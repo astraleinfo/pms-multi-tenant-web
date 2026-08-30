@@ -48,6 +48,7 @@ export function AppointmentModal({
   const [reason, setReason] = React.useState("");
   const [via, setVia] = React.useState<"front_desk" | "online" | "phone">("front_desk");
   const [touched, setTouched] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) return;
@@ -65,6 +66,15 @@ export function AppointmentModal({
     setTouched(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  /* The clinician list arrives with the rest of the clinic. Opening the dialog
+     before it lands used to leave the field empty and post an empty doctor_id,
+     so adopt the first one as soon as there is one to adopt. */
+  React.useEffect(() => {
+    if (!open || doctor) return;
+    const first = doctors[0]?.id;
+    if (first) setDoctor(first);
+  }, [open, doctor, doctors]);
 
   const conflicts = doctor && date && time ? conflictsFor(doctor, date, time, duration) : [];
   const taken = React.useMemo(() => {
@@ -89,19 +99,29 @@ export function AppointmentModal({
           <Button
             variant="primary"
             /* a clash is not a validation message you can dismiss — the slot is gone */
-            disabled={conflicts.length > 0}
-            onClick={() => {
+            disabled={conflicts.length > 0 || saving}
+            onClick={async () => {
               setTouched(true);
-              if (invalid) return;
-              createAppointment({
-                patient_id: patient!, doctor_id: doctor, date, time,
-                duration_min: duration, reason: reason.trim(), created_via: via,
-              });
-              notify({ tone: "ok", title: "Appointment booked", body: `${formatDate(date, "day")} at ${formatTime12(time)}.` });
-              onClose();
+              if (invalid || saving) return;
+              /* The confirmation has to follow the server, not the click: a
+                 clash or a lost slot must not leave a "booked" toast behind. */
+              setSaving(true);
+              try {
+                await createAppointment({
+                  patient_id: patient!, doctor_id: doctor, date, time,
+                  duration_min: duration, reason: reason.trim(), created_via: via,
+                });
+                notify({ tone: "ok", title: "Appointment booked", body: `${formatDate(date, "day")} at ${formatTime12(time)}.` });
+                onClose();
+              } catch {
+                /* useTenantMutation already said why; the dialog stays open so
+                   the slot can be changed without retyping everything. */
+              } finally {
+                setSaving(false);
+              }
             }}
           >
-            <IconCheck size={15} /> Book slot
+            <IconCheck size={15} /> {saving ? "Booking…" : "Book slot"}
           </Button>
         </>
       }
