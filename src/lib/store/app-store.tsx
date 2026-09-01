@@ -13,7 +13,7 @@ import { setActiveCurrency, setToday, TODAY } from "@/lib/format";
 import type {
   AccountStatus, Appointment, ClinicalTypeKey, Encounter, FeatureKey, FieldDefinition, Id,
   InventoryTxType, InvoiceLineItem, LabResultLine, NewAppointment, NewEncounter, Payment,
-  PrescriptionItem, QueueEntry, Tenant, TenantConfig,
+  PrescriptionItem, QueueEntry, Tenant, TenantConfig, User,
 } from "@/lib/types";
 import type { AuthResult, PlatformStaff } from "@/lib/api";
 
@@ -65,6 +65,8 @@ interface AppContextValue {
   signOut: () => void;
   platformSignIn: (email: string, password: string) => Promise<api.PlatformAuthResult>;
   platformSignOut: () => void;
+  createUser: (input: api.NewUser) => Promise<User>;
+  setUserPassword: (userId: Id, password: string) => Promise<User>;
   setUserStatus: (userId: Id, status: AccountStatus) => void;
 
   updateConfig: (patch: Partial<TenantConfig>) => void;
@@ -206,6 +208,17 @@ function AppFacade({ children }: { children: React.ReactNode }) {
   const mAddField = useTenantMutation((d: Omit<FieldDefinition, "id" | "tenant_id" | "scope" | "clinical_type">) => api.addFieldDefinition(d));
   const mRemoveField = useTenantMutation((id: Id) => api.removeFieldDefinition(id));
   const mUserStatus = useTenantMutation((a: { id: Id; status: AccountStatus }) => api.setUserStatus(a.id, a.status));
+  /* Not a `useTenantMutation`: the form that calls this awaits the answer and
+     shows the refusal against the field it belongs to — a duplicate email is
+     the one this happens to most — so a toast here would say it twice. */
+  const mCreateUser = useMutation({
+    mutationFn: (input: api.NewUser) => api.createUser(input),
+    onSuccess: invalidateTenant,
+  });
+  const mUserPassword = useMutation({
+    mutationFn: (a: { id: Id; password: string }) => api.setUserPassword(a.id, a.password),
+    onSuccess: invalidateTenant,
+  });
 
   const mCreateTenant = useMutation({
     mutationFn: (i: Parameters<typeof api.createTenant>[0]) => api.createTenant(i),
@@ -246,6 +259,8 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     signOut: () => { void s.signOut().then(() => qc.clear()); },
     platformSignIn: s.platformSignIn,
     platformSignOut: () => { void s.platformSignOut().then(() => qc.clear()); },
+    createUser: (input) => mCreateUser.mutateAsync(input),
+    setUserPassword: (id, password) => mUserPassword.mutateAsync({ id, password }),
     setUserStatus: (id, status) => mUserStatus.mutate({ id, status }),
 
     updateConfig: (patch) => mUpdateConfig.mutate(patch),

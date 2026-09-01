@@ -10,14 +10,14 @@ import { CLINICAL_TYPES, FEATURES } from "@/lib/data/catalog";
 import { activeFeatureKeys, selectUsers } from "@/lib/data/repository";
 import { ROLE_LABEL } from "@/lib/nav";
 import { currency, formatDate, formatTime12, pluralise, titleCase } from "@/lib/format";
-import type { FeatureKey, FieldDefinition, FieldType, User } from "@/lib/types";
+import type { FeatureKey, FieldDefinition, FieldType, Role, User } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardFooter, CardHeader, Legend } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, EmptyState, KV } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
-import { Checkbox, Field, Input, Select, Switch } from "@/components/ui/field";
+import { ChoiceGroup, Checkbox, Field, Input, Select, Switch } from "@/components/ui/field";
 import { Tabs } from "@/components/ui/tabs";
 import { DataTable, columnHelperFor } from "@/components/ui/data-table";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
@@ -25,8 +25,8 @@ import { RoleGate } from "@/components/domain/gates";
 import { useTour } from "@/components/onboarding/tour";
 import { Monogram } from "@/components/layout/rail";
 import {
-  IconCheck, IconLayers, IconLock, IconPlus, IconRefresh, IconShield, IconSpark, IconTrash,
-  IconUnlock, IconUsers,
+  IconAlert, IconCheck, IconKey, IconLayers, IconLock, IconMail, IconPlus, IconRefresh,
+  IconShield, IconSpark, IconTrash, IconUnlock, IconUser, IconUsers,
 } from "@/components/ui/icons";
 
 type Tab = "practice" | "config" | "features" | "fields" | "team" | "isolation";
@@ -71,12 +71,35 @@ const teamColumns = userCol.columns([
     ),
   }),
   userCol.display({
-    id: "lock",
+    id: "actions",
     header: "",
-    meta: { align: "right", width: 44 },
-    cell: ({ row }) => <LockControl user={row.original} />,
+    meta: { align: "right", width: 210 },
+    cell: ({ row }) => (
+      <div className="flex items-center justify-end gap-1.5">
+        <PasswordControl user={row.original} />
+        <LockControl user={row.original} />
+      </div>
+    ),
   }),
 ]);
+
+/**
+ * The account's own credential. An invited row has no password at all and the
+ * API refuses its sign-in by name, so this is the button that finishes what
+ * "Add person" started — and afterwards it is how a forgotten one is replaced.
+ */
+function PasswordControl({ user }: { user: User }) {
+  const [open, setOpen] = React.useState(false);
+  const invited = user.status === "invited";
+  return (
+    <>
+      <Button size="sm" variant={invited ? "secondary" : "ghost"} onClick={() => setOpen(true)}>
+        <IconKey size={14} /> {invited ? "Set password" : "Reset"}
+      </Button>
+      <SetPasswordModal user={user} open={open} onClose={() => setOpen(false)} />
+    </>
+  );
+}
 
 function TeamPerson({ user }: { user: User }) {
   const { session } = useApp();
@@ -135,7 +158,7 @@ export default function SettingsPage(props: PageProps<"/settings">) {
 function Settings({ initial }: { initial: Tab }) {
   const router = useRouter();
   const {
-    session, hasFeature, purchaseFeature, deactivateFeature,
+    session, can, hasFeature, purchaseFeature, deactivateFeature,
     removeFieldDefinition, notify,
   } = useApp();
   const db = useClinicDb();
@@ -150,6 +173,7 @@ function Settings({ initial }: { initial: Tab }) {
   );
   const [tab, setTab] = React.useState<Tab>(initial);
   const [addField, setAddField] = React.useState(false);
+  const [addPerson, setAddPerson] = React.useState(false);
 
   const clinical = CLINICAL_TYPES.find((c) => c.key === tenant.clinical_type)!;
   const staff = selectUsers(db, t);
@@ -411,6 +435,13 @@ function Settings({ initial }: { initial: Tab }) {
               icon={<IconUsers size={16} />}
               title="Team"
               subtitle="Role decides which modules a person sees. Locking an account stops them signing in without deleting anything they recorded."
+              actions={
+                can("user:manage") && (
+                  <Button variant="primary" size="sm" onClick={() => setAddPerson(true)}>
+                    <IconPlus size={14} /> Add person
+                  </Button>
+                )
+              }
             />
             <DataTable
               columns={teamColumns}
@@ -445,6 +476,7 @@ function Settings({ initial }: { initial: Tab }) {
       {tab === "isolation" && <IsolationTab />}
 
       <AddFieldModal open={addField} onClose={() => setAddField(false)} />
+      <AddPersonModal open={addPerson} onClose={() => setAddPerson(false)} />
     </>
   );
 
@@ -846,6 +878,450 @@ function AddFieldModal({ open, onClose }: { open: boolean; onClose: () => void }
         <Checkbox checked={required} onChange={setRequired} label="Required"
                   description="Validation is generated from the schema, so this is enforced without touching the form." />
       </div>
+    </Modal>
+  );
+}
+
+/* ==========================================================================
+   Adding a colleague.
+
+   The only write on the Team tab that makes a row rather than changing one.
+   Role is the whole point of it: it decides what the person sees in the rail,
+   and the server's guard reads the same table — so getting it wrong here is
+   visible immediately and enforced regardless.
+
+   Two kinds of account come out of this form. With a password the person is
+   active and can sign in now; without one the row is `invited`, and the API
+   refuses their sign-in until a password exists.
+   ========================================================================== */
+
+const ROLE_CHOICES: Array<{ value: Role; description: string }> = [
+  { value: "doctor", description: "Consultations, prescriptions, lab orders." },
+  { value: "receptionist", description: "Registration, the diary, the queue, billing." },
+  { value: "pharmacist", description: "Dispensing, and the stock ledger behind it." },
+  { value: "lab_tech", description: "Results and verification on the bench." },
+  { value: "tenant_admin", description: "Everything above, plus this page." },
+];
+
+/** A password nobody has to invent. Glyphs that read alike are left out. */
+function suggestPassword() {
+  const alphabet = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const draw = crypto.getRandomValues(new Uint32Array(16));
+  return Array.from(draw, (n) => alphabet[n % alphabet.length]).join("");
+}
+
+/* deliberately loose: the server owns the real check, this only catches typos */
+const EMAIL_SHAPE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+function AddPersonModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { createUser, notify } = useApp();
+  const { data: staff } = useUsers();
+
+  const [name, setName] = React.useState("");
+  const [email, setEmail] = React.useState("");
+  const [role, setRole] = React.useState<Role>("doctor");
+  const [speciality, setSpeciality] = React.useState("");
+  const [withPassword, setWithPassword] = React.useState(true);
+  const [password, setPassword] = React.useState("");
+  const [touched, setTouched] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [refused, setRefused] = React.useState<string | null>(null);
+  const [created, setCreated] = React.useState<{ user: User; password: string | null } | null>(null);
+
+  const reset = React.useCallback(() => {
+    setName(""); setEmail(""); setRole("doctor"); setSpeciality("");
+    setWithPassword(true); setPassword(suggestPassword());
+    setTouched(false); setBusy(false); setRefused(null); setCreated(null);
+  }, []);
+
+  React.useEffect(() => { if (open) reset(); }, [open, reset]);
+
+  const trimmedName = name.trim();
+  const address = email.trim().toLowerCase();
+  const duplicate = staff.some((u) => u.email.toLowerCase() === address);
+  const shapeOk = EMAIL_SHAPE.test(address);
+  const valid =
+    trimmedName.length >= 2 && shapeOk && !duplicate && (!withPassword || password.length >= 12);
+
+  const nameError = touched && trimmedName.length < 2 ? "At least two characters." : null;
+  const emailError = touched
+    ? !shapeOk
+      ? "An address they can be reached at — it is also their username."
+      : duplicate
+        ? "Someone here already signs in with that."
+        : null
+    : null;
+  /* the API will not accept a shorter one, so the form does not pretend it might */
+  const passwordError =
+    touched && withPassword && password.length < 12 ? "At least twelve characters." : null;
+
+  const submit = async () => {
+    setTouched(true);
+    setRefused(null);
+    if (!valid) return;
+
+    setBusy(true);
+    try {
+      /* The email is unique within the clinic, and the server is what decides
+         that: two admins adding the same person at once means the second one
+         hears about it here rather than getting a duplicate account. */
+      const user = await createUser({
+        name: trimmedName,
+        email: address,
+        role,
+        speciality: role === "doctor" ? speciality.trim() || undefined : undefined,
+        password: withPassword ? password : undefined,
+      });
+      setCreated({ user, password: withPassword ? password : null });
+      notify({
+        tone: "ok",
+        title: `${user.name} added`,
+        body: withPassword
+          ? `They can sign in as ${ROLE_LABEL[role].toLowerCase()} now.`
+          : "The account is invited — it cannot sign in until it has a password.",
+      });
+    } catch (error) {
+      setRefused(error instanceof Error ? error.message : "That account was not created.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (created) {
+    const person = created.user;
+    return (
+      <Modal
+        open={open}
+        onClose={onClose}
+        width="sm"
+        title={`${person.name} is on the team`}
+        subtitle={
+          created.password
+            ? "Hand these over out of band — the password is shown once and never stored where it can be read back."
+            : "The account exists, but nothing can sign in with it yet."
+        }
+        footer={
+          <>
+            <Button variant="ghost" onClick={reset}>Add another</Button>
+            <Button variant="primary" onClick={onClose}><IconCheck size={15} /> Done</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 rounded-[var(--r)] border border-line bg-surface-2 p-3.5">
+            <Avatar name={person.name} initials={person.initials} tintKey={person.id} />
+            <div className="min-w-0">
+              <p className="truncate font-medium text-ink">{person.name}</p>
+              <p className="truncate text-[0.75rem] text-ink-3">
+                {ROLE_LABEL[person.role]}{person.speciality ? ` · ${person.speciality}` : ""}
+              </p>
+            </div>
+            <Badge
+              className="ml-auto"
+              tone={person.status === "active" ? "ok" : "warn"}
+              size="sm"
+              dot
+            >
+              {titleCase(person.status)}
+            </Badge>
+          </div>
+
+          {created.password ? (
+            <div className="rounded-[var(--r)] border border-accent-border bg-accent-soft p-3.5">
+              <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-accent-text">
+                Sign-in credentials
+              </p>
+              <dl className="mt-2 space-y-1.5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-[0.75rem] text-ink-2">Email</dt>
+                  <dd className="tnum break-all font-mono text-[0.8125rem] text-ink">{person.email}</dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-[0.75rem] text-ink-2">Password</dt>
+                  <dd className="tnum font-mono text-[0.8125rem] text-ink">{created.password}</dd>
+                </div>
+              </dl>
+            </div>
+          ) : (
+            <div className="flex gap-2.5 rounded-[var(--r)] border border-line bg-surface-2 p-3.5">
+              <IconMail size={16} className="mt-px shrink-0 text-ink-3" />
+              <p className="text-[0.8125rem] leading-relaxed text-ink-2">
+                Invited accounts are refused at sign-in until they have a password. There is no invitation
+                email yet, so give <span className="text-ink">{person.name}</span> a password from this form
+                instead when they are ready to start.
+              </p>
+            </div>
+          )}
+
+          <p className="text-[0.75rem] leading-relaxed text-ink-3">
+            They see only what {ROLE_LABEL[person.role].toLowerCase()} may see, on this clinic&apos;s address and
+            no other. Locking the account later stops the sign-in without touching anything they recorded.
+          </p>
+        </div>
+      </Modal>
+    );
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Add someone to the team"
+      subtitle="Creates their account in this clinic. The role decides what they can reach — here and on the server."
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={() => { void submit(); }} disabled={busy}>
+            <IconSpark size={15} /> {busy ? "Adding…" : "Add person"}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {refused && (
+          <div role="alert" className="flex gap-2.5 rounded-[var(--r)] border border-critical-border bg-critical-soft p-3">
+            <IconAlert size={16} className="mt-px shrink-0 text-critical-text" />
+            <p className="text-[0.8125rem] leading-snug text-critical-text">{refused}</p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Full name" required error={nameError}>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Aparna Iyer"
+                   invalid={!!nameError} />
+          </Field>
+          <Field label="Email" required error={emailError}
+                 help={!emailError ? "This is the username they sign in with." : undefined}>
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                   placeholder="a.iyer@clinic.example" invalid={!!emailError} />
+          </Field>
+        </div>
+
+        <Field label="Role" required help="Changes what appears in their sidebar, and what the API will answer.">
+          <ChoiceGroup
+            columns={2}
+            value={role}
+            onChange={setRole}
+            options={ROLE_CHOICES.map((r) => ({
+              value: r.value,
+              label: ROLE_LABEL[r.value],
+              description: r.description,
+            }))}
+          />
+        </Field>
+
+        {role === "doctor" && (
+          <Field label="Speciality" help="Shown under their name in the team list and on the diary.">
+            <Input value={speciality} onChange={(e) => setSpeciality(e.target.value)}
+                   placeholder="Endodontics" />
+          </Field>
+        )}
+
+        <div className="rounded-[var(--r)] border border-line bg-surface-2 p-3.5">
+          <Checkbox
+            checked={withPassword}
+            onChange={setWithPassword}
+            label="Give them a password now"
+            description="Off creates an invited account instead — it exists in the list, but sign-in is refused until it has one."
+          />
+          {withPassword && (
+            <Field className="mt-3.5" label="Temporary password" required error={passwordError}
+                   help={!passwordError ? "Shown once, on the next screen. Hand it over out of band." : undefined}>
+              <div className="flex items-stretch gap-2">
+                <Input
+                  type="text"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="tnum font-mono"
+                  invalid={!!passwordError}
+                />
+                <Button variant="secondary" onClick={() => setPassword(suggestPassword())}
+                        aria-label="Suggest another password">
+                  <IconRefresh size={15} /> Suggest
+                </Button>
+              </div>
+            </Field>
+          )}
+        </div>
+
+        <p className="flex gap-2.5 border-t border-line-soft pt-3 text-[0.75rem] leading-relaxed text-ink-3">
+          <IconUser size={14} className="mt-px shrink-0" />
+          <span>
+            The account belongs to this clinic and is reachable only at its address. Nothing here can grant
+            access to another clinic, or to the platform console — those are a different table entirely.
+          </span>
+        </p>
+      </div>
+    </Modal>
+  );
+}
+
+/* ==========================================================================
+   Giving someone a password.
+
+   An admin does not know theirs, so nothing here asks for the current one —
+   the route is guarded by the role instead. Three consequences are worth
+   saying out loud in the dialog, because none of them are guessable:
+
+     · the first password an invited account gets is what activates it;
+     · every session opened with the old password ends, and the browser doing
+       the resetting is spared only when you are resetting your own;
+     · it is not an unlock. A locked account stays locked.
+   ========================================================================== */
+
+function SetPasswordModal({
+  user, open, onClose,
+}: {
+  user: User;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const { setUserPassword, session, notify } = useApp();
+  const [password, setPassword] = React.useState("");
+  const [touched, setTouched] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [refused, setRefused] = React.useState<string | null>(null);
+  const [done, setDone] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!open) return;
+    setPassword(suggestPassword());
+    setTouched(false); setBusy(false); setRefused(null); setDone(false);
+  }, [open]);
+
+  const invited = user.status === "invited";
+  const locked = user.status === "locked";
+  const own = user.id === session.userId;
+  const error = touched && password.length < 12 ? "At least twelve characters." : null;
+
+  const submit = async () => {
+    setTouched(true);
+    setRefused(null);
+    if (password.length < 12) return;
+
+    setBusy(true);
+    try {
+      await setUserPassword(user.id, password);
+      setDone(true);
+      notify({
+        tone: "ok",
+        title: invited ? `${user.name} can sign in` : `${user.name}'s password replaced`,
+        body: invited
+          ? "The invitation is accepted and the account is active."
+          : own
+            ? "Your other sessions are signed out; this one is not."
+            : "They are signed out everywhere and need the new password.",
+      });
+    } catch (error_) {
+      setRefused(error_ instanceof Error ? error_.message : "That password was not set.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      width="sm"
+      title={done
+        ? "Hand this over"
+        : invited ? `Set a password for ${user.name}` : `Reset ${user.name}'s password`}
+      subtitle={done
+        ? "It is shown once. The server keeps only a hash, and will never give it back."
+        : invited
+          ? "An invited account has no password at all, which is why it cannot sign in yet."
+          : "You do not need their current one — the role you hold is what permits this."}
+      footer={done ? (
+        <Button variant="primary" onClick={onClose}><IconCheck size={15} /> Done</Button>
+      ) : (
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={() => { void submit(); }} disabled={busy}>
+            <IconKey size={15} /> {busy ? "Saving…" : invited ? "Set password" : "Replace password"}
+          </Button>
+        </>
+      )}
+    >
+      {done ? (
+        <div className="space-y-4">
+          <div className="rounded-[var(--r)] border border-accent-border bg-accent-soft p-3.5">
+            <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-accent-text">
+              Sign-in credentials
+            </p>
+            <dl className="mt-2 space-y-1.5">
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-[0.75rem] text-ink-2">Email</dt>
+                <dd className="tnum break-all font-mono text-[0.8125rem] text-ink">{user.email}</dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-[0.75rem] text-ink-2">Password</dt>
+                <dd className="tnum font-mono text-[0.8125rem] text-ink">{password}</dd>
+              </div>
+            </dl>
+          </div>
+          {locked && (
+            <p className="flex gap-2.5 rounded-[var(--r)] border border-warn-border bg-warn-soft p-3 text-[0.8125rem] leading-snug text-warn-text">
+              <IconLock size={16} className="mt-px shrink-0" />
+              <span>
+                This account is still locked, so the new password will not get them in. Unlock it from
+                the team list when they should be let back.
+              </span>
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {refused && (
+            <div role="alert" className="flex gap-2.5 rounded-[var(--r)] border border-critical-border bg-critical-soft p-3">
+              <IconAlert size={16} className="mt-px shrink-0 text-critical-text" />
+              <p className="text-[0.8125rem] leading-snug text-critical-text">{refused}</p>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3 rounded-[var(--r)] border border-line bg-surface-2 p-3">
+            <Avatar name={user.name} initials={user.initials} size="sm" tintKey={user.id} />
+            <div className="min-w-0">
+              <p className="truncate text-[0.8438rem] font-medium text-ink">{user.name}</p>
+              <p className="tnum truncate font-mono text-[0.75rem] text-ink-3">{user.email}</p>
+            </div>
+            <Badge className="ml-auto" tone={user.status === "active" ? "ok" : user.status === "invited" ? "warn" : "critical"} size="sm" dot>
+              {titleCase(user.status)}
+            </Badge>
+          </div>
+
+          <Field label="New password" required error={error}
+                 help={!error ? "Hand it over out of band, not by email." : undefined}>
+            <div className="flex items-stretch gap-2">
+              <Input type="text" value={password} onChange={(e) => setPassword(e.target.value)}
+                     className="tnum font-mono" invalid={!!error} />
+              <Button variant="secondary" onClick={() => setPassword(suggestPassword())}
+                      aria-label="Suggest another password">
+                <IconRefresh size={15} /> Suggest
+              </Button>
+            </div>
+          </Field>
+
+          <ul className="space-y-2 border-t border-line-soft pt-3 text-[0.75rem] leading-snug text-ink-3">
+            {invited && (
+              <li className="flex gap-2">
+                <span>·</span> This accepts the invitation — the account becomes active straight away.
+              </li>
+            )}
+            <li className="flex gap-2">
+              <span>·</span>{" "}
+              {own
+                ? "Every other session you hold is signed out. This browser stays signed in."
+                : `Every session ${user.name.split(" ")[0]} has open is signed out.`}
+            </li>
+            {locked && (
+              <li className="flex gap-2 text-warn-text">
+                <span>·</span> The account stays locked. Unlocking is a separate decision.
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
     </Modal>
   );
 }

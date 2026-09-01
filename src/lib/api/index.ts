@@ -4,7 +4,7 @@ import type {
   AccountStatus, Appointment, ClinicalTypeKey, Encounter, FeatureKey, FieldDefinition,
   HistoryEvent, Id, InventoryBatch, InventoryItem, InventoryTransaction, InventoryTxType,
   Invoice, InvoiceLineItem, LabOrder, LabResultLine, NewAppointment, NewEncounter, Patient,
-  Payment, Prescription, PrescriptionItem, QueueEntry, Tenant, TenantConfig, TenantFeature, User,
+  Payment, Prescription, PrescriptionItem, QueueEntry, Role, Tenant, TenantConfig, TenantFeature, User,
 } from "@/lib/types";
 import { ApiError, del, get, patch as patch_, post, setAccessToken } from "./client";
 
@@ -306,6 +306,45 @@ export const listInvoicePage = (query: InvoiceQuery = {}) =>
 export const getInvoice = (id: Id) => get<Invoice>(`/v1/billing/invoices/${id}`);
 
 /* ---- staff ---------------------------------------------------------------- */
+
+/**
+ * What a practice admin sends to give a colleague an account. As everywhere
+ * else there is no tenant: the clinic is the address and the session. The id,
+ * the initials and the account status are the server's to decide.
+ *
+ * `password` decides which of two accounts is created. With one, the person is
+ * active and can sign in immediately. Without one the row is `invited`, and
+ * sign-in is refused until a password exists.
+ */
+export interface NewUser {
+  name: string;
+  email: string;
+  role: Role;
+  speciality?: string;
+  password?: string;
+}
+
+export const createUser = (input: NewUser) =>
+  post<User>("/v1/users", {
+    name: input.name,
+    email: input.email,
+    role: input.role,
+    speciality: input.speciality?.trim() || null,
+    password: input.password || null,
+  });
+
+/**
+ * Give someone a password they did not choose. There is no current password:
+ * the point of the route is that an admin does not know theirs.
+ *
+ * The first password an account is given is what accepts its invitation — an
+ * `invited` row has no hash and the sign-in refuses it by name. Every session
+ * opened with the old password ends, except the one making the request when an
+ * admin is rotating their own. It is not an unlock: a locked account stays
+ * locked, which is `setUserStatus`'s job.
+ */
+export const setUserPassword = (userId: Id, password: string) =>
+  post<User>(`/v1/users/${userId}/password`, { password });
 
 export const setUserStatus = (userId: Id, status: AccountStatus) =>
   patch_<User>(`/v1/users/${userId}/status`, { status });
