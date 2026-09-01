@@ -78,7 +78,7 @@ interface AppContextValue {
   createPatient: (values: Record<string, unknown>) => Promise<Id>;
   updatePatient: (id: Id, values: Record<string, unknown>) => void;
 
-  createAppointment: (a: NewAppointment) => void;
+  createAppointment: (a: NewAppointment) => Promise<Id>;
   setAppointmentStatus: (id: Id, status: Appointment["status"]) => void;
   conflictsFor: (doctorId: Id, date: string, time: string, duration: number, ignoreId?: Id) => Appointment[];
   checkIn: (appointmentId: Id) => void;
@@ -272,7 +272,7 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     createPatient: (values) => mCreatePatient.mutateAsync(values),
     updatePatient: (id, values) => mUpdatePatient.mutate({ id, values }),
 
-    createAppointment: (a) => mCreateAppointment.mutate(a),
+    createAppointment: (a) => mCreateAppointment.mutateAsync(a),
     setAppointmentStatus: (id, status) => mAppointmentStatus.mutate({ id, status }),
     /* Worked out from the appointments already in cache, so the slot grid stays
        instant. The server checks again on POST and answers 409 if the slot went
