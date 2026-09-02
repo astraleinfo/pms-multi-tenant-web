@@ -107,7 +107,10 @@ export default function DashboardPage() {
         description={`${tenant.name} runs the ${clinical.label.toLowerCase()} workflow. ${clinical.blurb}`}
         actions={
           <>
-            <Button variant="secondary" onClick={() => setWalkIn(true)}>
+            <ButtonLink href="/patients/new" variant="primary">
+              <IconUsers size={15} /> Add patient
+            </ButtonLink>
+            <Button variant="primary" onClick={() => setWalkIn(true)}>
               <IconPlus size={15} /> Walk-in
             </Button>
             <Button variant="primary" onClick={() => setBooking(true)}>

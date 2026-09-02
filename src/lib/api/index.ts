@@ -6,7 +6,7 @@ import type {
   Invoice, InvoiceLineItem, LabOrder, LabResultLine, NewAppointment, NewEncounter, Patient,
   Payment, Prescription, PrescriptionItem, QueueEntry, Role, Tenant, TenantConfig, TenantFeature, User,
 } from "@/lib/types";
-import { ApiError, del, get, patch as patch_, post, setAccessToken } from "./client";
+import { ApiError, del, get, patch as patch_, post, requestBlob, setAccessToken } from "./client";
 
 /* ==========================================================================
    The API.
@@ -127,6 +127,17 @@ export const listFieldDefinitions = () => get<FieldDefinition[]>("/v1/tenant/fie
 export const getSchema = (entity: FieldDefinition["entity"]) =>
   get<FieldDefinition[]>(`/v1/tenant/schema/${entity}`);
 
+/** Common medicines offered when writing a prescription — tenant- and
+ *  clinical-type-filtered server-side, so there is nothing to pass. */
+export interface MedicineSuggestionOut {
+  medicine: string;
+  strength: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+}
+export const getMedicines = () => get<MedicineSuggestionOut[]>("/v1/catalog/medicines");
+
 export interface PatientPage {
   items: Patient[];
   total: number;
@@ -244,6 +255,10 @@ export const listEncounterPage = (query: EncounterQuery = {}) =>
   get<Page<Encounter>>("/v1/encounters", { ...pageParams(query), patient_id: query.patient_id });
 
 export const getEncounter = (id: Id) => get<Encounter>(`/v1/encounters/${id}`);
+
+/** The printable consultation record — encounter, prescription and patient,
+ *  rendered server-side as a PDF. */
+export const getConsultationPdf = (id: Id) => requestBlob(`/v1/encounters/${id}/consultation-pdf`);
 
 export interface PrescriptionQuery extends PageQuery {
   status?: Prescription["status"];

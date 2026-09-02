@@ -1,10 +1,12 @@
 "use client";
 
 import * as React from "react";
+import * as api from "@/lib/api";
 import { useApp } from "@/lib/store/app-store";
 import { usePatient, usePrescriptionPage, useUsers } from "@/lib/query/hooks";
 import { useDebounced } from "@/lib/debounce";
 import { formatDate, pluralise } from "@/lib/format";
+import { openPdfBlob } from "@/lib/pdf";
 import type { Prescription } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/card";
@@ -18,7 +20,7 @@ import { Tabs } from "@/components/ui/tabs";
 import { FeatureGate } from "@/components/domain/gates";
 import { StatusPill } from "@/components/domain/status";
 import { AllergyFlag, PatientChip, PatientRef } from "@/components/domain/patient";
-import { IconArrowRight, IconMortar, IconPrint, IconRx } from "@/components/ui/icons";
+import { IconArrowRight, IconPrint, IconRx } from "@/components/ui/icons";
 
 type Tab = "all" | "pending" | "partially_dispensed" | "dispensed";
 
@@ -104,7 +106,7 @@ export default function PrescriptionsPage() {
 }
 
 function Prescriptions() {
-  const { hasFeature } = useApp();
+  const { hasFeature, notify } = useApp();
   const { data: users } = useUsers();
   const [tab, setTab] = React.useState<Tab>("all");
   const [q, setQ] = React.useState("");
@@ -112,6 +114,18 @@ function Prescriptions() {
   const [page, setPage] = React.useState(0);
   const [sort, setSort] = React.useState({ id: "created_at", desc: true });
   const [open, setOpen] = React.useState<Prescription | null>(null);
+  const [printing, setPrinting] = React.useState(false);
+
+  const printPrescription = async (encounterId: string) => {
+    setPrinting(true);
+    try {
+      openPdfBlob(await api.getConsultationPdf(encounterId));
+    } catch {
+      notify({ tone: "warn", title: "Could not generate the print PDF" });
+    } finally {
+      setPrinting(false);
+    }
+  };
 
   /* any change to what is being asked for starts again at the first page */
   React.useEffect(() => { setPage(0); }, [term, tab, sort]);
@@ -151,13 +165,6 @@ function Prescriptions() {
         eyebrow="Core module"
         title="Prescriptions"
         description="Written from the consultation and stored once. The pharmacy reads these rows directly rather than keeping a copy — which is why a clinic without a pharmacy still prescribes normally."
-        actions={
-          hasFeature("pharmacy") ? (
-            <ButtonLink href="/pharmacy" variant="primary">
-              <IconMortar size={15} /> Dispensing counter
-            </ButtonLink>
-          ) : undefined
-        }
         meta={
           <>
             <span className="text-[0.8125rem] text-ink-2">{pluralise(counts.all, "prescription")}</span>
@@ -215,7 +222,9 @@ function Prescriptions() {
         footer={
           open && (
             <>
-              <Button variant="ghost" onClick={() => window.print()}><IconPrint size={14} /> Print</Button>
+              <Button variant="ghost" onClick={() => void printPrescription(open.encounter_id)} disabled={printing}>
+                <IconPrint size={14} /> {printing ? "Preparing…" : "Print"}
+              </Button>
               {hasFeature("pharmacy") && open.status !== "dispensed" && (
                 <ButtonLink href="/pharmacy" variant="primary">
                   Dispense at the counter <IconArrowRight size={14} />
