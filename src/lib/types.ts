@@ -140,6 +140,14 @@ export interface User {
   /** consecutive failed sign-ins; five locks the account */
   failed_attempts: number;
   last_sign_in: string | null;
+  /**
+   * They are using a password somebody else chose — an admin typed it at the
+   * desk. Sign-in works, but the session is good for one thing until they
+   * replace it.
+   */
+  must_change_password?: boolean;
+  /** No password at all: their "set your password" link is still outstanding. */
+  invitation_pending?: boolean;
 }
 
 export interface Patient {

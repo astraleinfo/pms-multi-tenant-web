@@ -13,6 +13,8 @@
    this code never touches.
    ========================================================================== */
 
+import { resolveHost } from "@/lib/tenancy";
+
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
 
 let accessToken: string | null = null;
@@ -27,8 +29,12 @@ export const onSessionLost = (handler: () => void) => { onSignedOut = handler; }
 /** The clinic this tab is on, as a header for development proxies (see next.config.ts). */
 function tenantHeaders(): Record<string, string> {
   if (typeof window === "undefined") return {};
-  const [label, ...rest] = window.location.hostname.split(".");
-  return rest.length > 0 ? { "X-Tenant-Slug": label } : { "X-Platform-Console": "1" };
+  const ctx = resolveHost(window.location.host, window.location.protocol);
+  if (ctx.kind === "tenant" && ctx.slug) return { "X-Tenant-Slug": ctx.slug };
+  /* The console is served on `admin.<root>`; the apex is neither. Sending the
+     console header from the apex would let a request reach routes the real
+     deployment serves on a different address. */
+  return ctx.kind === "admin" ? { "X-Platform-Console": "1" } : {};
 }
 
 export interface ApiErrorBody {
@@ -86,6 +92,7 @@ export interface SessionResponse {
   tenant_id?: string | null;
   permissions?: string[];
   preferences?: unknown;
+  must_change_password?: boolean;
 }
 
 let refreshing: Promise<SessionResponse | null> | null = null;
@@ -167,6 +174,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 export const get = <T>(path: string, query?: RequestOptions["query"]) => request<T>(path, { query });
 export const post = <T>(path: string, body?: unknown) => request<T>(path, { method: "POST", body });
 export const patch = <T>(path: string, body?: unknown) => request<T>(path, { method: "PATCH", body });
+export const put = <T>(path: string, body?: unknown) => request<T>(path, { method: "PUT", body });
 export const del = <T>(path: string) => request<T>(path, { method: "DELETE" });
 
 /** Where the queue socket lives. Same host as the app unless told otherwise. */

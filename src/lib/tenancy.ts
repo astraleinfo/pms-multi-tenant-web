@@ -1,20 +1,31 @@
 /* ==========================================================================
    Host-based tenant resolution.
 
-   The tenant is a property of the URL the request arrived on, not something a
-   user picks after signing in — `northgate.astrale.test` is Northgate and can
-   never be anything else. The apex domain is the platform console.
+   Mirrors `app/core/tenancy.py` in the API. Three kinds of address, and which
+   one you are on decides what the app will even show you:
+
+     admin.astrale.test    the super-admin console
+     <slug>.astrale.test   exactly one clinic
+     astrale.test          the apex — neither a clinic nor the console
+
+   The tenant is a property of the URL, not something a user picks after
+   signing in: `northgate.astrale.test` is Northgate and can never be anything
+   else.
 
    Locally this needs no host file: browsers resolve every *.localhost name to
-   127.0.0.1, so `northgate.localhost:3000` just works.
+   127.0.0.1, so `northgate.localhost:3000` and `admin.localhost:3000` both
+   just work.
    ========================================================================== */
 
 /** Subdomains that can never belong to a clinic. */
 export const RESERVED_SUBDOMAINS = new Set([
-  "www", "app", "admin", "api", "platform", "static", "assets", "mail",
+  "www", "app", "admin", "administrator", "api", "platform", "static", "assets", "mail",
 ]);
 
-export type HostKind = "platform" | "tenant";
+/** Labels that resolve to the super-admin console rather than to the apex. */
+export const ADMIN_SUBDOMAINS = new Set(["admin", "administrator"]);
+
+export type HostKind = "platform" | "admin" | "tenant";
 
 export interface HostContext {
   kind: HostKind;
@@ -35,6 +46,13 @@ export function resolveHost(host: string | null | undefined, protocol = "http:")
   const [hostname = "", port = ""] = raw.split(":");
   const platform = (root: string): HostContext => ({ kind: "platform", slug: null, root, port, protocol });
 
+  /* a reserved label is the console when it names the console, and the apex
+     otherwise — `api.` and `www.` are not places anybody signs in */
+  const reserved = (slug: string, root: string): HostContext =>
+    ADMIN_SUBDOMAINS.has(slug)
+      ? { kind: "admin", slug: null, root, port, protocol }
+      : platform(root);
+
   if (!hostname || IPV4.test(hostname) || hostname === "[::1]") return platform(hostname || "localhost");
 
   const labels = hostname.split(".");
@@ -45,7 +63,7 @@ export function resolveHost(host: string | null | undefined, protocol = "http:")
     const slug = labels[0];
     const root = labels.slice(1).join(".");
     return RESERVED_SUBDOMAINS.has(slug)
-      ? platform(root)
+      ? reserved(slug, root)
       : { kind: "tenant", slug, root, port, protocol };
   }
 
@@ -55,7 +73,7 @@ export function resolveHost(host: string | null | undefined, protocol = "http:")
   const slug = labels[0];
   const root = labels.slice(1).join(".");
   return RESERVED_SUBDOMAINS.has(slug)
-    ? platform(root)
+    ? reserved(slug, root)
     : { kind: "tenant", slug, root, port, protocol };
 }
 
@@ -65,8 +83,23 @@ export function tenantUrl(slug: string, ctx: HostContext, path = "/") {
   return `${ctx.protocol}//${slug}.${ctx.root}${port}${path}`;
 }
 
-/** Absolute URL for the platform console. */
-export function platformUrl(ctx: HostContext, path = "/platform") {
+/**
+ * Absolute URL for the super-admin console.
+ *
+ * `admin.<root>` — its own address, not a path on the apex. The API refuses
+ * `/platform/*` anywhere else, so a link that pointed at the apex would take
+ * somebody to a console that could not talk to anything.
+ */
+export function adminUrl(ctx: HostContext, path = "/") {
+  const port = ctx.port ? `:${ctx.port}` : "";
+  return `${ctx.protocol}//admin.${ctx.root}${port}${path}`;
+}
+
+/** @deprecated the console moved to its own subdomain — use `adminUrl`. */
+export const platformUrl = adminUrl;
+
+/** Absolute URL for the apex: the product's public face. */
+export function apexUrl(ctx: HostContext, path = "/") {
   const port = ctx.port ? `:${ctx.port}` : "";
   return `${ctx.protocol}//${ctx.root}${port}${path}`;
 }

@@ -8,7 +8,9 @@ import { useShellReady } from "@/lib/query/hooks";
 import { Rail } from "./rail";
 import { Topbar } from "./topbar";
 import { CommandPalette } from "./command-palette";
-import { SuspendedTenantStage, UnknownTenantStage } from "./sign-in-stage";
+import { ApexStage, SuspendedTenantStage, UnknownTenantStage } from "./sign-in-stage";
+import { PasswordGate } from "./password-gate";
+import { SupportBanner } from "./support-banner";
 import { TourProvider } from "@/components/onboarding/tour";
 import { StageLoader } from "@/components/ui/loader";
 
@@ -48,6 +50,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   /* The waiting-room screen is a public display: no rail, no topbar. */
   const bare = pathname === "/display";
 
+  /* Screens for somebody who has no session and is not supposed to have one
+     yet. They live on a clinic's address because the clinic is the address,
+     but none of them is inside the shell. */
+  const PUBLIC = ["/login", "/forgot-password", "/accept-invitation", "/reset-password"];
+  const isPublic = PUBLIC.includes(pathname);
+
   function RedirectTo({ href }: { href: string }) {
     React.useEffect(() => { router.replace(href); }, [href]);
     return <StageLoader />;
@@ -57,8 +65,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return <StageLoader />;
   }
 
-  /* the apex host serves the platform console, which brings its own chrome */
-  if (host.kind === "platform") return <>{children}</>;
+  /* the console has its own address and brings its own chrome */
+  if (host.kind === "admin") return <>{children}</>;
+
+  /* the apex is neither a clinic nor the console — there is nothing here to
+     sign in to, and saying so is better than a redirect into either */
+  if (host.kind === "platform") return <ApexStage />;
 
   /* is there a clinic at this address at all? one public read answers that */
   if (hostTenantPending) {
@@ -69,9 +81,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (!hostTenant) return <UnknownTenantStage slug={host.slug} />;
   if (hostTenant.status === "suspended") return <SuspendedTenantStage name={hostTenant.name} />;
 
-  /* the login page is its own screen, not something inside the shell */
-  if (pathname === "/login") return <>{children}</>;
+  /* the sign-in and password screens are their own, not inside the shell */
+  if (isPublic) return <>{children}</>;
   if (!session.signedIn) return <RedirectTo href="/login" />;
+
+  /* A password somebody else chose gets one screen and no more, and the server
+     agrees — this is not a courtesy a hand-written request could step around. */
+  if (session.mustChangePassword) return <PasswordGate>{children}</PasswordGate>;
 
   /* the shell decides what to render from what this clinic bought and how it is
      configured — hold the chrome until those have arrived rather than flashing
@@ -110,6 +126,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
+        <SupportBanner />
         <Topbar
           onToggleRail={toggleRail}
           onOpenSearch={() => setSearch(true)}
