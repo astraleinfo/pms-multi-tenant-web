@@ -47,6 +47,8 @@ export const qk = {
   labOrderPage: (t: Id, query: Record<string, unknown>) =>
     ["tenant", t, "lab-orders", "page", query] as const,
   labOrder: (t: Id, id: Id) => ["tenant", t, "lab-orders", id] as const,
+  labAttachments: (t: Id, orderId: Id) =>
+    ["tenant", t, "lab-orders", orderId, "attachments"] as const,
 
   inventoryItems: (t: Id) => ["tenant", t, "inventory", "items"] as const,
   inventoryTx: (t: Id) => ["tenant", t, "inventory", "tx"] as const,
@@ -56,6 +58,17 @@ export const qk = {
   invoicePage: (t: Id, query: Record<string, unknown>) =>
     ["tenant", t, "invoices", "page", query] as const,
   invoice: (t: Id, id: Id) => ["tenant", t, "invoices", id] as const,
+  /** What a visit would bill for, as the server prices it. */
+  suggestedLines: (t: Id, encounterId: Id) =>
+    ["tenant", t, "invoices", "suggestions", encounterId] as const,
+  /** What one patient owes each counter, and what nobody has billed yet. */
+  patientAccount: (t: Id, patientId: Id) =>
+    ["tenant", t, "invoices", "account", patientId] as const,
+
+  /** The tariff — one entry per kind, so the pricing page and the composer
+      share a cache without either holding the other's rows. */
+  servicePrices: (t: Id, query: Record<string, unknown> = {}) =>
+    ["tenant", t, "pricing", "services", query] as const,
 
   analytics: (t: Id, days: number) => ["tenant", t, "analytics", days] as const,
 } as const;

@@ -2,11 +2,14 @@
 
 import * as React from "react";
 import { useApp } from "@/lib/store/app-store";
-import { useLabOrder, useLabOrderPage, useLabStats, useUsers } from "@/lib/query/hooks";
+import {
+  useLabAttachments, useLabOrder, useLabOrderPage, useLabStats, useUsers,
+} from "@/lib/query/hooks";
+import * as api from "@/lib/api";
 import { useDebounced } from "@/lib/debounce";
 
 import { formatDate, pluralise } from "@/lib/format";
-import type { LabOrder, LabResultLine } from "@/lib/types";
+import type { LabAttachment, LabOrder, LabResultLine } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable, columnHelperFor } from "@/components/ui/data-table";
 import { Card, Legend } from "@/components/ui/card";
@@ -22,8 +25,10 @@ import { FeatureGate, RoleGate } from "@/components/domain/gates";
 import { StatusPill } from "@/components/domain/status";
 import { PatientChip, PatientRef } from "@/components/domain/patient";
 import {
-  IconAlert, IconCheck, IconFlask, IconPlay, IconPlus, IconShield, IconTrash,
+  IconAlert, IconCard, IconCheck, IconDownload, IconFlask, IconPlay, IconPlus, IconShield,
+  IconTrash,
 } from "@/components/ui/icons";
+import { CounterPayment } from "@/components/domain/counter-payment";
 
 type Tab = "open" | "ordered" | "pending" | "resulted" | "verified";
 
@@ -216,7 +221,14 @@ function Lab() {
 }
 
 function OrderDrawer({ order: opened, onClose }: { order: LabOrder; onClose: () => void }) {
-  const { startLabOrder, saveLabResults, verifyLabOrder, notify } = useApp();
+  const { startLabOrder, saveLabResults, verifyLabOrder, hasFeature, can, notify } = useApp();
+
+  /* The clinic bills, and this person is allowed to take the money. Both, or
+     the button is an apology waiting to happen. */
+  const billsHere = hasFeature("billing") && can("billing:write");
+  /* The lab bills on its own invoices, so it can take its own money — a
+     patient collecting a report pays for the scan, not for their medicine. */
+  const [collecting, setCollecting] = React.useState(false);
   /* the row that opened this stands in until the read lands */
   const { data: fresh } = useLabOrder(opened.id);
   const order = fresh ?? opened;
@@ -243,6 +255,11 @@ function OrderDrawer({ order: opened, onClose }: { order: LabOrder; onClose: () 
       subtitle={`${order.patient_name} · ${order.patient_mrn}`}
       footer={
         <>
+          {billsHere && (
+            <Button variant="ghost" onClick={() => setCollecting(true)}>
+              <IconCard size={14} /> Collect payment
+            </Button>
+          )}
           {order.status === "ordered" && (
             <Button variant="primary" onClick={() => {
               startLabOrder(order.id);
@@ -352,6 +369,15 @@ function OrderDrawer({ order: opened, onClose }: { order: LabOrder; onClose: () 
           )}
         </div>
 
+        <Attachments order={order} />
+
+        <CounterPayment
+          open={collecting}
+          onClose={() => setCollecting(false)}
+          patientId={order.patient_id}
+          department="lab"
+        />
+
         <p className="flex items-start gap-2 rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-[0.75rem] leading-relaxed text-ink-2">
           <IconShield size={14} className="mt-px shrink-0 text-ink-3" />
           Verification is the gate: <code className="font-mono text-[0.6875rem]">GET /encounters/&#123;id&#125;/lab-results</code> returns
@@ -359,5 +385,136 @@ function OrderDrawer({ order: opened, onClose }: { order: LabOrder; onClose: () 
         </p>
       </div>
     </Drawer>
+  );
+}
+
+/** Bytes, in the unit a person would say them in. */
+function fileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const ACCEPT = ".pdf,.png,.jpg,.jpeg,.tif,.tiff,.webp,.csv,.txt";
+
+/**
+ * The paperwork half of a lab order (§3.10).
+ *
+ * A scan, a machine printout, a signed report — the same clinical record as the
+ * typed analytes, so it is filed against the order and released with it. A
+ * verified order takes no more paper: verification is what put the result in
+ * front of a clinician, and changing it afterwards would do so unsigned.
+ */
+function Attachments({ order }: { order: LabOrder }) {
+  const { uploadLabAttachment, removeLabAttachment, notify } = useApp();
+  const { data: files = [], isPending } = useLabAttachments(order.id);
+  const input = React.useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = React.useState(false);
+
+  const locked = order.status === "verified";
+
+  const send = async (chosen: FileList | null) => {
+    const file = chosen?.[0];
+    if (!file) return;
+    setBusy(true);
+    try {
+      await uploadLabAttachment(order.id, file);
+      notify({ tone: "ok", title: "Report attached", body: file.name });
+    } catch (e) {
+      /* the API refuses by name — an unsupported kind, or one that is too big */
+      notify({
+        tone: "critical",
+        title: "That file was not attached",
+        body: e instanceof Error ? e.message : "That did not go through.",
+      });
+    } finally {
+      setBusy(false);
+      if (input.current) input.current.value = "";
+    }
+  };
+
+  const open = async (file: LabAttachment) => {
+    try {
+      /* The route needs the session, so the file is fetched rather than linked
+         to, then handed to the browser as a blob it already holds. */
+      const blob = await api.getLabAttachmentFile(order.id, file.id);
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      notify({ tone: "critical", title: "That file could not be opened" });
+    }
+  };
+
+  return (
+    <div>
+      <Legend>Reports and scans</Legend>
+
+      {files.length === 0 && !isPending && (
+        <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-5 text-center text-[0.8125rem] text-ink-3">
+          {locked
+            ? "Nothing was filed against this order."
+            : "No file yet — attach the scan, the printout or the signed report."}
+        </p>
+      )}
+
+      {files.length > 0 && (
+        <ul className="space-y-2">
+          {files.map((file) => (
+            <li
+              key={file.id}
+              className="flex items-center justify-between gap-3 rounded-[var(--r)] border border-line px-3 py-2.5"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-[0.8438rem] font-medium text-ink">{file.filename}</p>
+                <p className="text-[0.75rem] text-ink-3">
+                  {fileSize(file.size_bytes)} · {file.uploaded_at}
+                  {file.note ? ` · ${file.note}` : ""}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <Button variant="ghost" size="icon-sm" aria-label={`Open ${file.filename}`}
+                        onClick={() => void open(file)}>
+                  <IconDownload size={14} />
+                </Button>
+                {!locked && (
+                  <Button variant="ghost" size="icon-sm" aria-label={`Remove ${file.filename}`}
+                          onClick={() => {
+                            removeLabAttachment(order.id, file.id);
+                            notify({ tone: "ok", title: "File removed", body: file.filename });
+                          }}>
+                    <IconTrash size={14} />
+                  </Button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {!locked && (
+        <div className="mt-3">
+          <input
+            ref={input}
+            type="file"
+            accept={ACCEPT}
+            className="sr-only"
+            onChange={(e) => void send(e.target.files)}
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={busy}
+            onClick={() => input.current?.click()}
+          >
+            <IconPlus size={14} /> {busy ? "Uploading…" : "Upload a report"}
+          </Button>
+          <p className="mt-1.5 text-[0.75rem] text-ink-3">
+            PDF, image, CSV or plain text, up to 15 MB. Files are released with the order when it is
+            verified, and cannot be changed afterwards.
+          </p>
+        </div>
+      )}
+    </div>
   );
 }

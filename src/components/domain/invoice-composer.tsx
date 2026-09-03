@@ -3,34 +3,59 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useApp } from "@/lib/store/app-store";
-import { useClinicDb, usePatient } from "@/lib/query/hooks";
-import {
-  findEncounter, selectInventoryItems, selectLabOrders, selectPrescriptions,
-} from "@/lib/data/repository";
+import { usePatient, useServicePrices, useSuggestedLines } from "@/lib/query/hooks";
 import { currency } from "@/lib/format";
-import type { InvoiceLineItem } from "@/lib/types";
+import type {
+  BillingDepartment, InvoiceLineItem, LineItemSource, ServiceKind, ServicePrice,
+} from "@/lib/types";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
-import { Checkbox, Field, Input, Select } from "@/components/ui/field";
+import {
+  Checkbox, Combobox, Field, Input, NumberInput, Select, type ComboOption,
+} from "@/components/ui/field";
 import { PatientPicker } from "./patient";
 import { Legend } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { IconPlus, IconReceipt, IconTrash } from "@/components/ui/icons";
+import { IconAlert, IconPlus, IconReceipt, IconTrash } from "@/components/ui/icons";
+import { DEPARTMENT_LABEL } from "@/components/domain/status";
 
-type Draft = Omit<InvoiceLineItem, "id"> & { key: string; suggested?: boolean };
+type Draft = Omit<InvoiceLineItem, "id"> & {
+  key: string;
+  suggested?: boolean;
+  /** the tariff had nothing for this line, so its price is a question */
+  unpriced?: boolean;
+};
 
 let seq = 0;
-const row = (d: Omit<InvoiceLineItem, "id">, suggested = false): Draft =>
-  ({ ...d, key: `li-${++seq}`, suggested });
+const row = (
+  d: Omit<InvoiceLineItem, "id">,
+  extra: { suggested?: boolean; unpriced?: boolean } = {},
+): Draft => ({ ...d, key: `li-${++seq}`, ...extra });
 
-const SOURCE_LABEL: Record<InvoiceLineItem["source"], string> = {
+const SOURCE_LABEL: Record<LineItemSource, string> = {
   consultation: "Consultation", procedure: "Procedure", pharmacy: "Pharmacy", lab: "Lab", manual: "Manual",
 };
 
+/** What a tariff row becomes when it is added as a line. */
+const SOURCE_OF_KIND: Record<ServiceKind, LineItemSource> = {
+  consultation: "consultation", procedure: "procedure", lab: "lab", other: "manual",
+};
+
+/** Which counter a line belongs to — the same mapping the server uses. */
+const DEPARTMENT_OF: Record<LineItemSource, BillingDepartment> = {
+  consultation: "clinic", procedure: "clinic", manual: "clinic", lab: "lab", pharmacy: "pharmacy",
+};
+
 /**
- * §3.12 — an invoice is composed from the visit. Suggestions come from the
- * encounter, its lab orders and anything dispensed against its prescriptions;
- * everything is editable and lines can be added by hand.
+ * §3.12 — an invoice is composed from the visit.
+ *
+ * The suggestions come from the server, priced from the clinic's own tariff:
+ * the consultation, each scan by its code, and anything dispensed at its stock
+ * price. Everything is editable and lines can be added by hand.
+ *
+ * The lab and the pharmacy bill separately, so a visit that touched both can
+ * be raised as one invoice per counter — each one owned by the desk that will
+ * chase it.
  */
 export function InvoiceComposer({
   open, onClose, patientId, encounterId,
@@ -42,46 +67,74 @@ export function InvoiceComposer({
   encounterId: string | null;
 }) {
   const router = useRouter();
-  const { session, config, createInvoice, notify } = useApp();
-  const db = useClinicDb();
-  const t = session.tenantId;
+  const { config, createInvoice, notify } = useApp();
+
+  const { data: suggested, isPending: suggestionsPending } = useSuggestedLines(
+    open ? encounterId : null,
+  );
+  /* The tariff, for the picker below and for the one line a walk-in starts
+     with. Prices are the practice admin's decision; this only quotes them. */
+  const { data: tariff } = useServicePrices({ active: true });
 
   const suggestions = React.useMemo<Draft[]>(() => {
-    const out: Draft[] = [];
-    const encounter = encounterId ? findEncounter(db, t, encounterId) : null;
-
-    const tax = config.tax_pct;
-    out.push(row({ description: "Consultation", source: "consultation", qty: 1, unit_price: 500, tax_pct: tax }, true));
-
-    if (encounter) {
-      const procedures = (encounter.clinical_ext.procedures as string[] | undefined) ?? [];
-      for (const p of procedures) {
-        out.push(row({ description: p, source: "procedure", qty: 1, unit_price: 2500, tax_pct: tax }, true));
-      }
-      for (const l of selectLabOrders(db, t).filter((x) => x.encounter_id === encounterId)) {
-        out.push(row({ description: l.test_name, source: "lab", qty: 1, unit_price: 300, tax_pct: tax }, true));
-      }
-      const items = selectInventoryItems(db, t);
-      for (const rx of selectPrescriptions(db, t).filter((x) => x.encounter_id === encounterId)) {
-        for (const it of rx.items.filter((x) => x.dispensed_qty > 0)) {
-          const stock = items.find((s) => s.id === it.item_id);
-          out.push(row({
-            description: `${it.medicine} ${it.strength} × ${it.dispensed_qty}`,
-            source: "pharmacy", qty: it.dispensed_qty,
-            unit_price: Math.round((stock?.unit_price ?? 0.4) * 1.6 * 100) / 100, tax_pct: tax,
-          }, true));
-        }
-      }
+    if (!encounterId) {
+      /* No visit to bill from — a walk-in at the desk. It still starts with the
+         consultation the clinic charges for, rather than a blank sheet or a
+         figure invented here. */
+      const consultation = tariff.find((p) => p.kind === "consultation");
+      return [
+        row(
+          {
+            description: consultation?.name ?? "Consultation",
+            source: "consultation",
+            qty: 1,
+            unit_price: consultation?.price ?? 0,
+            tax_pct: consultation?.tax_pct ?? config.tax_pct,
+          },
+          { suggested: true, unpriced: !consultation },
+        ),
+      ];
     }
-    return out;
-  }, [db, t, encounterId, config.tax_pct]);
+    return (suggested ?? []).map((line) =>
+      row(
+        {
+          description: line.description,
+          source: line.source,
+          qty: line.qty,
+          unit_price: line.unit_price,
+          tax_pct: line.tax_pct,
+        },
+        { suggested: true, unpriced: !line.priced },
+      ),
+    );
+  }, [suggested, encounterId, tariff, config.tax_pct]);
 
-  const [lines, setLines] = React.useState<Draft[]>(suggestions);
+  const [lines, setLines] = React.useState<Draft[]>([]);
   const [issue, setIssue] = React.useState(true);
+  const [split, setSplit] = React.useState(true);
+  const [department, setDepartment] = React.useState<BillingDepartment>("clinic");
   const [chosen, setChosen] = React.useState<string | null>(patientId);
+  const [saving, setSaving] = React.useState(false);
+
+  /* Seeded once per opening. The suggestions arrive after the dialogue does,
+     so they fill it when they land — but a later refetch must not wipe out
+     lines somebody has since edited. */
+  const seeded = React.useRef(false);
+
   React.useEffect(() => {
-    if (open) { setLines(suggestions); setIssue(true); setChosen(patientId); }
-  }, [open, suggestions, patientId]);
+    if (open) {
+      setIssue(true); setSplit(true); setChosen(patientId); setSaving(false);
+      seeded.current = false;
+    }
+  }, [open, patientId]);
+
+  React.useEffect(() => {
+    if (!open || seeded.current) return;
+    /* Nothing to seed from yet: a visit whose suggestions are still in flight. */
+    if (encounterId && suggestionsPending) return;
+    setLines(suggestions);
+    seeded.current = true;
+  }, [open, suggestions, suggestionsPending, encounterId]);
 
   const patch = (key: string, p: Partial<Draft>) =>
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...p } : l)));
@@ -89,6 +142,75 @@ export function InvoiceComposer({
   const subtotal = lines.reduce((s, l) => s + l.qty * l.unit_price, 0);
   const tax = lines.reduce((s, l) => s + (l.qty * l.unit_price * l.tax_pct) / 100, 0);
   const { data: patient } = usePatient(chosen ?? "");
+
+  /** The lines this composer holds, grouped by the counter that owns them. */
+  const byDepartment = React.useMemo(() => {
+    const groups = new Map<BillingDepartment, Draft[]>();
+    for (const line of lines) {
+      const key = DEPARTMENT_OF[line.source];
+      groups.set(key, [...(groups.get(key) ?? []), line]);
+    }
+    return groups;
+  }, [lines]);
+
+  const tariffOptions = React.useMemo<ComboOption[]>(
+    () => tariff.map((p: ServicePrice) => ({
+      value: p.id,
+      label: p.name,
+      hint: currency(p.price),
+      keywords: `${p.code} ${p.kind} ${p.note ?? ""}`,
+    })),
+    [tariff],
+  );
+
+  const spansCounters = byDepartment.size > 1;
+  const unpriced = lines.filter((l) => l.unpriced || l.unit_price <= 0).length;
+
+  const submit = async () => {
+    if (!chosen) {
+      notify({ tone: "warn", title: "Choose a patient first" });
+      return;
+    }
+    if (!lines.length) {
+      notify({ tone: "warn", title: "Add at least one line" });
+      return;
+    }
+
+    /* Either one invoice per counter, or one invoice carrying the department
+       that was chosen for it. */
+    const batches: Array<{ department: BillingDepartment; lines: Draft[] }> =
+      split && spansCounters
+        ? [...byDepartment.entries()].map(([dept, group]) => ({ department: dept, lines: group }))
+        : [{ department: spansCounters ? department : ([...byDepartment.keys()][0] ?? "clinic"), lines }];
+
+    setSaving(true);
+    try {
+      const ids: string[] = [];
+      for (const batch of batches) {
+        const id = await createInvoice({
+          patient_id: chosen,
+          encounter_id: encounterId,
+          department: batch.department,
+          line_items: batch.lines.map(({ key, suggested: _s, unpriced: _u, ...rest }) => rest),
+          issue,
+        });
+        ids.push(id);
+      }
+      notify({
+        tone: "ok",
+        title: batches.length > 1
+          ? `${batches.length} invoices ${issue ? "issued" : "saved as drafts"}`
+          : issue ? "Invoice issued" : "Draft invoice saved",
+        body: batches.length > 1
+          ? batches.map((b) => DEPARTMENT_LABEL[b.department]).join(", ")
+          : currency(subtotal + tax),
+      });
+      onClose();
+      router.push(`/billing/${ids[0]}`);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <Modal
@@ -100,29 +222,11 @@ export function InvoiceComposer({
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button
-            variant="primary"
-            onClick={async () => {
-              if (!chosen) {
-                notify({ tone: "warn", title: "Choose a patient first" });
-                return;
-              }
-              if (!lines.length) {
-                notify({ tone: "warn", title: "Add at least one line" });
-                return;
-              }
-              const id = await createInvoice({
-                patient_id: chosen,
-                encounter_id: encounterId,
-                line_items: lines.map(({ key, suggested, ...rest }) => rest),
-                issue,
-              });
-              notify({ tone: "ok", title: issue ? "Invoice issued" : "Draft invoice saved", body: currency(subtotal + tax) });
-              onClose();
-              router.push(`/billing/${id}`);
-            }}
-          >
-            <IconReceipt size={15} /> {issue ? "Issue invoice" : "Save draft"}
+          <Button variant="primary" onClick={() => void submit()} disabled={saving}>
+            <IconReceipt size={15} />
+            {split && spansCounters
+              ? `${issue ? "Issue" : "Save"} ${byDepartment.size} invoices`
+              : issue ? "Issue invoice" : "Save draft"}
           </Button>
         </>
       }
@@ -136,18 +240,38 @@ export function InvoiceComposer({
 
         <Legend>Line items</Legend>
 
-        {lines.length === 0 && (
+        {encounterId && suggestionsPending && (
+          <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-6 text-center text-[0.8125rem] text-ink-3">
+            Working out what this visit bills for…
+          </p>
+        )}
+
+        {lines.length === 0 && !suggestionsPending && (
           <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-6 text-center text-[0.8125rem] text-ink-3">
             No lines yet — add one below.
           </p>
         )}
 
+        {unpriced > 0 && (
+          <p className="flex items-start gap-2 rounded-[var(--r)] border border-warn-border bg-warn-soft px-3 py-2.5 text-[0.8125rem] leading-relaxed text-warn-text">
+            <IconAlert size={14} className="mt-px shrink-0" />
+            {unpriced === 1 ? "One line has" : `${unpriced} lines have`} no price in the tariff yet, so
+            {unpriced === 1 ? " it is" : " they are"} suggested at zero. Type a figure here, or set one for
+            good under Pricing.
+          </p>
+        )}
+
         {lines.map((l) => (
           <div key={l.key} className="rounded-[var(--r)] border border-line bg-surface-2 p-3">
-            <div className="mb-2.5 flex items-center justify-between gap-3">
-              {l.suggested
-                ? <Badge tone="accent" size="sm">Suggested from the visit</Badge>
-                : <Badge tone="neutral" size="sm">Added by hand</Badge>}
+            <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {l.suggested
+                  ? <Badge tone="accent" size="sm">Suggested from the visit</Badge>
+                  : <Badge tone="neutral" size="sm">Added by hand</Badge>}
+                <Badge tone="neutral" size="sm" dot={false}>{DEPARTMENT_LABEL[DEPARTMENT_OF[l.source]]}</Badge>
+                {(l.unpriced || l.unit_price <= 0)
+                  && <Badge tone="warn" size="sm" dot={false}>No price set</Badge>}
+              </div>
               <Button variant="ghost" size="icon-sm" onClick={() => setLines((p) => p.filter((x) => x.key !== l.key))}
                       aria-label="Remove line">
                 <IconTrash size={14} />
@@ -158,29 +282,58 @@ export function InvoiceComposer({
                 <Input value={l.description} onChange={(e) => patch(l.key, { description: e.target.value })} />
               </Field>
               <Field label="Source">
-                <Select value={l.source} onChange={(e) => patch(l.key, { source: e.target.value as InvoiceLineItem["source"] })}>
+                <Select value={l.source} onChange={(e) => patch(l.key, { source: e.target.value as LineItemSource })}>
                   {Object.entries(SOURCE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </Select>
               </Field>
               <Field label="Qty">
-                <Input type="number" min={1} value={l.qty}
-                       onChange={(e) => patch(l.key, { qty: Math.max(1, Number(e.target.value) || 1) })} />
+                <NumberInput min={1} value={l.qty}
+                             onChange={(n) => patch(l.key, { qty: n })} />
               </Field>
               <Field label="Unit price">
-                <Input type="number" min={0} step="0.01" value={l.unit_price}
-                       onChange={(e) => patch(l.key, { unit_price: Number(e.target.value) || 0 })} />
+                <NumberInput min={0} step="0.01" value={l.unit_price}
+                             onChange={(n) => patch(l.key, { unit_price: n, unpriced: false })} />
               </Field>
             </div>
           </div>
         ))}
 
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => setLines((p) => [...p, row({ description: "", source: "manual", qty: 1, unit_price: 0, tax_pct: 0 })])}
-        >
-          <IconPlus size={14} /> Add line
-        </Button>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <Field label="Add from the tariff" htmlFor="composer-tariff">
+            <Combobox
+              id="composer-tariff"
+              value=""
+              onChange={(id) => {
+                const priced = tariff.find((p) => p.id === id);
+                if (!priced) return;
+                setLines((p) => [
+                  ...p,
+                  row({
+                    description: priced.name,
+                    source: SOURCE_OF_KIND[priced.kind],
+                    qty: 1,
+                    unit_price: priced.price,
+                    tax_pct: priced.tax_pct,
+                  }),
+                ]);
+              }}
+              options={tariffOptions}
+              placeholder="Type a procedure, a scan or a service"
+              emptyText="Nothing in the tariff matches. Prices are set under Pricing."
+            />
+          </Field>
+          <Field label={<span className="sr-only">Add a blank line</span>} className="sm:self-end">
+            <Button
+              variant="secondary"
+              onClick={() => setLines((p) => [
+                ...p,
+                row({ description: "", source: "manual", qty: 1, unit_price: 0, tax_pct: config.tax_pct }),
+              ])}
+            >
+              <IconPlus size={14} /> Blank line
+            </Button>
+          </Field>
+        </div>
 
         <div className="rounded-[var(--r)] border border-line bg-surface-2 p-3">
           <dl className="space-y-1.5">
@@ -198,6 +351,41 @@ export function InvoiceComposer({
             </div>
           </dl>
         </div>
+
+        {/* Which counter gets it. Only a question when the lines span more
+            than one — otherwise the answer is obvious and the server works it
+            out from the lines anyway. */}
+        {spansCounters ? (
+          <div className="space-y-3 rounded-[var(--r)] border border-line bg-surface-2 p-3">
+            <Checkbox
+              checked={split}
+              onChange={setSplit}
+              label="Bill each counter separately"
+              description={`One invoice per counter — ${[...byDepartment.entries()]
+                .map(([d, group]) => `${DEPARTMENT_LABEL[d]} (${group.length})`)
+                .join(", ")}. The lab and the pharmacy chase their own money.`}
+            />
+            {!split && (
+              <Field label="Raise the whole thing under" htmlFor="composer-department">
+                <Select
+                  id="composer-department"
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value as BillingDepartment)}
+                >
+                  {(Object.keys(DEPARTMENT_LABEL) as BillingDepartment[]).map((d) => (
+                    <option key={d} value={d}>{DEPARTMENT_LABEL[d]}</option>
+                  ))}
+                </Select>
+              </Field>
+            )}
+          </div>
+        ) : (
+          lines.length > 0 && (
+            <p className="rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-[0.75rem] text-ink-2">
+              This goes to the {DEPARTMENT_LABEL[[...byDepartment.keys()][0] ?? "clinic"].toLowerCase()} counter.
+            </p>
+          )
+        )}
 
         <Checkbox
           checked={issue}

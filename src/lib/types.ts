@@ -286,6 +286,18 @@ export interface LabResultLine {
   flag: "normal" | "high" | "low";
 }
 
+/** A file filed against a lab order — what it is, not what is in it. */
+export interface LabAttachment {
+  id: Id;
+  lab_order_id: Id;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  note?: string | null;
+  uploaded_at: string;
+  uploaded_by?: Id | null;
+}
+
 export interface LabOrder {
   id: Id;
   tenant_id: Id;
@@ -309,6 +321,20 @@ export interface LabOrder {
 
 export type InventoryTxType = "purchase" | "dispense" | "return" | "adjustment" | "expiry" | "transfer";
 
+/**
+ * How a stock line's selling price was arrived at.
+ *
+ * `price` — the figure typed is the figure charged.
+ * `percent` — cost plus `margin_pct`.
+ * `mrp` — the printed price, less `margin_pct` as a discount.
+ *
+ * Whichever it is, `unit_price` is the answer; the server does the arithmetic
+ * so two clients can never disagree about it.
+ */
+export type PricingMode = "price" | "percent" | "mrp";
+
+export type InventoryCategory = "medicine" | "consumable" | "implant" | "lens" | "reagent";
+
 export interface InventoryItem {
   id: Id;
   tenant_id: Id;
@@ -317,10 +343,69 @@ export interface InventoryItem {
   form: string;
   strength: string;
   unit: string;
-  category: "medicine" | "consumable" | "implant" | "lens" | "reagent";
+  category: InventoryCategory;
   reorder_level: number;
+  /** what one unit bills at, however it was decided */
   unit_price: number;
+  /** what one unit cost to buy */
+  cost_price: number;
+  /** the printed maximum retail price, where the pack carries one */
+  mrp: number;
+  /** margin over cost, or discount off MRP, depending on the mode */
+  margin_pct: number;
+  pricing_mode: PricingMode;
 }
+
+/** What opens a new stock line. The server owns the id and the tenant. */
+export interface NewInventoryItem {
+  sku: string;
+  name: string;
+  form?: string;
+  strength?: string;
+  unit?: string;
+  category: InventoryCategory;
+  reorder_level?: number;
+  unit_price?: number;
+  cost_price?: number;
+  mrp?: number;
+  margin_pct?: number;
+  pricing_mode?: PricingMode;
+}
+
+/** What may be changed about one. Everything sent is what changes. */
+export type InventoryItemPatch = Partial<NewInventoryItem>;
+
+/* ---- the tariff (§3.12) --------------------------------------------------
+   What this clinic charges for everything that is not stock. Set by the
+   practice admin, read by the composer — so a scan can carry its own amount
+   and no price is a number in the code. */
+
+export type ServiceKind = "consultation" | "procedure" | "lab" | "other";
+
+export interface ServicePrice {
+  id: Id;
+  tenant_id: Id;
+  kind: ServiceKind;
+  /** the lab test code for a lab price; a slug the admin chose otherwise */
+  code: string;
+  name: string;
+  price: number;
+  tax_pct: number;
+  active: boolean;
+  note?: string | null;
+}
+
+export interface NewServicePrice {
+  kind: ServiceKind;
+  code: string;
+  name: string;
+  price: number;
+  tax_pct?: number;
+  active?: boolean;
+  note?: string | null;
+}
+
+export type ServicePricePatch = Partial<Omit<NewServicePrice, "kind" | "code">>;
 
 export interface InventoryBatch {
   batch_no: string;
@@ -345,13 +430,79 @@ export interface InventoryTransaction {
 
 export type InvoiceStatus = "draft" | "issued" | "partially_paid" | "paid" | "void";
 
+export type LineItemSource = "consultation" | "procedure" | "pharmacy" | "lab" | "manual";
+
 export interface InvoiceLineItem {
   id: Id;
   description: string;
-  source: "consultation" | "procedure" | "pharmacy" | "lab" | "manual";
+  source: LineItemSource;
   qty: number;
   unit_price: number;
   tax_pct: number;
+  /** the row this line bills for — a prescription item, a lab order, an
+   *  encounter. `source` says which. It is what stops the same charge being
+   *  billed twice. */
+  ref_id?: Id | null;
+}
+
+/**
+ * Something the patient has had that no invoice covers yet.
+ *
+ * Worked out on the server from what the clinic already recorded — medicine
+ * handed over, tests ordered, consultations held — minus whatever an invoice
+ * line already points at.
+ */
+export interface Charge {
+  source: LineItemSource;
+  department: BillingDepartment;
+  description: string;
+  qty: number;
+  unit_price: number;
+  tax_pct: number;
+  ref_id: Id;
+  /** false when the clinic's tariff has nothing for it, so it reads as zero */
+  priced: boolean;
+  total: number;
+}
+
+/** What one counter is owed, and what it has not billed yet. */
+export interface DepartmentAccount {
+  department: BillingDepartment;
+  /** on invoices already raised */
+  outstanding: number;
+  /** not on an invoice yet */
+  unbilled_total: number;
+  /** what the counter would ask for right now */
+  due: number;
+  /** what it has already taken — which is why that money is not in `due` */
+  paid: number;
+  unbilled: Charge[];
+  invoices: Invoice[];
+}
+
+/** A patient's account across all three counters. */
+export interface PatientAccount {
+  patient_id: Id;
+  patient_name: string;
+  patient_mrn: string;
+  departments: Record<BillingDepartment, DepartmentAccount>;
+  total_due: number;
+}
+
+/**
+ * A line the visit implies, priced from the clinic's tariff.
+ *
+ * `priced` is false when nothing in the tariff covers it — the composer says
+ * so rather than quietly suggesting zero.
+ */
+export interface SuggestedLine {
+  description: string;
+  source: LineItemSource;
+  department: BillingDepartment;
+  qty: number;
+  unit_price: number;
+  tax_pct: number;
+  priced: boolean;
 }
 
 export interface Payment {
@@ -371,6 +522,12 @@ export interface InvoiceTotals {
   balance: number;
 }
 
+/**
+ * Which counter raised an invoice. The lab and the pharmacy bill separately
+ * from the clinic, so one visit can produce three.
+ */
+export type BillingDepartment = "clinic" | "lab" | "pharmacy";
+
 export interface Invoice {
   id: Id;
   tenant_id: Id;
@@ -381,6 +538,7 @@ export interface Invoice {
   encounter_id: Id | null;
   number: string;
   status: InvoiceStatus;
+  department: BillingDepartment;
   issued_at: string;
   due_at: string;
   line_items: InvoiceLineItem[];

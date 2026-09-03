@@ -15,12 +15,14 @@ import { Card, CardBody, CardHeader, Legend } from "@/components/ui/card";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { EmptyState, Meter } from "@/components/ui/misc";
 import { Stat } from "@/components/ui/stat";
-import { Input, Select } from "@/components/ui/field";
+import { Input, NumberInput, Select } from "@/components/ui/field";
 import { Tabs } from "@/components/ui/tabs";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { FeatureGate, RoleGate } from "@/components/domain/gates";
 import { StatusPill } from "@/components/domain/status";
 import { AllergyFlag, PatientChip, PatientRef } from "@/components/domain/patient";
+import { CounterPayment } from "@/components/domain/counter-payment";
+import { PatientAccountSummary } from "@/components/domain/patient-account";
 import { cn } from "@/lib/cn";
 import {
   IconAlert, IconBox, IconCheck, IconMortar, IconRx,
@@ -165,7 +167,14 @@ function Pharmacy() {
 }
 
 function DispensePanel({ rx, onDone }: { rx: Prescription; onDone: () => void }) {
-  const { session, dispense, notify } = useApp();
+  const { session, dispense, hasFeature, can, notify } = useApp();
+
+  /* The clinic bills, and this person is allowed to take the money. Without
+     both, the window hands over the medicine and nothing else. */
+  const billsHere = hasFeature("billing") && can("billing:write");
+  /* Two steps at one window: hand the medicine over, then ask for the money. */
+  const [busy, setBusy] = React.useState(false);
+  const [collecting, setCollecting] = React.useState(false);
   const db = useClinicDb();
   const t = session.tenantId;
   /* The drawer shows allergies, which a list row does not carry. */
@@ -200,6 +209,13 @@ function DispensePanel({ rx, onDone }: { rx: Prescription; onDone: () => void })
           </div>
         )}
 
+        {/* What the window is owed, before anything is handed over. Somebody
+            who came back only to pay is served from here, without dispensing
+            anything they have already had. */}
+        {hasFeature("billing") && (
+          <PatientAccountSummary patientId={rx.patient_id} only="pharmacy" />
+        )}
+
         <div>
           <Legend>Lines to hand over</Legend>
           <ul className="space-y-3">
@@ -222,14 +238,13 @@ function DispensePanel({ rx, onDone }: { rx: Prescription; onDone: () => void })
                   <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[6rem_minmax(0,1fr)_auto] sm:items-end">
                     <div>
                       <label className="mb-1.5 block text-[0.75rem] font-medium text-ink">Quantity</label>
-                      <Input
-                        type="number"
+                      <NumberInput
                         min={0}
                         max={remaining}
                         value={line.qty}
                         disabled={remaining === 0}
-                        onChange={(e) =>
-                          setLines((p) => ({ ...p, [it.id]: { ...p[it.id], qty: Math.max(0, Math.min(remaining, Number(e.target.value) || 0)) } }))}
+                        onChange={(qty) =>
+                          setLines((p) => ({ ...p, [it.id]: { ...p[it.id], qty } }))}
                       />
                     </div>
                     <div>
@@ -275,22 +290,42 @@ function DispensePanel({ rx, onDone }: { rx: Prescription; onDone: () => void })
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line-soft pt-4">
           <p className="text-[0.75rem] leading-snug text-ink-3">
             Dispensing updates the prescription item and writes one ledger transaction per stocked line.
+            {hasFeature("billing") && " What was handed over then becomes a charge at the pharmacy counter."}
           </p>
           <Button
             variant="primary"
-            disabled={!anything || shortfalls.length > 0}
-            onClick={() => {
-              dispense(rx.id, rx.items.map((it) => ({
-                itemId: it.id, qty: lines[it.id]?.qty ?? 0, batch_no: lines[it.id]?.batch ?? "—",
-              })).filter((l) => l.qty > 0));
+            disabled={busy || !anything || shortfalls.length > 0}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await dispense(rx.id, rx.items.map((it) => ({
+                  itemId: it.id, qty: lines[it.id]?.qty ?? 0, batch_no: lines[it.id]?.batch ?? "—",
+                })).filter((l) => l.qty > 0));
+              } catch {
+                /* the refusal is already a toast; the panel stays as it was */
+                setBusy(false);
+                return;
+              }
+              setBusy(false);
               notify({ tone: "ok", title: "Dispensed", body: "Prescription updated and stock drawn from the ledger." });
-              onDone();
+              /* Money comes second, and only where the clinic bills at all. The
+                 dialogue reads the account fresh, so it charges for what was
+                 just handed over rather than what this panel thinks. */
+              if (billsHere) setCollecting(true);
+              else onDone();
             }}
           >
-            <IconCheck size={15} /> Dispense
+            <IconCheck size={15} /> {billsHere ? "Dispense and bill" : "Dispense"}
           </Button>
         </div>
       </CardBody>
+
+      <CounterPayment
+        open={collecting}
+        onClose={() => { setCollecting(false); onDone(); }}
+        patientId={rx.patient_id}
+        department="pharmacy"
+      />
     </Card>
   );
 }

@@ -17,7 +17,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, EmptyState, KV } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
-import { ChoiceGroup, Checkbox, Field, Input, Select, Switch } from "@/components/ui/field";
+import {
+  ChoiceGroup, Checkbox, Field, Input, NumberInput, Select, Switch,
+} from "@/components/ui/field";
 import { Tabs } from "@/components/ui/tabs";
 import { DataTable, columnHelperFor } from "@/components/ui/data-table";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
@@ -598,8 +600,8 @@ function ConfigurationTab() {
                 </Select>
               </Field>
               <Field label="Tax rate" help="Applied to new invoice lines.">
-                <Input type="number" min={0} max={40} step="0.5" value={draft.tax_pct}
-                       onChange={(e) => set("tax_pct", Number(e.target.value) || 0)} />
+                <NumberInput min={0} max={40} step="0.5" value={draft.tax_pct}
+                             onChange={(n) => set("tax_pct", n)} />
               </Field>
               <Field label="Payment terms" required>
                 <Select value={String(draft.payment_terms_days)}

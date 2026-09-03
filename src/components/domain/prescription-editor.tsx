@@ -5,10 +5,10 @@ import { useApp } from "@/lib/store/app-store";
 import { useClinicDb, useMedicines } from "@/lib/query/hooks";
 import { selectInventoryItems, stockLevel } from "@/lib/data/repository";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Select } from "@/components/ui/field";
+import { Field, Input, NumberInput } from "@/components/ui/field";
 import { EmptyState } from "@/components/ui/misc";
 import { Badge } from "@/components/ui/badge";
-import { IconPlus, IconRx, IconTrash } from "@/components/ui/icons";
+import { IconAlert, IconBox, IconPlus, IconRx, IconTrash } from "@/components/ui/icons";
 
 export interface DraftRxItem {
   key: string;
@@ -22,13 +22,34 @@ export interface DraftRxItem {
   qty: number;
 }
 
-interface MedicineSuggestion {
+/**
+ * One thing a clinician can pick.
+ *
+ * Where the clinic keeps stock, these are its own shelf: an item the pharmacy
+ * actually holds, carrying the id that lets a dispense draw from the ledger.
+ * Where it does not, they are the shared catalogue, and `item_id` is null —
+ * the prescription still prints and still lives on the record.
+ */
+interface MedicineChoice {
+  item_id: string | null;
   medicine: string;
   strength: string;
   dosage: string;
   frequency: string;
   duration: string;
+  /** how many are on the shelf, for a stock-backed choice */
+  on_hand?: number;
+  unit?: string;
+  /** which list it came from, so the dropdown can say so */
+  source: "stock" | "catalogue";
+  /** typed by hand rather than picked: it names the medicine and nothing else */
+  custom?: true;
 }
+
+const GROUP_LABEL: Record<MedicineChoice["source"], string> = {
+  stock: "In this clinic's inventory",
+  catalogue: "Common medicines — not stocked here",
+};
 
 let rowSeq = 0;
 export const emptyRxItem = (): DraftRxItem => ({
@@ -40,17 +61,21 @@ export const emptyRxItem = (): DraftRxItem => ({
 /**
  * A searchable medicine field styled like the app's other pickers
  * (`PatientPicker`): a plain text input that still accepts anything typed,
- * with a filtered dropdown of catalog matches underneath. Picking a match
- * fills the rest of the row the way a quick-add chip does.
+ * with a filtered dropdown of matches underneath. Picking a match fills the
+ * rest of the row — and, when the match is a stock line, ties the row to it.
+ *
+ * Typing something that is not on the list stays possible on purpose: a
+ * clinician writing a script the patient will fill somewhere else is a real
+ * thing, and the row says plainly that the pharmacy cannot dispense it.
  */
 function MedicineField({
-  value, suggestions, onChange, onBlurCheck, onPick,
+  value, choices, onChange, onBlurCheck, onPick,
 }: {
   value: string;
-  suggestions: MedicineSuggestion[];
+  choices: MedicineChoice[];
   onChange: (v: string) => void;
   onBlurCheck: (v: string) => void;
-  onPick: (s: MedicineSuggestion) => void;
+  onPick: (choice: MedicineChoice) => void;
 }) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
@@ -64,11 +89,23 @@ function MedicineField({
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
 
-  const term = value.trim().toLowerCase();
-  const matches = (term
-    ? suggestions.filter((s) => s.medicine.toLowerCase().includes(term))
-    : suggestions
-  ).slice(0, 8);
+  const typed = value.trim();
+  const term = typed.toLowerCase();
+  const matching = term
+    ? choices.filter((c) => `${c.medicine} ${c.strength}`.toLowerCase().includes(term))
+    : choices;
+
+  /* Two lists, stock first: what the pharmacy can hand over, then everything
+     else a clinician commonly writes. Each is capped so one cannot bury the
+     other. */
+  const groups = (["stock", "catalogue"] as const)
+    .map((source) => ({ source, rows: matching.filter((c) => c.source === source).slice(0, 8) }))
+    .filter((g) => g.rows.length > 0);
+
+  /* Anything can be written, whether it is on either list or not — a script
+     the patient fills somewhere else is an ordinary thing. */
+  const exact = matching.some((c) => c.medicine.toLowerCase() === term);
+  const custom = typed.length > 0 && !exact;
 
   return (
     <div className="relative" ref={ref}>
@@ -77,25 +114,69 @@ function MedicineField({
         onChange={(e) => { onChange(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
         onBlur={(e) => onBlurCheck(e.target.value)}
-        placeholder="Amoxicillin"
+        placeholder="Type a medicine, or pick one below"
         autoComplete="off"
       />
-      {open && matches.length > 0 && (
+      {open && (groups.length > 0 || custom) && (
         <div className="pop absolute left-0 right-0 z-40 mt-1.5 overflow-hidden rounded-[var(--r)] border border-line bg-surface shadow-e3">
-          <ul className="max-h-56 overflow-y-auto p-1.5">
-            {matches.map((s) => (
-              <li key={s.medicine}>
+          <ul className="max-h-64 overflow-y-auto p-1.5">
+            {groups.map((group) => (
+              <li key={group.source}>
+                <p className="px-2.5 pb-1 pt-2 text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-3">
+                  {GROUP_LABEL[group.source]}
+                </p>
+                <ul>
+                  {group.rows.map((c) => (
+                    <li key={c.item_id ?? `cat-${c.medicine}`}>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => { onPick(c); setOpen(false); }}
+                        className="flex w-full items-center justify-between gap-2.5 rounded-[var(--r-sm)] px-2.5 py-2 text-left transition-colors hover:bg-surface-2"
+                      >
+                        <span className="min-w-0 flex-1 truncate text-[0.8438rem] text-ink">
+                          {c.medicine}
+                          {c.strength && <span className="text-ink-3"> · {c.strength}</span>}
+                        </span>
+                        {c.on_hand === undefined ? (
+                          <span className="shrink-0 text-[0.75rem] text-ink-3">{c.dosage || "—"}</span>
+                        ) : (
+                          <span
+                            className={`shrink-0 text-[0.75rem] ${c.on_hand > 0 ? "text-ink-3" : "text-warn-text"}`}
+                          >
+                            {c.on_hand > 0 ? `${c.on_hand} ${c.unit ?? ""} on hand` : "none left"}
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+
+            {custom && (
+              <li className="mt-1 border-t border-line-soft pt-1">
                 <button
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => { onPick(s); setOpen(false); }}
-                  className="flex w-full items-center justify-between gap-2.5 rounded-[var(--r-sm)] px-2.5 py-2 text-left transition-colors hover:bg-surface-2"
+                  onClick={() => {
+                    /* A custom entry keeps whatever else has been typed into
+                       the row; only the tie to a stock line goes. */
+                    onPick({
+                      item_id: null, medicine: typed, strength: "", dosage: "",
+                      frequency: "", duration: "", source: "catalogue", custom: true,
+                    });
+                    setOpen(false);
+                  }}
+                  className="flex w-full items-center gap-2 rounded-[var(--r-sm)] px-2.5 py-2 text-left transition-colors hover:bg-surface-2"
                 >
-                  <span className="truncate text-[0.8438rem] text-ink">{s.medicine}</span>
-                  <span className="shrink-0 text-[0.75rem] text-ink-3">{s.strength}</span>
+                  <IconPlus size={13} className="shrink-0 text-ink-3" />
+                  <span className="min-w-0 flex-1 truncate text-[0.8438rem] text-ink">
+                    Write “{typed}” as a custom entry
+                  </span>
                 </button>
               </li>
-            ))}
+            )}
           </ul>
         </div>
       )}
@@ -104,9 +185,13 @@ function MedicineField({
 }
 
 /**
- * §3.8 — prescriptions are core. If the clinic also runs a pharmacy the row can
- * be tied to a stock item so dispensing later draws from the ledger; if not,
- * the medicine is simply free text and everything else still works.
+ * §3.8 — prescriptions are core.
+ *
+ * A clinic that keeps stock prescribes from its own shelf: the picker offers
+ * the inventory lines it holds, and choosing one ties the row to that item, so
+ * the pharmacy dispenses against the ledger rather than matching names by eye.
+ * A clinic with no inventory sees the shared catalogue exactly as before, and
+ * either way anything can still be typed by hand.
  */
 export function PrescriptionEditor({
   items, onChange,
@@ -116,10 +201,60 @@ export function PrescriptionEditor({
 }) {
   const { session, hasFeature, notify } = useApp();
   const db = useClinicDb();
-  const { data: suggestions = [] } = useMedicines();
-  const stockItems = hasFeature("pharmacy") || hasFeature("inventory")
-    ? selectInventoryItems(db, session.tenantId).filter((i) => i.category === "medicine")
-    : [];
+  const { data: catalogue = [] } = useMedicines();
+
+  const stocked = hasFeature("pharmacy") || hasFeature("inventory");
+  const stockItems = React.useMemo(
+    () => (stocked
+      ? selectInventoryItems(db, session.tenantId).filter((i) => i.category === "medicine")
+      : []),
+    [stocked, db, session.tenantId],
+  );
+
+  /**
+   * What the picker offers.
+   *
+   * With stock, the shelf is the list — and the catalogue is still read for the
+   * dose, frequency and duration a name implies, so picking a box of
+   * amoxicillin fills the row the way it always did.
+   */
+  /**
+   * What the picker offers: both lists, stock first.
+   *
+   * The shelf is what the pharmacy can actually hand over, so it leads and
+   * carries the id a dispense needs. The shared catalogue stays underneath it —
+   * a clinician writing something this clinic does not keep is ordinary, and so
+   * is typing a name that is on neither list.
+   *
+   * A catalogue entry whose name is already a stock line is dropped: it would
+   * be the same medicine twice, once dispensable and once not.
+   */
+  const choices = React.useMemo<MedicineChoice[]>(() => {
+    const defaultsFor = (name: string) =>
+      catalogue.find((c) => c.medicine.toLowerCase() === name.toLowerCase());
+
+    const fromStock: MedicineChoice[] = stockItems.map((item) => {
+      const defaults = defaultsFor(item.name);
+      return {
+        item_id: item.id,
+        medicine: item.name,
+        strength: item.strength,
+        dosage: defaults?.dosage ?? "",
+        frequency: defaults?.frequency ?? "",
+        duration: defaults?.duration ?? "",
+        on_hand: stockLevel(db, session.tenantId, item.id),
+        unit: item.unit,
+        source: "stock",
+      };
+    });
+
+    const stocked = new Set(fromStock.map((c) => c.medicine.toLowerCase()));
+    const fromCatalogue: MedicineChoice[] = catalogue
+      .filter((c) => !stocked.has(c.medicine.toLowerCase()))
+      .map((c) => ({ item_id: null, ...c, source: "catalogue" }));
+
+    return [...fromStock, ...fromCatalogue];
+  }, [stockItems, catalogue, db, session.tenantId]);
 
   const patch = (key: string, p: Partial<DraftRxItem>) =>
     onChange(items.map((it) => (it.key === key ? { ...it, ...p } : it)));
@@ -130,20 +265,55 @@ export function PrescriptionEditor({
     return !!n && items.some((it) => it.key !== exceptKey && norm(it.medicine) === n);
   };
 
-  const addSuggestion = (s: MedicineSuggestion) => {
-    if (isDuplicate(s.medicine)) {
-      notify({ tone: "warn", title: `${s.medicine} is already on this prescription` });
+  /** What one row can be dispensed against, and how much of it there is. */
+  const stockFor = (it: DraftRxItem) => stockItems.find((s) => s.id === it.item_id) ?? null;
+  const levelFor = (it: DraftRxItem) =>
+    it.item_id ? stockLevel(db, session.tenantId, it.item_id) : null;
+
+  const addChoice = (c: MedicineChoice) => {
+    if (isDuplicate(c.medicine)) {
+      notify({ tone: "warn", title: `${c.medicine} is already on this prescription` });
       return;
     }
-    onChange([...items, { ...emptyRxItem(), ...s, instructions: "", qty: 1, item_id: null }]);
+    onChange([...items, {
+      ...emptyRxItem(),
+      item_id: c.item_id,
+      medicine: c.medicine,
+      strength: c.strength,
+      dosage: c.dosage,
+      frequency: c.frequency,
+      duration: c.duration,
+    }]);
   };
 
-  const pickForRow = (key: string, s: MedicineSuggestion) => {
-    if (isDuplicate(s.medicine, key)) {
-      notify({ tone: "warn", title: `${s.medicine} is already on this prescription` });
+  const pickForRow = (key: string, c: MedicineChoice) => {
+    if (isDuplicate(c.medicine, key)) {
+      notify({ tone: "warn", title: `${c.medicine} is already on this prescription` });
       return;
     }
-    patch(key, { medicine: s.medicine, strength: s.strength, dosage: s.dosage, frequency: s.frequency, duration: s.duration });
+    /* A custom entry only names the medicine — the dose, frequency and anything
+       else already typed into the row is what the clinician meant, and picking
+       "write this as a custom entry" must not throw it away. */
+    if (c.custom) {
+      patch(key, { item_id: null, medicine: c.medicine });
+      return;
+    }
+    patch(key, {
+      item_id: c.item_id,
+      medicine: c.medicine,
+      strength: c.strength,
+      dosage: c.dosage,
+      frequency: c.frequency,
+      duration: c.duration,
+    });
+  };
+
+  /* Typing over a name that was picked from the shelf breaks the tie to it:
+     the row is about whatever it now says, not the box it started as. */
+  const editMedicine = (it: DraftRxItem, name: string) => {
+    const stock = stockFor(it);
+    const drifted = !!stock && norm(name) !== norm(stock.name);
+    patch(it.key, { medicine: name, ...(drifted ? { item_id: null } : {}) });
   };
 
   const handleMedicineBlur = (key: string, name: string) => {
@@ -159,90 +329,105 @@ export function PrescriptionEditor({
           compact
           icon={<IconRx size={20} />}
           title="No medicines on this prescription"
-          body="Add a line, or start from one of the common choices below."
+          body={stockItems.length
+            ? "Add a line and start typing — what this clinic stocks comes first, then the common list."
+            : "Add a line, or start from one of the common choices below."}
         />
       )}
 
-      {items.map((it, idx) => (
-        <div key={it.key} className="rounded-[var(--r)] border border-line bg-surface-2 p-3">
-          <div className="mb-2.5 flex items-center justify-between gap-3">
-            <span className="tnum font-mono text-[0.75rem] font-medium text-ink-3">Line {idx + 1}</span>
-            <Button variant="ghost" size="icon-sm" onClick={() => onChange(items.filter((x) => x.key !== it.key))}
-                    aria-label="Remove line">
-              <IconTrash size={14} />
-            </Button>
-          </div>
+      {items.map((it, idx) => {
+        const level = levelFor(it);
+        const stock = stockFor(it);
+        const short = level !== null && level < it.qty;
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Field
-              label="Medicine"
-              required
-              className="sm:col-span-2"
-              error={isDuplicate(it.medicine, it.key) ? "Already on this prescription." : null}
-            >
-              <MedicineField
-                value={it.medicine}
-                suggestions={suggestions}
-                onChange={(v) => patch(it.key, { medicine: v })}
-                onBlurCheck={(v) => handleMedicineBlur(it.key, v)}
-                onPick={(s) => pickForRow(it.key, s)}
-              />
-            </Field>
-            <Field label="Strength">
-              <Input value={it.strength} onChange={(e) => patch(it.key, { strength: e.target.value })} placeholder="500 mg" />
-            </Field>
-            <Field label="Quantity">
-              <Input type="number" min={1} value={it.qty}
-                     onChange={(e) => patch(it.key, { qty: Math.max(1, Number(e.target.value) || 1) })} />
-            </Field>
-            <Field label="Dose">
-              <Input value={it.dosage} onChange={(e) => patch(it.key, { dosage: e.target.value })} placeholder="1 capsule" />
-            </Field>
-            <Field label="Frequency">
-              <Input value={it.frequency} onChange={(e) => patch(it.key, { frequency: e.target.value })} placeholder="Three times daily" />
-            </Field>
-            <Field label="Duration">
-              <Input value={it.duration} onChange={(e) => patch(it.key, { duration: e.target.value })} placeholder="5 days" />
-            </Field>
-            <Field label="Instructions">
-              <Input value={it.instructions} onChange={(e) => patch(it.key, { instructions: e.target.value })} placeholder="After food" />
-            </Field>
+        return (
+          <div key={it.key} className="rounded-[var(--r)] border border-line bg-surface-2 p-3">
+            <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="tnum font-mono text-[0.75rem] font-medium text-ink-3">Line {idx + 1}</span>
+                {stock && (
+                  <Badge tone={short ? "warn" : "ok"} size="sm" dot={false}>
+                    <IconBox size={11} /> {level} {stock.unit} on hand
+                  </Badge>
+                )}
+                {stockItems.length > 0 && !it.item_id && it.medicine.trim() && (
+                  <Badge tone="neutral" size="sm" dot={false}>Not stocked here</Badge>
+                )}
+              </div>
+              <Button variant="ghost" size="icon-sm" onClick={() => onChange(items.filter((x) => x.key !== it.key))}
+                      aria-label="Remove line">
+                <IconTrash size={14} />
+              </Button>
+            </div>
 
-            {stockItems.length > 0 && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Field
-                label="Stock item"
-                className="sm:col-span-2 lg:col-span-4"
-                help="Linking a line lets the pharmacy dispense against the inventory ledger. Optional."
+                label="Medicine"
+                required
+                className="sm:col-span-2"
+                error={isDuplicate(it.medicine, it.key) ? "Already on this prescription." : null}
+                help={stockItems.length && !it.item_id && it.medicine.trim()
+                  ? "Not one of this clinic's stock lines — the pharmacy cannot dispense it, but it still prints."
+                  : undefined}
               >
-                <Select value={it.item_id ?? ""} onChange={(e) => patch(it.key, { item_id: e.target.value || null })}>
-                  <option value="">Not linked to stock</option>
-                  {stockItems.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} · {s.strength} — {stockLevel(db, session.tenantId, s.id)} {s.unit} on hand
-                    </option>
-                  ))}
-                </Select>
+                <MedicineField
+                  value={it.medicine}
+                  choices={choices}
+                  onChange={(v) => editMedicine(it, v)}
+                  onBlurCheck={(v) => handleMedicineBlur(it.key, v)}
+                  onPick={(c) => pickForRow(it.key, c)}
+                />
               </Field>
-            )}
+              <Field label="Strength">
+                <Input value={it.strength} onChange={(e) => patch(it.key, { strength: e.target.value })} placeholder="500 mg" />
+              </Field>
+              <Field
+                label="Quantity"
+                error={short ? `Only ${level} on hand.` : null}
+              >
+                <NumberInput min={1} value={it.qty}
+                             onChange={(n) => patch(it.key, { qty: n })} />
+              </Field>
+              <Field label="Dose">
+                <Input value={it.dosage} onChange={(e) => patch(it.key, { dosage: e.target.value })} placeholder="1 capsule" />
+              </Field>
+              <Field label="Frequency">
+                <Input value={it.frequency} onChange={(e) => patch(it.key, { frequency: e.target.value })} placeholder="Three times daily" />
+              </Field>
+              <Field label="Duration">
+                <Input value={it.duration} onChange={(e) => patch(it.key, { duration: e.target.value })} placeholder="5 days" />
+              </Field>
+              <Field label="Instructions">
+                <Input value={it.instructions} onChange={(e) => patch(it.key, { instructions: e.target.value })} placeholder="After food" />
+              </Field>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="secondary" size="sm" onClick={() => onChange([...items, emptyRxItem()])}>
           <IconPlus size={14} /> Add line
         </Button>
-        {suggestions.slice(0, 4).map((s) => (
+        {choices.slice(0, 4).map((c) => (
           <button
-            key={s.medicine}
+            key={c.item_id ?? `cat-${c.medicine}`}
             type="button"
-            onClick={() => addSuggestion(s)}
+            onClick={() => addChoice(c)}
             className="rounded-[var(--r-pill)] border border-line-strong bg-surface px-2.5 py-1 text-[0.75rem] text-ink-2 transition-colors hover:border-accent hover:text-accent-text"
           >
-            + {s.medicine}
+            + {c.medicine}
           </button>
         ))}
       </div>
+
+      {stocked && stockItems.length === 0 && (
+        <p className="flex items-start gap-2 rounded-[var(--r)] border border-warn-border bg-warn-soft px-3 py-2.5 text-[0.75rem] leading-relaxed text-warn-text">
+          <IconAlert size={14} className="mt-px shrink-0" />
+          There are no medicine lines in inventory yet, so nothing on this prescription can be dispensed
+          by the pharmacy. Add them under Inventory and they will lead the list here.
+        </p>
+      )}
 
       {!hasFeature("pharmacy") && items.length > 0 && (
         <Badge tone="neutral" size="sm">

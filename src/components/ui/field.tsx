@@ -88,6 +88,91 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTML
   },
 );
 
+/**
+ * A number field you can actually empty.
+ *
+ * The obvious `value={n} onChange={Number(e.target.value) || 0}` cannot be
+ * cleared: deleting the last digit yields `""`, which becomes `0`, which is
+ * written straight back into the box. Anyone typing a figure has to select the
+ * zero first, and anyone who does not ends up with `020` — or gives up and
+ * types the number into the field next door.
+ *
+ * So the text is this component's own state while it is being edited, and the
+ * parent is told a number. An empty box means zero as far as the parent is
+ * concerned, but stays empty on screen until focus leaves it.
+ */
+/** Bring a figure inside the bounds the field declares, if it declares any. */
+function clamp(value: number, min?: string | number, max?: string | number) {
+  const low = min === undefined || min === "" ? -Infinity : Number(min);
+  const high = max === undefined || max === "" ? Infinity : Number(max);
+  if (Number.isFinite(low) && value < low) return low;
+  if (Number.isFinite(high) && value > high) return high;
+  return value;
+}
+
+export function NumberInput({
+  value, onChange, onBlur, className, invalid, ...rest
+}: Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "type"> & {
+  value: number;
+  onChange: (value: number) => void;
+  invalid?: boolean;
+}) {
+  const show = (n: number) => (Number.isFinite(n) ? String(n) : "");
+  const [text, setText] = React.useState(() => show(value));
+  /* what the parent was last told — so a change from outside (a dialogue
+     reopening on another row) resyncs, while our own echo does not. */
+  const reported = React.useRef(value);
+
+  React.useEffect(() => {
+    if (value !== reported.current) {
+      reported.current = value;
+      setText(show(value));
+    }
+  }, [value]);
+
+  return (
+    <input
+      type="number"
+      inputMode="decimal"
+      value={text}
+      onChange={(e) => {
+        const raw = e.target.value;
+        setText(raw);
+        /* Half-typed values — "", "-", "1e" — are left on screen without being
+           reported, except that an empty box means zero. Nothing is clamped
+           here: pulling a figure back to `min` on every keystroke is the same
+           trap in a different shape, since deleting "12" down to "1" would
+           snap it to the floor before the "5" arrives. */
+        if (raw.trim() === "") {
+          reported.current = 0;
+          onChange(0);
+          return;
+        }
+        const parsed = Number(raw);
+        if (Number.isNaN(parsed)) return;
+        reported.current = parsed;
+        onChange(parsed);
+      }}
+      onBlur={(e) => {
+        /* Now that they have finished: "" becomes 0, "007" becomes 7, and
+           anything outside min/max is brought inside it. */
+        const bounded = clamp(reported.current, rest.min, rest.max);
+        if (bounded !== reported.current) {
+          reported.current = bounded;
+          onChange(bounded);
+        }
+        setText(show(bounded));
+        onBlur?.(e);
+      }}
+      className={cn(
+        controlBase, "h-9.5 px-3 text-[0.875rem]",
+        invalid && "border-critical focus:border-critical", className,
+      )}
+      {...rest}
+    />
+  );
+}
+
 export function Select({
   className, invalid, children, ...rest
 }: React.SelectHTMLAttributes<HTMLSelectElement> & { invalid?: boolean }) {
@@ -121,6 +206,160 @@ export function SearchInput({
         className={cn(controlBase, "h-9.5 pl-9 pr-3 text-[0.875rem] [&::-webkit-search-cancel-button]:appearance-none", className)}
         {...rest}
       />
+    </div>
+  );
+}
+
+/**
+ * A select you can type into.
+ *
+ * A dropdown is fine for five options and hopeless for five hundred: picking a
+ * medicine out of a stock list means typing the first few letters of its name,
+ * not scrolling. The options are already in the browser — this filters them as
+ * you type, over the name, the code, and whatever hint each row carries.
+ *
+ * Keyboard: type to filter, ↑/↓ to move, Enter to take the highlighted row,
+ * Escape to close without changing anything.
+ */
+export interface ComboOption {
+  value: string;
+  label: string;
+  /** the second line — a code, a level, whatever tells two rows apart */
+  hint?: string;
+  /** extra text to match against without showing it */
+  keywords?: string;
+}
+
+export function Combobox({
+  value, onChange, options, placeholder = "Type to search", emptyText = "Nothing matches",
+  disabled, id, invalid, className,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: ComboOption[];
+  placeholder?: string;
+  emptyText?: string;
+  disabled?: boolean;
+  id?: string;
+  invalid?: boolean;
+  className?: string;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [query, setQuery] = React.useState("");
+  const [active, setActive] = React.useState(0);
+  const wrap = React.useRef<HTMLDivElement>(null);
+
+  const selected = options.find((o) => o.value === value) ?? null;
+
+  /* While it is closed the input shows what is chosen; while it is open it
+     shows what is being typed, so the list and the box always agree. */
+  const text = open ? query : selected?.label ?? "";
+
+  const matches = React.useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!open || !term) return options;
+    return options.filter((o) =>
+      `${o.label} ${o.hint ?? ""} ${o.keywords ?? ""}`.toLowerCase().includes(term),
+    );
+  }, [options, query, open]);
+
+  React.useEffect(() => { setActive(0); }, [query, open]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (wrap.current && !wrap.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const take = (option: ComboOption) => {
+    onChange(option.value);
+    setOpen(false);
+    setQuery("");
+  };
+
+  return (
+    <div className={cn("relative", className)} ref={wrap}>
+      <input
+        id={id}
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={id ? `${id}-listbox` : undefined}
+        autoComplete="off"
+        disabled={disabled}
+        value={text}
+        placeholder={selected ? selected.label : placeholder}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            e.preventDefault();
+            setOpen(true);
+            setActive((i) => {
+              const next = e.key === "ArrowDown" ? i + 1 : i - 1;
+              if (!matches.length) return 0;
+              return (next + matches.length) % matches.length;
+            });
+            return;
+          }
+          if (e.key === "Enter" && open) {
+            const option = matches[active];
+            if (option) { e.preventDefault(); take(option); }
+            return;
+          }
+          if (e.key === "Escape" && open) {
+            e.preventDefault();
+            setOpen(false);
+            setQuery("");
+          }
+        }}
+        className={cn(
+          controlBase, "h-9.5 pl-3 pr-9 text-[0.875rem]",
+          invalid && "border-critical focus:border-critical",
+        )}
+      />
+      <IconChevronDown
+        size={16}
+        className="pointer-events-none absolute right-2.5 top-[1.1875rem] -translate-y-1/2 text-ink-3"
+      />
+
+      {open && (
+        <ul
+          id={id ? `${id}-listbox` : undefined}
+          role="listbox"
+          className="pop absolute left-0 right-0 z-40 mt-1.5 max-h-64 overflow-y-auto rounded-[var(--r)] border border-line bg-surface p-1.5 shadow-e3"
+        >
+          {matches.length === 0 && (
+            <li className="px-3 py-5 text-center text-[0.8125rem] text-ink-3">{emptyText}</li>
+          )}
+          {matches.map((option, i) => (
+            <li key={option.value} role="option" aria-selected={option.value === value}>
+              <button
+                type="button"
+                /* mousedown, not click: the input blurs first otherwise and the
+                   list is gone before the click lands */
+                onMouseDown={(e) => { e.preventDefault(); take(option); }}
+                onMouseEnter={() => setActive(i)}
+                className={cn(
+                  "flex w-full items-center justify-between gap-3 rounded-[var(--r-sm)] px-2.5 py-2 text-left transition-colors",
+                  i === active ? "bg-surface-2" : "",
+                  option.value === value ? "bg-accent-soft" : "",
+                )}
+              >
+                <span className="min-w-0 flex-1 truncate text-[0.8438rem] text-ink">{option.label}</span>
+                {option.hint && (
+                  <span className="shrink-0 text-[0.75rem] text-ink-3">{option.hint}</span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

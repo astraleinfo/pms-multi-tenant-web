@@ -204,6 +204,41 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   return parsed as T;
 }
 
+/**
+ * A multipart POST — the one request that does not carry JSON.
+ *
+ * `FormData` sets its own `Content-Type` including the boundary, so this must
+ * not set one; everything else (the token, the clinic header, the refresh dance
+ * on a 401) is the same as `request`.
+ */
+export async function upload<T>(path: string, form: FormData): Promise<T> {
+  const send = async () => {
+    const headers: Record<string, string> = { Accept: "application/json", ...tenantHeaders() };
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+    return fetch(url(path), { method: "POST", headers, credentials: "include", body: form });
+  };
+
+  let response = await send();
+
+  if (response.status === 401) {
+    const recovered = await refreshSession();
+    if (recovered) {
+      response = await send();
+    } else {
+      setAccessToken(null);
+      onSignedOut?.();
+    }
+  }
+
+  const text = await response.text();
+  const parsed = text ? (JSON.parse(text) as unknown) : null;
+
+  if (!response.ok) {
+    throw new ApiError(response.status, parsed as ApiErrorBody, "That upload did not go through.");
+  }
+  return parsed as T;
+}
+
 export const get = <T>(path: string, query?: RequestOptions["query"]) => request<T>(path, { query });
 export const post = <T>(path: string, body?: unknown) => request<T>(path, { method: "POST", body });
 export const patch = <T>(path: string, body?: unknown) => request<T>(path, { method: "PATCH", body });

@@ -11,9 +11,11 @@ import { SessionProvider, useSession } from "@/lib/store/session";
 import { useQueueStream, type ConnectionState } from "@/lib/realtime";
 import { setActiveCurrency, setToday, TODAY } from "@/lib/format";
 import type {
-  AccountStatus, Appointment, ClinicalTypeKey, Encounter, FeatureKey, FieldDefinition, Id,
-  InventoryTxType, InvoiceLineItem, LabResultLine, NewAppointment, NewEncounter, Payment,
-  PrescriptionItem, QueueEntry, Tenant, TenantConfig, TenantFeature, User,
+  AccountStatus, Appointment, BillingDepartment, ClinicalTypeKey, Encounter, FeatureKey,
+  FieldDefinition, Id, InventoryItem, InventoryItemPatch, Invoice, InvoiceLineItem, LabAttachment,
+  LabResultLine, NewAppointment, NewEncounter, NewInventoryItem, NewServicePrice, Payment,
+  PrescriptionItem, QueueEntry, ServicePrice, ServicePricePatch, Tenant, TenantConfig,
+  TenantFeature, User,
 } from "@/lib/types";
 import type { AuthResult, PlatformStaff } from "@/lib/api";
 
@@ -92,7 +94,11 @@ interface AppContextValue {
     encounterId: Id, patientId: Id, doctorId: Id,
     items: Array<Omit<PrescriptionItem, "id" | "prescription_id" | "dispensed_qty" | "status">>,
   ) => void;
-  dispense: (prescriptionId: Id, lines: Array<{ itemId: Id; qty: number; batch_no: string }>) => void;
+  /** Resolves once the hand-over is written, so the window can ask for money
+      knowing the charge exists. */
+  dispense: (
+    prescriptionId: Id, lines: Array<{ itemId: Id; qty: number; batch_no: string }>,
+  ) => Promise<Id>;
 
   createLabOrder: (
     encounterId: Id, patientId: Id, orderedBy: Id,
@@ -101,15 +107,49 @@ interface AppContextValue {
   startLabOrder: (id: Id) => void;
   saveLabResults: (id: Id, results: LabResultLine[]) => void;
   verifyLabOrder: (id: Id) => void;
+  /** File a scan, a printout or a signed report against an order. */
+  uploadLabAttachment: (orderId: Id, file: File, note?: string) => Promise<LabAttachment>;
+  removeLabAttachment: (orderId: Id, attachmentId: Id) => void;
 
-  recordStockMovement: (input: { item_id: Id; type: InventoryTxType; qty: number; batch_no: string; note?: string }) => void;
+  createInventoryItem: (input: NewInventoryItem) => Promise<InventoryItem>;
+  updateInventoryItem: (id: Id, changes: InventoryItemPatch) => Promise<InventoryItem>;
+  /** Resolves once the ledger row is written, so a caller can do something
+      after it — opening a line and stocking it is two writes, in order. */
+  recordStockMovement: (input: api.StockMovement) => Promise<Id>;
+
+  /** The tariff. Writing is the practice admin's — the server is what enforces
+      that; the pricing page only hides the buttons. */
+  createServicePrice: (input: NewServicePrice) => Promise<ServicePrice>;
+  updateServicePrice: (id: Id, changes: ServicePricePatch) => Promise<ServicePrice>;
+  deleteServicePrice: (id: Id) => void;
+  importLabCataloguePrices: (price: number, taxPct?: number) => Promise<ServicePrice[]>;
 
   createInvoice: (input: {
-    patient_id: Id; encounter_id: Id | null; line_items: Array<Omit<InvoiceLineItem, "id">>; issue: boolean;
+    patient_id: Id;
+    encounter_id: Id | null;
+    department?: BillingDepartment;
+    line_items: Array<Omit<InvoiceLineItem, "id">>;
+    issue: boolean;
   }) => Promise<Id>;
   addPayment: (invoiceId: Id, amount: number, method: Payment["method"], reference?: string) => void;
   issueInvoice: (id: Id) => void;
   voidInvoice: (id: Id) => void;
+
+  /* One patient, three counters. Each is billed and settled on its own — the
+     pharmacy window taking money for medicine has not taken money for a scan. */
+  raiseCounterInvoice: (
+    patientId: Id,
+    input: { department: BillingDepartment; issue?: boolean; ref_ids?: Id[] },
+  ) => Promise<Invoice>;
+  takeCounterPayment: (
+    patientId: Id,
+    input: {
+      department: BillingDepartment;
+      amount: number;
+      method: Payment["method"];
+      reference?: string;
+    },
+  ) => Promise<api.CounterPayment>;
 
   createTenant: (input: {
     name: string; slug: string; city: string; clinical_type: ClinicalTypeKey;
@@ -205,12 +245,31 @@ function AppFacade({ children }: { children: React.ReactNode }) {
   const mStartLab = useTenantMutation((id: Id) => api.startLabOrder(id));
   const mSaveLab = useTenantMutation((a: { id: Id; results: LabResultLine[] }) => api.saveLabResults(a.id, a.results));
   const mVerifyLab = useTenantMutation((id: Id) => api.verifyLabOrder(id));
-  const mStock = useTenantMutation((i: Parameters<typeof api.recordStockMovement>[0]) => api.recordStockMovement(i));
+  const mStock = useTenantMutation((i: api.StockMovement) => api.recordStockMovement(i));
+  const mCreateItem = useTenantMutation((i: NewInventoryItem) => api.createInventoryItem(i));
+  const mUpdateItem = useTenantMutation((a: { id: Id; changes: InventoryItemPatch }) =>
+    api.updateInventoryItem(a.id, a.changes));
+  const mUploadAttachment = useTenantMutation((a: { orderId: Id; file: File; note?: string }) =>
+    api.uploadLabAttachment(a.orderId, a.file, a.note));
+  const mRemoveAttachment = useTenantMutation((a: { orderId: Id; attachmentId: Id }) =>
+    api.deleteLabAttachment(a.orderId, a.attachmentId));
+  const mCreatePrice = useTenantMutation((i: NewServicePrice) => api.createServicePrice(i));
+  const mUpdatePrice = useTenantMutation((a: { id: Id; changes: ServicePricePatch }) =>
+    api.updateServicePrice(a.id, a.changes));
+  const mDeletePrice = useTenantMutation((id: Id) => api.deleteServicePrice(id));
+  const mImportLabPrices = useTenantMutation((a: { price: number; taxPct: number }) =>
+    api.importLabCataloguePrices(a.price, a.taxPct));
   const mCreateInvoice = useTenantMutation((i: Parameters<typeof api.createInvoice>[0]) => api.createInvoice(i));
   const mAddPayment = useTenantMutation((a: { id: Id; amount: number; method: Payment["method"]; reference?: string }) =>
     api.addPayment(a.id, a.amount, a.method, a.reference));
   const mIssueInvoice = useTenantMutation((id: Id) => api.issueInvoice(id));
   const mVoidInvoice = useTenantMutation((id: Id) => api.voidInvoice(id));
+  const mCounterInvoice = useTenantMutation(
+    (a: { patientId: Id; input: Parameters<typeof api.raiseCounterInvoice>[1] }) =>
+      api.raiseCounterInvoice(a.patientId, a.input));
+  const mCounterPayment = useTenantMutation(
+    (a: { patientId: Id; input: Parameters<typeof api.takeCounterPayment>[1] }) =>
+      api.takeCounterPayment(a.patientId, a.input));
   const mUpdateConfig = useTenantMutation((p: Partial<TenantConfig>) => api.updateConfig(p));
   const mPurchase = useTenantMutation((k: FeatureKey) => api.purchaseFeature(k));
   const mDeactivate = useTenantMutation((k: FeatureKey) => api.deactivateFeature(k));
@@ -316,20 +375,34 @@ function AppFacade({ children }: { children: React.ReactNode }) {
 
     createPrescription: (encounterId, patientId, doctorId, items) =>
       mCreatePrescription.mutate({ encounterId, patientId, doctorId, items }),
-    dispense: (id, lines) => mDispense.mutate({ id, lines }),
+    dispense: (id, lines) => mDispense.mutateAsync({ id, lines }),
 
     createLabOrder: (encounterId, patientId, orderedBy, tests) =>
       mCreateLabOrder.mutate({ encounterId, patientId, orderedBy, tests }),
     startLabOrder: (id) => mStartLab.mutate(id),
     saveLabResults: (id, results) => mSaveLab.mutate({ id, results }),
     verifyLabOrder: (id) => mVerifyLab.mutate(id),
+    uploadLabAttachment: (orderId, file, note) =>
+      mUploadAttachment.mutateAsync({ orderId, file, note }),
+    removeLabAttachment: (orderId, attachmentId) =>
+      mRemoveAttachment.mutate({ orderId, attachmentId }),
 
-    recordStockMovement: (input) => mStock.mutate(input),
+    createInventoryItem: (input) => mCreateItem.mutateAsync(input),
+    updateInventoryItem: (id, changes) => mUpdateItem.mutateAsync({ id, changes }),
+    recordStockMovement: (input) => mStock.mutateAsync(input),
+
+    createServicePrice: (input) => mCreatePrice.mutateAsync(input),
+    updateServicePrice: (id, changes) => mUpdatePrice.mutateAsync({ id, changes }),
+    deleteServicePrice: (id) => mDeletePrice.mutate(id),
+    importLabCataloguePrices: (price, taxPct = 0) =>
+      mImportLabPrices.mutateAsync({ price, taxPct }),
 
     createInvoice: (input) => mCreateInvoice.mutateAsync(input),
     addPayment: (id, amount, method, reference) => mAddPayment.mutate({ id, amount, method, reference }),
     issueInvoice: (id) => mIssueInvoice.mutate(id),
     voidInvoice: (id) => mVoidInvoice.mutate(id),
+    raiseCounterInvoice: (patientId, input) => mCounterInvoice.mutateAsync({ patientId, input }),
+    takeCounterPayment: (patientId, input) => mCounterPayment.mutateAsync({ patientId, input }),
 
     createTenant: (input) => mCreateTenant.mutateAsync(input),
     setTenantStatus: (id, status) => mTenantStatus.mutate({ id, status }),

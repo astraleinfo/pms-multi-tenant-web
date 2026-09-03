@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 
-import type { Invoice } from "@/lib/types";
+import type { BillingDepartment, Invoice } from "@/lib/types";
 import { useBillingStats, useInvoicePage } from "@/lib/query/hooks";
 import { invoiceTotals } from "@/lib/data/repository";
 import { useDebounced } from "@/lib/debounce";
@@ -15,14 +15,16 @@ import { DataTable, columnHelperFor } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Meter } from "@/components/ui/misc";
 import { Stat } from "@/components/ui/stat";
-import { SearchInput } from "@/components/ui/field";
+import { ChoiceGroup, SearchInput } from "@/components/ui/field";
 import { Tabs } from "@/components/ui/tabs";
 import { DonutChart } from "@/components/charts/donut-chart";
 import { FeatureGate, RoleGate } from "@/components/domain/gates";
-import { StatusPill } from "@/components/domain/status";
+import { Badge } from "@/components/ui/badge";
+import { DEPARTMENT_LABEL, StatusPill } from "@/components/domain/status";
 import { PatientChip, PatientRef } from "@/components/domain/patient";
 import { InvoiceComposer } from "@/components/domain/invoice-composer";
-import { IconAlert, IconCheck, IconPlus, IconReceipt } from "@/components/ui/icons";
+import { IconAlert, IconCard, IconCheck, IconPlus, IconReceipt } from "@/components/ui/icons";
+import { PatientAccount } from "@/components/domain/patient-account";
 
 type Tab = "all" | "unpaid" | "draft" | "paid" | "void";
 
@@ -60,6 +62,15 @@ const invoiceColumns = col.columns([
     header: "Issued",
     cell: ({ row }) => (
       <span className="tnum font-mono text-[0.8125rem] text-ink-2">{formatDate(row.original.issued_at)}</span>
+    ),
+  }),
+  col.accessor("department", {
+    header: "Counter",
+    enableSorting: false,
+    cell: ({ getValue }) => (
+      <Badge tone={getValue() === "clinic" ? "neutral" : "accent"} size="sm" dot={false}>
+        {DEPARTMENT_LABEL[getValue()]}
+      </Badge>
     ),
   }),
   col.accessor((i) => invoiceTotals(i).total, {
@@ -111,11 +122,20 @@ function Billing() {
   const router = useRouter();
 
   const [tab, setTab] = React.useState<Tab>("all");
+  /* The lab and the pharmacy bill separately, so the ledger can be read one
+     counter at a time — the database narrows it, not the browser. */
+  const [counter, setCounter] = React.useState<BillingDepartment | "all">("all");
   const [q, setQ] = React.useState("");
   const term = useDebounced(q);
   const [page, setPage] = React.useState(0);
   const [sort, setSort] = React.useState({ id: "issued_at", desc: true });
   const [compose, setCompose] = React.useState(false);
+  /* Two questions, and the screen answers one at a time. "How is the ledger
+     doing" is a table of invoices; "somebody is at the desk to pay" is one
+     person's account, counter by counter. They want different shapes, so they
+     are different views rather than one screen trying to be both. */
+  const [view, setView] = React.useState<"ledger" | "account">("ledger");
+  const [payingFor, setPayingFor] = React.useState<string | null>(null);
 
   /* The money is added up in the database, so this page, the reports and the
      ledger cannot disagree about it. */
@@ -123,25 +143,37 @@ function Billing() {
   const mix = stats.revenue_mix;
 
   /* any change to what is being asked for starts again at the first page */
-  React.useEffect(() => { setPage(0); }, [term, tab, sort]);
+  React.useEffect(() => { setPage(0); }, [term, tab, sort, counter]);
 
   /* Owing is a question about money rather than a status value, so it goes to
      the database as its own flag — a browser cannot answer it over ten rows. */
   const query = React.useMemo(() => ({
     status: tab === "all" || tab === "unpaid" ? undefined : tab,
     unpaid: tab === "unpaid" || undefined,
+    department: counter === "all" ? undefined : counter,
     search: term || undefined,
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
     sort: SORT_KEYS[sort.id] ?? "issued_at",
     order: (sort.desc ? "desc" : "asc") as "asc" | "desc",
-  }), [tab, term, page, sort]);
+  }), [tab, counter, term, page, sort]);
 
   const { data: result, isFetching } = useInvoicePage(query);
   const rows = result?.items ?? [];
   const total = result?.total ?? 0;
 
   const byStatus = result?.counts ?? {};
+  /* The department counts describe the whole ledger, so the segmented control
+     keeps saying how many the lab has while the clinic's page is on screen. */
+  const counters = {
+    clinic: byStatus["department:clinic"] ?? 0,
+    lab: byStatus["department:lab"] ?? 0,
+    pharmacy: byStatus["department:pharmacy"] ?? 0,
+    all:
+      (byStatus["department:clinic"] ?? 0)
+      + (byStatus["department:lab"] ?? 0)
+      + (byStatus["department:pharmacy"] ?? 0),
+  };
   const counts = {
     all: (["draft", "issued", "partially_paid", "paid", "void"] as const)
       .reduce((s, key) => s + (byStatus[key] ?? 0), 0),
@@ -156,11 +188,16 @@ function Billing() {
       <PageHeader
         eyebrow="Feature module"
         title="Billing"
-        description="Invoices reference the encounter rather than copying it. Line items can be suggested from the visit, its lab orders and anything dispensed — or typed by hand."
+        description="Invoices reference the encounter rather than copying it. Lines are suggested from the visit and priced from the clinic's own tariff — and the lab and the pharmacy bill on their own invoices, so each counter chases its own money."
         actions={
-          <Button variant="primary" onClick={() => setCompose(true)}>
-            <IconPlus size={15} /> New invoice
-          </Button>
+          <>
+            <Button variant="secondary" onClick={() => setView("account")}>
+              <IconCard size={15} /> Collect payment
+            </Button>
+            <Button variant="primary" onClick={() => setCompose(true)}>
+              <IconPlus size={15} /> New invoice
+            </Button>
+          </>
         }
       />
 
@@ -174,8 +211,39 @@ function Billing() {
         <Stat label="Drafts" value={stats.drafts} icon={<IconReceipt size={16} />} hint="Not yet issued" />
       </section>
 
-      <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
+      <Tabs
+        className="mb-5 mt-5"
+        value={view}
+        onChange={setView}
+        tabs={[
+          { value: "ledger", label: "Invoices", count: counts.all },
+          { value: "account", label: "A patient's account" },
+        ]}
+      />
+
+      {view === "account" && (
+        <PatientAccount
+          patientId={payingFor}
+          onPatientChange={setPayingFor}
+        />
+      )}
+
+      {view === "ledger" && (
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         <div className="min-w-0">
+          <ChoiceGroup<BillingDepartment | "all">
+            className="mb-4"
+            columns={4}
+            value={counter}
+            onChange={setCounter}
+            options={[
+              { value: "all", label: "Every counter", description: `${counters.all} invoices` },
+              { value: "clinic", label: "Clinic", description: `${counters.clinic} invoices` },
+              { value: "lab", label: "Lab", description: `${counters.lab} invoices` },
+              { value: "pharmacy", label: "Pharmacy", description: `${counters.pharmacy} invoices` },
+            ]}
+          />
+
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <Tabs
               value={tab}
@@ -255,6 +323,8 @@ function Billing() {
           </Card>
         </div>
       </div>
+
+      )}
 
       <InvoiceComposer open={compose} onClose={() => setCompose(false)} patientId={null} encounterId={null} />
     </>
