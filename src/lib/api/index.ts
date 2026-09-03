@@ -1,12 +1,17 @@
 "use client";
 
 import type {
-  AccountStatus, Appointment, ClinicalTypeKey, Encounter, FeatureKey, FieldDefinition,
-  HistoryEvent, Id, InventoryBatch, InventoryItem, InventoryTransaction, InventoryTxType,
-  Invoice, InvoiceLineItem, LabOrder, LabResultLine, NewAppointment, NewEncounter, Patient,
-  Payment, Prescription, PrescriptionItem, QueueEntry, Role, Tenant, TenantConfig, TenantFeature, User,
+  AccountStatus, Appointment, BillingDepartment, ClinicalTypeKey, Encounter, FeatureKey,
+  Charge, FieldDefinition, HistoryEvent, Id, InventoryBatch, InventoryItem, InventoryItemPatch,
+  InventoryTransaction, InventoryTxType, Invoice, InvoiceLineItem, LabAttachment, LabOrder,
+  LabResultLine, NewAppointment, NewEncounter, NewInventoryItem, NewServicePrice, Patient,
+  PatientAccount, Payment, Prescription, PrescriptionItem, PricingMode, QueueEntry, Role,
+  ServiceKind,
+  ServicePrice, ServicePricePatch, SuggestedLine, Tenant, TenantConfig, TenantFeature, User,
 } from "@/lib/types";
-import { ApiError, del, get, patch as patch_, post, put as put_, setAccessToken } from "./client";
+import {
+  ApiError, del, get, patch as patch_, post, put as put_, requestBlob, setAccessToken, upload,
+} from "./client";
 
 /* ==========================================================================
    The API.
@@ -377,6 +382,8 @@ export interface InvoiceQuery extends PageQuery {
   status?: Invoice["status"];
   /** issued or part paid, with something still owing */
   unpaid?: boolean;
+  /** which counter raised it — the lab and the pharmacy bill separately */
+  department?: BillingDepartment;
   patient_id?: Id;
 }
 
@@ -388,6 +395,7 @@ export const listInvoicePage = (query: InvoiceQuery = {}) =>
     ...pageParams(query),
     status: query.status,
     unpaid: query.unpaid || undefined,
+    department: query.department,
     patient_id: query.patient_id,
   });
 
@@ -613,11 +621,58 @@ export const saveLabResults = async (id: Id, results: LabResultLine[]) =>
 export const verifyLabOrder = async (id: Id) =>
   (await patch_<LabOrder>(`/v1/lab/orders/${id}`, { status: "verified" })).id;
 
-/* ---- inventory (§3.11) --------------------------------------------------------- */
+/* The files an order collects — a scanned request form, a machine printout, a
+   signed report. They are reached through the order, never by a bare file id,
+   so the tenant check that protects the order protects the file. */
 
-export const recordStockMovement = async (
-  input: { item_id: Id; type: InventoryTxType; qty: number; batch_no: string; note?: string },
-) => (await post<InventoryTransaction>("/v1/inventory/transactions", input)).item_id;
+export const listLabAttachments = (orderId: Id) =>
+  get<LabAttachment[]>(`/v1/lab/orders/${orderId}/attachments`);
+
+export const uploadLabAttachment = (orderId: Id, file: File, note?: string) => {
+  const form = new FormData();
+  form.append("file", file);
+  if (note?.trim()) form.append("note", note.trim());
+  return upload<LabAttachment>(`/v1/lab/orders/${orderId}/attachments`, form);
+};
+
+export const deleteLabAttachment = (orderId: Id, attachmentId: Id) =>
+  del<void>(`/v1/lab/orders/${orderId}/attachments/${attachmentId}`);
+
+/** The file itself, as a blob the caller can open or save. */
+export const getLabAttachmentFile = (orderId: Id, attachmentId: Id) =>
+  requestBlob(`/v1/lab/orders/${orderId}/attachments/${attachmentId}`);
+
+/* ---- inventory (§3.11) ---------------------------------------------------------
+
+   A stock line is opened before any stock exists: on hand is the sum of the
+   ledger, so a new item starts at nothing and the first purchase puts it on the
+   shelf. How it is priced — a typed price, a margin over cost, or the MRP less
+   a discount — is the server's arithmetic, so two screens cannot disagree. */
+
+export const createInventoryItem = (input: NewInventoryItem) =>
+  post<InventoryItem>("/v1/inventory/items", input);
+
+export const updateInventoryItem = (id: Id, changes: InventoryItemPatch) =>
+  patch_<InventoryItem>(`/v1/inventory/items/${id}`, changes);
+
+export interface StockMovement {
+  item_id: Id;
+  type: InventoryTxType;
+  qty: number;
+  batch_no: string;
+  expiry?: string;
+  note?: string;
+  /* A delivery is when the supplier's figures are in front of somebody. Sent,
+     they re-price the line; left out, it keeps the price it had. */
+  unit_price?: number;
+  cost_price?: number;
+  mrp?: number;
+  margin_pct?: number;
+  pricing_mode?: PricingMode;
+}
+
+export const recordStockMovement = async (input: StockMovement) =>
+  (await post<InventoryTransaction>("/v1/inventory/transactions", input)).item_id;
 
 /* ---- billing (§3.12) ------------------------------------------------------------ */
 
@@ -635,9 +690,80 @@ export const issueInvoice = async (id: Id) =>
 export const voidInvoice = async (id: Id) =>
   (await post<Invoice>(`/v1/billing/invoices/${id}/void`)).id;
 
-/** What this visit would bill for — the consultation, its labs, its dispenses. */
+/* ---- a patient's account (§3.12) -------------------------------------------
+
+   One patient, three counters. The clinic, the lab and the pharmacy each keep
+   their own invoices and each is settled on its own — paying for your medicine
+   at the window is not paying for your scan. */
+
+export const getPatientAccount = (patientId: Id) =>
+  get<PatientAccount>(`/v1/billing/patients/${patientId}/account`);
+
+/** Just the unbilled half — what the dispensing window shows when it asks for
+ *  money, optionally for one counter. */
+export const listUnbilledCharges = (patientId: Id, department?: BillingDepartment) =>
+  get<Charge[]>(`/v1/billing/patients/${patientId}/charges`, { department });
+
+/**
+ * Put a counter's outstanding charges onto one invoice.
+ *
+ * `ref_ids` narrows it to particular charges — the window billing exactly what
+ * it just handed over. Each line points back at what it bills, so calling this
+ * twice cannot charge for the same box of tablets twice.
+ */
+export const raiseCounterInvoice = (
+  patientId: Id,
+  input: { department: BillingDepartment; issue?: boolean; ref_ids?: Id[] },
+) => post<Invoice>(`/v1/billing/patients/${patientId}/invoices`, input);
+
+export interface CounterPayment {
+  department: BillingDepartment;
+  paid: number;
+  /** what that counter is still owed afterwards */
+  remaining: number;
+  invoices: Invoice[];
+}
+
+/** One amount, handed over at one counter. Oldest invoice first. */
+export const takeCounterPayment = (
+  patientId: Id,
+  input: {
+    department: BillingDepartment;
+    amount: number;
+    method: Payment["method"];
+    reference?: string;
+  },
+) => post<CounterPayment>(`/v1/billing/patients/${patientId}/payments`, input);
+
+/** What this visit would bill for — the consultation, its labs, its dispenses,
+ *  each priced from the clinic's own tariff. */
 export const suggestedInvoiceLines = (encounterId: Id) =>
-  get<Array<Omit<InvoiceLineItem, "id">>>("/v1/billing/invoices/suggestions", { encounter_id: encounterId });
+  get<SuggestedLine[]>("/v1/billing/invoices/suggestions", { encounter_id: encounterId });
+
+/* ---- the tariff (§3.12) ---------------------------------------------------
+
+   What this clinic charges for everything that is not stock. Reading is open to
+   anyone who can see a price; setting one is the practice admin's, which the
+   server enforces — the page below only hides the buttons. */
+
+export const listServicePrices = (query: { kind?: ServiceKind; active?: boolean } = {}) =>
+  get<ServicePrice[]>("/v1/pricing/services", {
+    kind: query.kind,
+    active: query.active || undefined,
+  });
+
+export const createServicePrice = (input: NewServicePrice) =>
+  post<ServicePrice>("/v1/pricing/services", input);
+
+export const updateServicePrice = (id: Id, changes: ServicePricePatch) =>
+  patch_<ServicePrice>(`/v1/pricing/services/${id}`, changes);
+
+export const deleteServicePrice = (id: Id) => del<void>(`/v1/pricing/services/${id}`);
+
+/** Give every test this clinic can order a row to price, at one starting
+ *  figure. Anything already priced is left exactly as it is. */
+export const importLabCataloguePrices = (price: number, tax_pct = 0) =>
+  post<ServicePrice[]>("/v1/pricing/services/import-lab-catalogue", { price, tax_pct });
 
 /* ---- analytics (§3.14) ---------------------------------------------------------- */
 

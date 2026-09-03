@@ -1,7 +1,7 @@
 import * as React from "react";
 import type { FeatureKey, Role } from "@/lib/types";
 import {
-  IconBox, IconCalendar, IconChart, IconFlask, IconMonitor, IconMortar, IconPulse,
+  IconBox, IconCalendar, IconCard, IconChart, IconFlask, IconMonitor, IconMortar, IconPulse,
   IconQueue, IconReceipt, IconRx, IconSettings, IconStethoscope, IconUsers,
 } from "@/components/ui/icons";
 
@@ -53,6 +53,7 @@ export const NAV: NavGroup[] = [
     label: "Practice",
     items: [
       { href: "/reports", label: "Reports", icon: IconChart, roles: ["tenant_admin", "doctor"], description: "What the transactional tables add up to." },
+      { href: "/pricing", label: "Pricing", icon: IconCard, roles: ["tenant_admin"], description: "What the clinic charges — consultations, procedures and each scan." },
       { href: "/display", label: "Waiting room", icon: IconMonitor, feature: "queue", description: "The screen patients look at." },
       { href: "/settings", label: "Settings", icon: IconSettings, roles: ["tenant_admin"], description: "Features, fields, team and tenant profile." },
     ],

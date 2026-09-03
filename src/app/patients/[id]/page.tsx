@@ -21,6 +21,7 @@ import { PageLoader } from "@/components/ui/loader";
 import { DynamicForm, DynamicSummary, validateAgainstSchema, type FormValues } from "@/components/domain/dynamic-form";
 import { StatusPill } from "@/components/domain/status";
 import { AllergyFlag } from "@/components/domain/patient";
+import { PatientAccountSummary } from "@/components/domain/patient-account";
 import { AppointmentModal } from "@/components/domain/quick-actions";
 import { ClinicalExamPanel } from "@/components/domain/clinical-exam";
 import {
@@ -368,7 +369,17 @@ function PatientRecord({ patient }: { patient: Patient }) {
           )}
 
           {tab === "billing" && (
-            <Card className="overflow-hidden">
+            <div className="space-y-5">
+              {hasFeature("billing") && (
+                <Card>
+                  <CardHeader title="What is owed" subtitle="Each counter is settled on its own." />
+                  <CardBody className="pt-1">
+                    <PatientAccountSummary patientId={patient.id} />
+                  </CardBody>
+                </Card>
+              )}
+
+              <Card className="overflow-hidden">
               <CardHeader icon={<IconReceipt size={16} />} title="Invoices"
                           subtitle={`${pluralise(invoices.length, "invoice")} · ${currency(owing)} outstanding`} />
               {invoices.length === 0 ? (
@@ -400,7 +411,8 @@ function PatientRecord({ patient }: { patient: Patient }) {
                   </Table>
                 </TableWrap>
               )}
-            </Card>
+              </Card>
+            </div>
           )}
 
           {tab === "edit" && (

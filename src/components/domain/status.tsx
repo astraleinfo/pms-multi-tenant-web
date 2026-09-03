@@ -1,5 +1,6 @@
 import { Badge, APPOINTMENT_TONE, INVOICE_TONE, LAB_TONE, QUEUE_TONE, RX_TONE, TX_TONE, type Tone } from "@/components/ui/badge";
 import { sentenceCase } from "@/lib/format";
+import type { BillingDepartment } from "@/lib/types";
 
 const MAPS = {
   appointment: APPOINTMENT_TONE,
@@ -38,3 +39,13 @@ export function StatusPill({
 }
 
 export const statusLabel = (status: string) => LABELS[status] ?? sentenceCase(status);
+
+/**
+ * Which counter an invoice belongs to, in words.
+ *
+ * One map, because the ledger's column, the composer and the account panel all
+ * name the same three things and must not drift apart.
+ */
+export const DEPARTMENT_LABEL: Record<BillingDepartment, string> = {
+  clinic: "Clinic", lab: "Lab", pharmacy: "Pharmacy",
+};

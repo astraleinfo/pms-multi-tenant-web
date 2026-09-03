@@ -12,10 +12,10 @@ import { Button, ButtonLink } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState, KV, Meter } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
-import { Field, Input, Select } from "@/components/ui/field";
+import { Field, Input, NumberInput, Select } from "@/components/ui/field";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { FeatureGate, RoleGate } from "@/components/domain/gates";
-import { StatusPill } from "@/components/domain/status";
+import { DEPARTMENT_LABEL, StatusPill } from "@/components/domain/status";
 import { PatientChip } from "@/components/domain/patient";
 import {
   IconArrowRight, IconCard, IconCheck, IconChevronLeft, IconPrint, IconReceipt, IconX,
@@ -39,6 +39,10 @@ function Invoice({ id }: { id: string }) {
   const t = session.tenantId;
   const invoice = findInvoice(db, t, id);
   const [paying, setPaying] = React.useState(false);
+  /* Above the bail-out below, not next to where it is read. The invoice is not
+     there on the first render and is a moment later, so a hook underneath that
+     `return` is a hook this component calls sometimes — which React counts. */
+  const { data: patient } = usePatient(invoice?.patient_id ?? "");
 
   if (!invoice) {
     return (
@@ -53,7 +57,6 @@ function Invoice({ id }: { id: string }) {
   }
 
   const totals = invoiceTotals(invoice);
-  const { data: patient } = usePatient(invoice.patient_id);
   const overdue = totals.balance > 0.005 && invoice.due_at < today && invoice.status !== "draft";
 
   return (
@@ -91,6 +94,11 @@ function Invoice({ id }: { id: string }) {
         meta={
           <>
             <StatusPill kind="invoice" status={invoice.status} />
+            {/* Which counter raised it — the lab and the pharmacy bill on
+                their own invoices, and chase their own money. */}
+            <Badge tone={invoice.department === "clinic" ? "neutral" : "accent"} size="sm" dot={false}>
+              {DEPARTMENT_LABEL[invoice.department]} counter
+            </Badge>
             {overdue && <Badge tone="critical" size="sm">Overdue since {formatDate(invoice.due_at)}</Badge>}
             {invoice.encounter_id && (
               <ButtonLink href={`/consultations/${invoice.encounter_id}`} variant="ghost" size="sm">
@@ -293,8 +301,7 @@ function PaymentModal({
     >
       <div className="space-y-4">
         <Field label="Amount" required help={`Anything up to ${currency(balance)}. Part payments are allowed.`}>
-          <Input type="number" min={0} step="0.01" max={balance} value={amount}
-                 onChange={(e) => setAmount(Number(e.target.value) || 0)} />
+          <NumberInput min={0} step="0.01" max={balance} value={amount} onChange={setAmount} />
         </Field>
         <Field label="Method" required>
           <Select value={method} onChange={(e) => setMethod(e.target.value as Payment["method"])}>

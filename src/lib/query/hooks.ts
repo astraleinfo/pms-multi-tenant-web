@@ -7,7 +7,7 @@ import { qk } from "./keys";
 import { useSession } from "@/lib/store/session";
 import { defaultConfig } from "@/lib/data/repository";
 import type {
-  FieldDefinition, Id, Patient, Tenant, TenantConfig, TenantFeature, User,
+  FieldDefinition, Id, Patient, ServiceKind, ServicePrice, Tenant, TenantConfig, TenantFeature, User,
 } from "@/lib/types";
 
 /* ==========================================================================
@@ -327,6 +327,42 @@ export function useLabOrderPage(query: api.LabOrderQuery, { enabled = true } = {
   );
 }
 
+/**
+ * The files filed against one lab order.
+ *
+ * Names and sizes only — the file itself is a separate request, made when
+ * somebody actually opens it.
+ */
+export function useLabAttachments(orderId: Id) {
+  const t = useTenantId();
+  const gated = useFeatureEnabled("lab");
+  return useClinicQuery(
+    qk.labAttachments(t, orderId),
+    () => api.listLabAttachments(orderId),
+    !!orderId && gated,
+  );
+}
+
+/**
+ * What this clinic charges (§3.12).
+ *
+ * Not behind a feature gate: a tariff is configuration, and the composer needs
+ * it whether or not the lab module was ever bought. It changes rarely, so it
+ * stays fresh for a while — like the catalogues.
+ */
+export function useServicePrices(query: { kind?: ServiceKind; active?: boolean } = {}) {
+  const t = useTenantId();
+  const signedIn = useSignedIn();
+  const key = query as Record<string, unknown>;
+  const result = useQuery({
+    queryKey: qk.servicePrices(t, key),
+    queryFn: () => api.listServicePrices(query),
+    enabled: signedIn && !!t,
+    staleTime: 5 * 60_000,
+  });
+  return { ...result, data: useResolved<ServicePrice[]>(result, EMPTY) };
+}
+
 export function useInventoryItems() {
   const t = useTenantId();
   return useClinicQuery(qk.inventoryItems(t), api.listInventoryItems, useFeatureEnabled("inventory"));
@@ -355,6 +391,40 @@ export function useInvoicePage(query: api.InvoiceQuery, { enabled = true } = {})
     qk.invoicePage(t, query as Record<string, unknown>),
     () => api.listInvoicePage(query),
     enabled && gated,
+  );
+}
+
+/**
+ * What this visit would bill for, priced from the clinic's own tariff.
+ *
+ * The arithmetic is the server's — the consultation, each scan by its code, and
+ * anything dispensed at its stock price — so the composer quotes what the
+ * practice admin set rather than a number in the browser.
+ */
+export function useSuggestedLines(encounterId: Id | null) {
+  const t = useTenantId();
+  const gated = useFeatureEnabled("billing");
+  return useClinicQuery(
+    qk.suggestedLines(t, encounterId ?? ""),
+    () => api.suggestedInvoiceLines(encounterId as Id),
+    !!encounterId && gated,
+  );
+}
+
+/**
+ * A patient's account across all three counters.
+ *
+ * Both the dispensing window and the billing desk read this, so they can never
+ * disagree about what is owed. It is deliberately not cached for long: money
+ * moves while somebody is standing at the counter.
+ */
+export function usePatientAccount(patientId: Id | null) {
+  const t = useTenantId();
+  const gated = useFeatureEnabled("billing");
+  return useClinicQuery(
+    qk.patientAccount(t, patientId ?? ""),
+    () => api.getPatientAccount(patientId as Id),
+    !!patientId && gated,
   );
 }
 
