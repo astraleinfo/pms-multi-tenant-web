@@ -18,6 +18,7 @@ export const qk = {
   fields: (t: Id) => ["tenant", t, "fields"] as const,
   schema: (t: Id, entity: FieldDefinition["entity"], clinicalType: string) =>
     ["tenant", t, "fields", "schema", entity, clinicalType] as const,
+  medicines: (t: Id) => ["tenant", t, "catalog", "medicines"] as const,
 
   patients: (t: Id) => ["tenant", t, "patients"] as const,
   /** The key carries the query, so every page and search is its own cache entry

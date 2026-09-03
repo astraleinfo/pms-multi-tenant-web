@@ -126,6 +126,39 @@ export function refreshSession(): Promise<SessionResponse | null> {
   return refreshing;
 }
 
+/** For endpoints that answer with a file rather than JSON — a PDF, say. Same
+ *  auth/refresh dance as `request`, but resolves to a `Blob` instead of
+ *  parsing the body. */
+export async function requestBlob(path: string, options: RequestOptions = {}): Promise<Blob> {
+  const { method = "GET", query, retryOnExpiry = true } = options;
+
+  const send = async () => {
+    const headers: Record<string, string> = { ...tenantHeaders() };
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+    return fetch(url(path, query), { method, headers, credentials: "include" });
+  };
+
+  let response = await send();
+
+  if (response.status === 401 && retryOnExpiry) {
+    const recovered = await refreshSession();
+    if (recovered) {
+      response = await send();
+    } else {
+      setAccessToken(null);
+      onSignedOut?.();
+    }
+  }
+
+  if (!response.ok) {
+    let parsed: Partial<ApiErrorBody> | null = null;
+    try { parsed = JSON.parse(await response.text()) as ApiErrorBody; } catch { /* not JSON */ }
+    throw new ApiError(response.status, parsed, "Something went wrong.");
+  }
+
+  return response.blob();
+}
+
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, query, retryOnExpiry = true } = options;
 
@@ -184,6 +217,6 @@ export function socketUrl(path: string, token: string) {
     ? configured
     : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}${BASE}`;
   const slug = tenantHeaders()["X-Tenant-Slug"];
-  const suffix = configured && slug ? `&tenant=${encodeURIComponent(slug)}` : "";
+  const suffix = slug ? `&tenant=${encodeURIComponent(slug)}` : "";
   return `${origin}${path}?access_token=${encodeURIComponent(token)}${suffix}`;
 }

@@ -143,6 +143,21 @@ export function useSchema(entity: FieldDefinition["entity"]) {
   return { ...query, data: useResolved<FieldDefinition[]>(query, EMPTY) };
 }
 
+/** Common medicines for the prescription editor — tenant- and clinical-type-
+ *  filtered on the server. Catalog data changes rarely, so it stays fresh for
+ *  a while, mirroring `useTenantRecord`. */
+export function useMedicines() {
+  const t = useTenantId();
+  const signedIn = useSignedIn();
+  const query = useQuery({
+    queryKey: qk.medicines(t),
+    queryFn: api.getMedicines,
+    enabled: signedIn && !!t,
+    staleTime: 5 * 60_000,
+  });
+  return { ...query, data: useResolved<api.MedicineSuggestionOut[]>(query, EMPTY) };
+}
+
 /* ---- clinic data ---------------------------------------------------------- */
 
 /**

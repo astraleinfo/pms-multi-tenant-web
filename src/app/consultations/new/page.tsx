@@ -17,7 +17,7 @@ import { FeatureGate, RoleGate } from "@/components/domain/gates";
 import { DynamicField } from "@/components/domain/dynamic-form";
 import { AllergyFlag, PatientChip, PatientPicker } from "@/components/domain/patient";
 import { ClinicalExamPanel } from "@/components/domain/clinical-exam";
-import { PrescriptionEditor, emptyRxItem, type DraftRxItem } from "@/components/domain/prescription-editor";
+import { PrescriptionEditor, type DraftRxItem } from "@/components/domain/prescription-editor";
 import { LabOrderPicker, type DraftLabTest } from "@/components/domain/lab-order-picker";
 import {
   IconCheck, IconChevronLeft, IconFlask, IconRx, IconStethoscope, IconBookmark,
@@ -57,6 +57,7 @@ function Workspace({ queueId, patientId }: { queueId?: string; patientId?: strin
   const [notes, setNotes] = React.useState("");
   const [diagnosis, setDiagnosis] = React.useState("");
   const [followUp, setFollowUp] = React.useState<string>("");
+  const [followUpCustom, setFollowUpCustom] = React.useState<string>("");
   const [ext, setExt] = React.useState<Record<string, unknown>>({});
   const [rx, setRx] = React.useState<DraftRxItem[]>([]);
   const [tests, setTests] = React.useState<DraftLabTest[]>([]);
@@ -84,7 +85,7 @@ function Workspace({ queueId, patientId }: { queueId?: string; patientId?: strin
       chief_complaint: complaint.trim(),
       notes: notes.trim(),
       diagnosis: diagnosis.trim(),
-      follow_up_days: followUp ? Number(followUp) : null,
+      follow_up_days: followUp === "custom" ? (followUpCustom ? Number(followUpCustom) : null) : followUp ? Number(followUp) : null,
       clinical_ext: ext,
     }, sign);
 
@@ -223,10 +224,28 @@ function Workspace({ queueId, patientId }: { queueId?: string; patientId?: strin
                           placeholder="What you saw, what you did, what you advised." />
               </Field>
               <Field label="Follow-up" help="Leave blank if no review is needed.">
-                <Select value={followUp} onChange={(e) => setFollowUp(e.target.value)}>
-                  <option value="">No follow-up</option>
-                  {[7, 14, 21, 28, 42, 90, 180].map((d) => <option key={d} value={d}>In {d} days</option>)}
-                </Select>
+                <div className="flex gap-2">
+                  <Select
+                    value={followUp}
+                    onChange={(e) => setFollowUp(e.target.value)}
+                    className={followUp === "custom" ? "w-1/2" : undefined}
+                  >
+                    <option value="">No follow-up</option>
+                    {[7, 14, 21, 28, 42, 90, 180].map((d) => <option key={d} value={d}>In {d} days</option>)}
+                    <option value="custom">Custom…</option>
+                  </Select>
+                  {followUp === "custom" && (
+                    <Input
+                      type="number"
+                      min={0}
+                      max={3650}
+                      value={followUpCustom}
+                      onChange={(e) => setFollowUpCustom(e.target.value)}
+                      placeholder="Days"
+                      className="w-1/2"
+                    />
+                  )}
+                </div>
               </Field>
             </CardBody>
           </Card>
@@ -236,11 +255,6 @@ function Workspace({ queueId, patientId }: { queueId?: string; patientId?: strin
                         subtitle="Core — available whether or not this clinic sells medicines." />
             <CardBody className="pt-0">
               <PrescriptionEditor items={rx} onChange={setRx} />
-              {rx.length === 0 && (
-                <Button variant="secondary" size="sm" className="mt-3" onClick={() => setRx([emptyRxItem()])}>
-                  <IconRx size={14} /> Start a prescription
-                </Button>
-              )}
             </CardBody>
           </Card>
 

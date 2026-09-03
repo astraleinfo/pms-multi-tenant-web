@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import * as api from "@/lib/api";
 import { useApp, useTenant } from "@/lib/store/app-store";
 import { useClinicDb, useSchema, usePatient } from "@/lib/query/hooks";
 import {
@@ -9,6 +10,7 @@ import {
 } from "@/lib/data/repository";
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
 import { addDays, currency, formatDate, relativeDay } from "@/lib/format";
+import { openPdfBlob } from "@/lib/pdf";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader, Legend } from "@/components/ui/card";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -54,6 +56,18 @@ function EncounterView({ id }: { id: string }) {
   const clinical = CLINICAL_TYPES.find((c) => c.key === tenant.clinical_type)!;
 
   const [billing, setBilling] = React.useState(false);
+  const [printing, setPrinting] = React.useState(false);
+
+  const printConsultation = async () => {
+    setPrinting(true);
+    try {
+      openPdfBlob(await api.getConsultationPdf(encounter.id));
+    } catch {
+      notify({ tone: "warn", title: "Could not generate the print PDF" });
+    } finally {
+      setPrinting(false);
+    }
+  };
 
   const { data: allSchema } = useSchema("encounter");
   const schema = allSchema.filter((f) => f.field_key !== "chief_complaint");
@@ -69,8 +83,8 @@ function EncounterView({ id }: { id: string }) {
         description={`Recorded by ${userName(db, encounter.doctor_id)} · ${clinical.label} workflow`}
         actions={
           <>
-            <Button variant="ghost" onClick={() => window.print()}>
-              <IconPrint size={15} /> Print
+            <Button variant="ghost" onClick={() => void printConsultation()} disabled={printing}>
+              <IconPrint size={15} /> {printing ? "Preparing…" : "Print"}
             </Button>
             {encounter.status === "draft" && (
               <Button
