@@ -59,3 +59,48 @@ export function SuspendedTenantStage({ name }: { name: string }) {
     </div>
   );
 }
+
+/**
+ * The apex: neither a clinic nor the console.
+ *
+ * Before the console moved to `admin.<root>`, this address served it. It no
+ * longer does — and the API refuses `/platform/*` here — so rendering the
+ * console would produce a screen that cannot talk to anything. Saying where
+ * the two doors are is more use than a redirect into either.
+ */
+export function ApexStage() {
+  const { host, consoleUrl } = useApp();
+  const root = `${host.root}${host.port ? `:${host.port}` : ""}`;
+
+  return (
+    <div className="relative flex min-h-dvh items-center justify-center bg-stage px-6 text-stage-ink">
+      <div className="fixed inset-0 -z-10 bg-stage" aria-hidden />
+      <div className="max-w-lg text-center">
+        <span
+          className="mx-auto flex h-11 w-11 items-center justify-center rounded-[13px] bg-accent text-accent-ink"
+          aria-hidden
+        >
+          <IconShield size={20} />
+        </span>
+        <h1 className="mt-5 font-display text-[2rem] font-semibold leading-tight tracking-[-0.03em]">
+          Astrale Practice OS
+        </h1>
+        <p className="mx-auto mt-4 max-w-md text-[0.9375rem] leading-relaxed text-stage-dim">
+          Every clinic is served on its own address, and the tenant is that address — there is
+          no clinic selector to get wrong. Sign in at{" "}
+          <span className="tnum font-mono text-[0.875rem] text-stage-ink">
+            your-clinic.{root}
+          </span>
+          .
+        </p>
+        <a
+          href={consoleUrl()}
+          className="mt-6 inline-flex h-10 items-center gap-2 rounded-[var(--r)] bg-stage-ink px-4 text-[0.875rem] font-medium text-stage transition-opacity hover:opacity-90"
+        >
+          Super-admin console <IconArrowRight size={15} />
+        </a>
+        <p className="tnum mt-3 font-mono text-[0.75rem] text-stage-dim">admin.{root}</p>
+      </div>
+    </div>
+  );
+}

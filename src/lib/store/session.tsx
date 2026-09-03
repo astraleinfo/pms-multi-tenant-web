@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import type { HostContext } from "@/lib/tenancy";
-import { hostFromWindow, platformUrl, resolveHost, tenantUrl } from "@/lib/tenancy";
+import { adminUrl, apexUrl, hostFromWindow, resolveHost, tenantUrl } from "@/lib/tenancy";
 import * as api from "@/lib/api";
 import { onSessionLost, refreshSession, setAccessToken } from "@/lib/api/client";
 import type { Id, User } from "@/lib/types";
@@ -24,6 +24,16 @@ export interface Session {
   tenantId: Id;
   userId: Id;
   signedIn: boolean;
+  /**
+   * They are using a password somebody else chose. The session is real, but it
+   * is good for one thing until they replace it — see `<PasswordGate>`.
+   */
+  mustChangePassword: boolean;
+  /**
+   * Platform staff working inside this clinic, opened from the console. The
+   * banner says so; the audit trail already knows.
+   */
+  impersonated: boolean;
 }
 
 export interface PlatformSession {
@@ -39,7 +49,53 @@ export interface Toast {
 }
 
 const THEME_KEY = "astrale-pms.theme";
-const SIGNED_OUT: Session = { tenantId: "", userId: "", signedIn: false };
+const SIGNED_OUT: Session = {
+  tenantId: "", userId: "", signedIn: false, mustChangePassword: false, impersonated: false,
+};
+
+/**
+ * Where a support session arrives.
+ *
+ * The console hands the token over in the URL fragment: browsers do not send
+ * a fragment to a server, and it does not end up in a proxy log the way a
+ * query string does. This reads it once, wipes it from the address bar, and
+ * from then on it is an ordinary in-memory access token.
+ */
+const SUPPORT_FRAGMENT = "support_token";
+
+/**
+ * The support token, lifted out of the URL and held outside React.
+ *
+ * The fragment can only be read once: taking it means wiping it from the
+ * address bar, or it would sit in the URL for the life of the tab and end up
+ * in a screenshot or a shared link. But an effect in React is not guaranteed
+ * to run once — StrictMode deliberately runs it twice in development, and Fast
+ * Refresh re-runs it on every edit. A second run would find the fragment
+ * already gone, conclude there was no session, and send the tab to a sign-in
+ * screen that platform staff have no account for.
+ *
+ * So the token is taken exactly once, into a module variable that survives
+ * every remount, and stays there until it has actually been exchanged.
+ */
+let heldSupportToken: string | null = null;
+
+function takeSupportToken(): string | null {
+  if (heldSupportToken) return heldSupportToken;
+  if (typeof window === "undefined") return null;
+
+  const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const token = fragment.get(SUPPORT_FRAGMENT);
+  if (!token) return null;
+
+  fragment.delete(SUPPORT_FRAGMENT);
+  const rest = fragment.toString();
+  window.history.replaceState(
+    null, "", `${window.location.pathname}${window.location.search}${rest ? `#${rest}` : ""}`,
+  );
+
+  heldSupportToken = token;
+  return token;
+}
 
 interface SessionContextValue {
   ready: boolean;
@@ -56,6 +112,8 @@ interface SessionContextValue {
 
   signIn: (email: string, password: string) => Promise<api.AuthResult>;
   signOut: () => Promise<void>;
+  /** The password has been replaced, so the one-thing-only session is over. */
+  clearPasswordHold: () => void;
   platformSignIn: (email: string, password: string) => Promise<api.PlatformAuthResult>;
   platformSignOut: () => Promise<void>;
   /** the API told us this session is over — drop it without a round trip */
@@ -70,6 +128,7 @@ interface SessionContextValue {
 
   clinicUrl: (slug: string, path?: string) => string;
   consoleUrl: () => string;
+  apexHomeUrl: () => string;
 }
 
 const SessionContext = React.createContext<SessionContextValue | null>(null);
@@ -110,6 +169,41 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     (async () => {
+      /* A support session arrives in the fragment. It has no refresh cookie,
+         so it is deliberately not resumable: when it runs out, it is opened
+         again from the console. */
+      const supportToken = takeSupportToken();
+      if (supportToken) {
+        setAccessToken(supportToken);
+        const who = await api.me().catch(() => null);
+
+        /* Note there is no `cancelled` bail before this point. The token has
+           already left the URL, so an effect that gave up here would throw the
+           only copy of the session away — and the remount that cancelled it is
+           about to look for a fragment that is no longer there. */
+        if (who?.user) {
+          heldSupportToken = null;
+          setUser(who.user);
+          setPermissions(who.permissions);
+          setPreferences(who.preferences);
+          setSession({
+            tenantId: who.user.tenant_id,
+            userId: who.user.id,
+            signedIn: true,
+            mustChangePassword: false,
+            impersonated: true,
+          });
+          setReady(true);
+          return;
+        }
+
+        /* The token was refused — expired, or minted for another clinic. Drop
+           it rather than retrying it on every remount. */
+        heldSupportToken = null;
+        setAccessToken(null);
+        if (cancelled) return;
+      }
+
       /* Was this tab already signed in? The refresh cookie is the only place
          that answer can come from. */
       const resumed = await refreshSession();
@@ -120,7 +214,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         setUser(resumedUser);
         setPermissions(resumed.permissions ?? []);
         setPreferences((resumed.preferences as api.UserPreferences) ?? api.NO_PREFERENCES);
-        setSession({ tenantId: resumedUser.tenant_id, userId: resumedUser.id, signedIn: true });
+        setSession({
+          tenantId: resumedUser.tenant_id,
+          userId: resumedUser.id,
+          signedIn: true,
+          mustChangePassword: resumed.must_change_password === true,
+          impersonated: false,
+        });
       } else if (resumed?.platform_user) {
         const staff = resumed.platform_user as api.PlatformStaff;
         setPlatformUser(staff);
@@ -149,7 +249,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     const result = await api.authenticate(email, password);
     if (result.ok) {
       setUser(result.user);
-      setSession({ tenantId: result.user.tenant_id, userId: result.user.id, signedIn: true });
+      setSession({
+        tenantId: result.user.tenant_id,
+        userId: result.user.id,
+        signedIn: true,
+        mustChangePassword: result.mustChangePassword,
+        impersonated: false,
+      });
       const who = await api.me().catch(() => null);
       if (who) {
         setPermissions(who.permissions);
@@ -157,6 +263,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       }
     }
     return result;
+  }, []);
+
+  /* They chose their own password, so the hold is over. The server already
+     agrees — this is the local half, so the gate lifts without a round trip. */
+  const clearPasswordHold = React.useCallback(() => {
+    setSession((current) => ({ ...current, mustChangePassword: false }));
+    setUser((current) => (current ? { ...current, must_change_password: false } : current));
   }, []);
 
   const signOut = React.useCallback(async () => {
@@ -205,20 +318,21 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const clinicUrl = React.useCallback(
     (slug: string, path = "/") => tenantUrl(slug, hostRef.current, path), [],
   );
-  const consoleUrl = React.useCallback(() => platformUrl(hostRef.current), []);
+  const consoleUrl = React.useCallback(() => adminUrl(hostRef.current), []);
+  const apexHomeUrl = React.useCallback(() => apexUrl(hostRef.current), []);
 
   const value = React.useMemo<SessionContextValue>(() => ({
     ready, host,
     session, user, permissions, preferences, savePreferences,
     platformSession, platformUser,
-    signIn, signOut, platformSignIn, platformSignOut, endSession,
+    signIn, signOut, clearPasswordHold, platformSignIn, platformSignOut, endSession,
     theme, toggleTheme, toasts, notify, dismissToast,
-    clinicUrl, consoleUrl,
+    clinicUrl, consoleUrl, apexHomeUrl,
   }), [
     ready, host, session, user, permissions, preferences, savePreferences,
     platformSession, platformUser,
-    signIn, signOut, platformSignIn, platformSignOut, endSession,
-    theme, toggleTheme, toasts, notify, dismissToast, clinicUrl, consoleUrl,
+    signIn, signOut, clearPasswordHold, platformSignIn, platformSignOut, endSession,
+    theme, toggleTheme, toasts, notify, dismissToast, clinicUrl, consoleUrl, apexHomeUrl,
   ]);
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

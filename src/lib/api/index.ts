@@ -6,7 +6,7 @@ import type {
   Invoice, InvoiceLineItem, LabOrder, LabResultLine, NewAppointment, NewEncounter, Patient,
   Payment, Prescription, PrescriptionItem, QueueEntry, Role, Tenant, TenantConfig, TenantFeature, User,
 } from "@/lib/types";
-import { ApiError, del, get, patch as patch_, post, setAccessToken } from "./client";
+import { ApiError, del, get, patch as patch_, post, put as put_, setAccessToken } from "./client";
 
 /* ==========================================================================
    The API.
@@ -35,6 +35,8 @@ export interface SessionPayload {
   platform_user?: PlatformStaff | null;
   tenant_id?: string | null;
   permissions?: string[];
+  /** they are using a password somebody else chose — see `mustChangePassword` */
+  must_change_password?: boolean;
 }
 
 export interface PlatformStaff {
@@ -45,7 +47,9 @@ export interface PlatformStaff {
   title: string;
 }
 
-export type AuthResult = { ok: true; user: User } | { ok: false; error: string; code?: string };
+export type AuthResult =
+  | { ok: true; user: User; mustChangePassword: boolean }
+  | { ok: false; error: string; code?: string };
 export type PlatformAuthResult =
   | { ok: true; user: PlatformStaff }
   | { ok: false; error: string; code?: string };
@@ -55,7 +59,11 @@ export async function authenticate(email: string, password: string): Promise<Aut
   try {
     const session = await post<SessionPayload>("/v1/auth/login", { email, password });
     setAccessToken(session.access_token);
-    return { ok: true, user: session.user as User };
+    return {
+      ok: true,
+      user: session.user as User,
+      mustChangePassword: session.must_change_password === true,
+    };
   } catch (error) {
     if (error instanceof ApiError) return { ok: false, error: error.message, code: error.code };
     return { ok: false, error: "The clinic could not be reached. Try again." };
@@ -74,6 +82,71 @@ export async function authenticatePlatform(email: string, password: string): Pro
 }
 
 export const signOut = () => post<void>("/v1/auth/logout").catch(() => undefined);
+
+/* ---- passwords ------------------------------------------------------------
+ *
+ * Nobody is ever handed a password. An account is created without one, its
+ * owner is emailed a single-use link, and the password it ends up with is one
+ * only they have seen. These four calls are the whole of that road, and three
+ * of them run before anyone is signed in — the clinic comes from the address,
+ * exactly as it does for sign-in.
+ */
+
+/** What the "choose a password" page is told about a link it was given. */
+export interface InvitationPreview {
+  valid: boolean;
+  /** `invite` for a first password, `reset` for a replacement */
+  purpose: "invite" | "reset" | "";
+  name: string;
+  email: string;
+  clinic: string;
+  problem: string | null;
+}
+
+/**
+ * Inspect a link without spending it.
+ *
+ * An expired or already-used link is a page to render, not an error to catch:
+ * this resolves with `valid: false` and a sentence rather than throwing.
+ */
+export const inspectInvitation = (token: string) =>
+  get<InvitationPreview>("/v1/auth/invitation", { token });
+
+/**
+ * Ask for a reset link.
+ *
+ * Always succeeds, and says the same thing whether or not that address has an
+ * account here — the form cannot be used to find out who works at a clinic.
+ */
+export const requestPasswordReset = (email: string) =>
+  post<{ status: string; message: string }>("/v1/auth/password/forgot", { email });
+
+/**
+ * Spend a link and choose a password.
+ *
+ * No session comes back on purpose: they sign in with the password they just
+ * chose, which proves it went in as they intended. Every session the account
+ * had is ended, including any opened with the password being replaced.
+ */
+export const acceptPasswordReset = (token: string, password: string) =>
+  post<{ ok: boolean; email: string; message: string }>("/v1/auth/password/reset", {
+    token,
+    password,
+  });
+
+/**
+ * Change your own password, having proved you know the current one.
+ *
+ * This is what clears `must_change_password`, so it is also the way out of a
+ * session that is good for one thing only. Every other session this account
+ * holds ends; the browser doing it is spared.
+ */
+export const changeOwnPassword = (currentPassword: string, newPassword: string) =>
+  post<User>("/v1/auth/password/change", {
+    current_password: currentPassword,
+    new_password: newPassword,
+  });
+
 
 /** How one person has set the interface up for themselves. */
 export interface UserPreferences {
@@ -312,9 +385,14 @@ export const getInvoice = (id: Id) => get<Invoice>(`/v1/billing/invoices/${id}`)
  * else there is no tenant: the clinic is the address and the session. The id,
  * the initials and the account status are the server's to decide.
  *
- * `password` decides which of two accounts is created. With one, the person is
- * active and can sign in immediately. Without one the row is `invited`, and
- * sign-in is refused until a password exists.
+ * `password` decides which of two accounts is created, and the ordinary answer
+ * is to leave it out: the row is then `invited` with no hash at all, and the
+ * server emails them a link to choose their own.
+ *
+ * Supplying one is the fallback for somebody standing at the desk. It works,
+ * but the admin typing it knows it — so the account comes back with
+ * `must_change_password` set and its owner is held at the change-password
+ * screen until they have replaced it.
  */
 export interface NewUser {
   name: string;
@@ -345,6 +423,16 @@ export const createUser = (input: NewUser) =>
  */
 export const setUserPassword = (userId: Id, password: string) =>
   post<User>(`/v1/users/${userId}/password`, { password });
+
+/**
+ * Send this colleague their link again.
+ *
+ * Handles both cases: an invitation never accepted, and a password simply
+ * forgotten. Issuing a link spends every earlier one, so the newest email is
+ * the only one that opens anything. A locked account is refused — releasing it
+ * is `setUserStatus`, and a resend must not quietly undo a lockout.
+ */
+export const resendInvitation = (userId: Id) => post<User>(`/v1/users/${userId}/invite`);
 
 export const setUserStatus = (userId: Id, status: AccountStatus) =>
   patch_<User>(`/v1/users/${userId}/status`, { status });
@@ -631,13 +719,128 @@ export interface PlatformSnapshot {
 export const platformSnapshot = () => get<PlatformSnapshot>("/v1/platform/snapshot");
 export const listTenants = () => get<Tenant[]>("/v1/platform/tenants");
 
+/** Whether a subdomain can be claimed, answered while somebody types it. */
+export interface SlugCheck {
+  slug: string;
+  available: boolean;
+  problem: string | null;
+  /** the address the clinic would answer on */
+  url: string;
+}
+
+export const checkSlug = (slug: string) =>
+  get<SlugCheck>("/v1/platform/tenants/slug-check", { slug });
+
+export interface TenantCreated {
+  tenantId: Id;
+  userId: Id;
+  slug: string;
+  adminEmail: string;
+  /** the clinic row, so the console can act on what it just made */
+  tenant: Tenant;
+  /** false means the clinic exists but nobody can sign into it yet */
+  invitationSent: boolean;
+  /** only under the development mail transport — otherwise it is in an inbox */
+  invitationUrl: string | null;
+}
+
+interface TenantCreatedBody {
+  tenant: Tenant;
+  admin_user_id: Id;
+  admin_email: string;
+  invitation_sent: boolean;
+  invitation_url: string | null;
+}
+
+const asCreated = (body: TenantCreatedBody): TenantCreated => ({
+  tenant: body.tenant,
+  tenantId: body.tenant.id,
+  userId: body.admin_user_id,
+  slug: body.tenant.slug,
+  adminEmail: body.admin_email,
+  invitationSent: body.invitation_sent,
+  invitationUrl: body.invitation_url,
+});
+
+/**
+ * Create a clinic.
+ *
+ * No password, anywhere: the first administrator is written without one and
+ * emailed a link to choose their own. `invitationSent` is the part worth
+ * reading — a clinic whose admin never got the link exists but cannot be
+ * signed into, and the console should say so rather than report success.
+ */
 export const createTenant = async (input: {
   name: string; slug: string; city: string; clinical_type: ClinicalTypeKey;
-  admin_name: string; admin_email: string; admin_password: string;
-}) => {
-  const created = await post<{ tenant: Tenant; admin_user_id: Id }>("/v1/platform/tenants", input);
-  return { tenantId: created.tenant.id, userId: created.admin_user_id, slug: created.tenant.slug };
-};
+  admin_name: string; admin_email: string;
+}) => asCreated(await post<TenantCreatedBody>("/v1/platform/tenants", input));
+
+/** Send a clinic's administrator their link again. */
+export const resendTenantInvitation = async (tenantId: Id, userId: Id) =>
+  asCreated(
+    await post<TenantCreatedBody>(`/v1/platform/tenants/${tenantId}/users/${userId}/invite`),
+  );
+
+/**
+ * Edit a clinic's record.
+ *
+ * `slug` is absent and cannot be added: it is the clinic's address, it is
+ * inside every live session token, and changing it would sign the whole
+ * practice out. Status has its own call, because suspending is not an edit.
+ */
+export interface TenantEdit {
+  name?: string;
+  city?: string;
+  plan?: string;
+  timezone?: string;
+  clinical_type?: ClinicalTypeKey;
+}
+
+export const updateTenant = (tenantId: Id, changes: TenantEdit) =>
+  patch_<Tenant>(`/v1/platform/tenants/${tenantId}`, changes);
 
 export const setTenantStatus = async (tenantId: Id, status: Tenant["status"]) =>
   (await patch_<Tenant>(`/v1/platform/tenants/${tenantId}/status`, { status })).id;
+
+/** This clinic's staff, as the console sees them — support accounts excluded. */
+export const tenantUsers = (tenantId: Id) =>
+  get<User[]>(`/v1/platform/tenants/${tenantId}/users`);
+
+export const tenantFeatures = (tenantId: Id) =>
+  get<TenantFeature[]>(`/v1/platform/tenants/${tenantId}/features`);
+
+/**
+ * Switch a module on or off for one clinic.
+ *
+ * The clinic-side call records a clinic buying something; this is the
+ * platform's own hand on the switch. Both write the same row, so the feature
+ * guard reads one answer either way.
+ */
+export const setTenantFeature = (
+  tenantId: Id,
+  featureKey: FeatureKey,
+  status: TenantFeature["status"],
+) => put_<TenantFeature>(`/v1/platform/tenants/${tenantId}/features/${featureKey}`, { status });
+
+/**
+ * Open a support session inside a clinic.
+ *
+ * What comes back is an access token and nothing else — no refresh token and
+ * no cookie — so it lasts one access-token lifetime and then has to be opened
+ * again from here. Inside, it carries a practice admin's permissions, and
+ * everything it does is recorded against the platform person who opened it.
+ *
+ * The token is handed over in the URL fragment, which browsers do not send to
+ * a server and which does not survive into history the way a query string
+ * does. The clinic tab reads it, drops it from the address bar, and holds it
+ * in memory like any other access token.
+ */
+export interface SupportSession {
+  access_token: string;
+  expires_in: number;
+  tenant: Tenant;
+  url: string;
+}
+
+export const openSupportSession = (tenantId: Id) =>
+  post<SupportSession>(`/v1/platform/tenants/${tenantId}/impersonate`);

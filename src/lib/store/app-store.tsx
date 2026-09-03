@@ -13,7 +13,7 @@ import { setActiveCurrency, setToday, TODAY } from "@/lib/format";
 import type {
   AccountStatus, Appointment, ClinicalTypeKey, Encounter, FeatureKey, FieldDefinition, Id,
   InventoryTxType, InvoiceLineItem, LabResultLine, NewAppointment, NewEncounter, Payment,
-  PrescriptionItem, QueueEntry, Tenant, TenantConfig, User,
+  PrescriptionItem, QueueEntry, Tenant, TenantConfig, TenantFeature, User,
 } from "@/lib/types";
 import type { AuthResult, PlatformStaff } from "@/lib/api";
 
@@ -113,9 +113,18 @@ interface AppContextValue {
 
   createTenant: (input: {
     name: string; slug: string; city: string; clinical_type: ClinicalTypeKey;
-    admin_name: string; admin_email: string; admin_password: string;
-  }) => Promise<{ tenantId: Id; userId: Id; slug: string }>;
+    admin_name: string; admin_email: string;
+  }) => Promise<api.TenantCreated>;
   setTenantStatus: (tenantId: Id, status: Tenant["status"]) => void;
+  updateTenant: (tenantId: Id, changes: api.TenantEdit) => Promise<Tenant>;
+  setTenantFeature: (
+    tenantId: Id, featureKey: FeatureKey, status: TenantFeature["status"],
+  ) => Promise<TenantFeature>;
+  resendTenantInvitation: (tenantId: Id, userId: Id) => Promise<api.TenantCreated>;
+  openSupportSession: (tenantId: Id) => Promise<api.SupportSession>;
+  /** Send this colleague their "set your password" link again. */
+  resendInvitation: (userId: Id) => Promise<User>;
+  changeOwnPassword: (current: string, next: string) => Promise<User>;
 }
 
 const AppContext = React.createContext<AppContextValue | null>(null);
@@ -228,6 +237,25 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     mutationFn: (a: { id: Id; status: Tenant["status"] }) => api.setTenantStatus(a.id, a.status),
     onSuccess: invalidatePlatform,
   });
+  const mUpdateTenant = useMutation({
+    mutationFn: (a: { id: Id; changes: api.TenantEdit }) => api.updateTenant(a.id, a.changes),
+    onSuccess: invalidatePlatform,
+  });
+  const mTenantFeature = useMutation({
+    mutationFn: (a: { id: Id; key: FeatureKey; status: TenantFeature["status"] }) =>
+      api.setTenantFeature(a.id, a.key, a.status),
+    onSuccess: invalidatePlatform,
+  });
+  const mResendTenantInvite = useMutation({
+    mutationFn: (a: { id: Id; userId: Id }) => api.resendTenantInvitation(a.id, a.userId),
+  });
+  const mResendInvite = useMutation({
+    mutationFn: (userId: Id) => api.resendInvitation(userId),
+    onSuccess: invalidateTenant,
+  });
+  const mChangePassword = useMutation({
+    mutationFn: (a: { current: string; next: string }) => api.changeOwnPassword(a.current, a.next),
+  });
 
   const value = React.useMemo<AppContextValue>(() => ({
     ready: s.ready,
@@ -305,6 +333,12 @@ function AppFacade({ children }: { children: React.ReactNode }) {
 
     createTenant: (input) => mCreateTenant.mutateAsync(input),
     setTenantStatus: (id, status) => mTenantStatus.mutate({ id, status }),
+    updateTenant: (id, changes) => mUpdateTenant.mutateAsync({ id, changes }),
+    setTenantFeature: (id, key, status) => mTenantFeature.mutateAsync({ id, key, status }),
+    resendTenantInvitation: (id, userId) => mResendTenantInvite.mutateAsync({ id, userId }),
+    openSupportSession: (id) => api.openSupportSession(id),
+    resendInvitation: (userId) => mResendInvite.mutateAsync(userId),
+    changeOwnPassword: (current, next) => mChangePassword.mutateAsync({ current, next }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [s, hostTenant, hostTenantPending, tenant, features, config, appointments, connection, qc]);
 

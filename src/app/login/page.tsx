@@ -122,6 +122,12 @@ export default function LoginPage() {
         <Button type="submit" variant="primary" size="lg" className="w-full" disabled={busy}>
           Sign in <IconArrowRight size={16} />
         </Button>
+
+        <p className="text-center text-[0.8125rem] text-ink-3">
+          <a href="/forgot-password" className="text-accent-text underline-offset-4 hover:underline">
+            Forgotten your password?
+          </a>
+        </p>
       </form>
 
       <DemoCredentials
