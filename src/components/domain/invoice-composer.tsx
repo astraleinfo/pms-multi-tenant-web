@@ -95,6 +95,16 @@ export function InvoiceComposer({
         ),
       ];
     }
+    /* `suggested` is expected to be `{ lines, already_billed }` (the shape the
+       server now returns). If it is somehow still a bare array — the old
+       shape, e.g. from a mismatched deploy — `suggested?.lines` would quietly
+       resolve to nothing and seed zero lines with no sign anything is wrong.
+       Treat that as an error rather than silently proceeding as if the visit
+       has nothing to bill. */
+    if (Array.isArray(suggested)) {
+      notify({ tone: "critical", title: "Could not read suggested invoice lines" });
+      return [];
+    }
     return (suggested?.lines ?? []).map((line) =>
       row(
         {
@@ -107,7 +117,7 @@ export function InvoiceComposer({
         { suggested: true, unpriced: !line.priced },
       ),
     );
-  }, [suggested, encounterId, tariff, config.tax_pct]);
+  }, [suggested, encounterId, tariff, config.tax_pct, notify]);
 
   /* Items already invoiced (and possibly paid) through the pharmacy counter
      or a department account — offered separately so they aren't silently
@@ -357,6 +367,10 @@ export function InvoiceComposer({
                         {invoice?.invoice_status === "paid" && " · already paid"}
                         {invoice?.invoice_status === "partially_paid" && " · part paid"}
                         {invoice?.invoice_status === "issued" && " · issued, not yet paid"}
+                        {/* A pharmacy item can be split across more than one counter
+                            invoice (partial billing) — say so rather than showing
+                            only the first invoice and hiding the rest. */}
+                        {b.invoices.length > 1 && ` (+${b.invoices.length - 1} more)`}
                       </p>
                     </div>
                     <Button
