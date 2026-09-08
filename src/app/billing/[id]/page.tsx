@@ -6,6 +6,7 @@ import { useClinicDb, usePatient } from "@/lib/query/hooks";
 import { findInvoice, invoiceTotals } from "@/lib/data/repository";
 import { currency, formatDate, pluralise, relativeDay } from "@/lib/format";
 import type { Payment } from "@/lib/types";
+import { PAYMENT_METHODS } from "@/lib/payment-methods";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -305,10 +306,7 @@ function PaymentModal({
         </Field>
         <Field label="Method" required>
           <Select value={method} onChange={(e) => setMethod(e.target.value as Payment["method"])}>
-            <option value="card">Card</option>
-            <option value="cash">Cash</option>
-            <option value="upi">Bank transfer / UPI</option>
-            <option value="insurance">Insurance</option>
+            {PAYMENT_METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
           </Select>
         </Field>
         <Field label="Reference">
