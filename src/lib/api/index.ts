@@ -199,6 +199,9 @@ export const getTenant = () => get<Tenant>("/v1/tenant");
 export const listUsers = () => get<User[]>("/v1/users");
 export const listDoctors = () => get<User[]>("/v1/users/doctors");
 
+export const setDoctorConsultationFee = (doctorId: Id, fee: number | null) =>
+  patch_<User>(`/v1/pricing/doctors/${doctorId}`, { consultation_fee: fee });
+
 export const listFeatures = () => get<TenantFeature[]>("/v1/tenant/features");
 export const getConfig = () => get<TenantConfig>("/v1/tenant/config");
 

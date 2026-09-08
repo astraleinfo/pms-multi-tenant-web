@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useApp, useTenant } from "@/lib/store/app-store";
-import { useServicePrices } from "@/lib/query/hooks";
+import { useDoctors, useServicePrices } from "@/lib/query/hooks";
 import { currency } from "@/lib/format";
 import type { ServiceKind, ServicePrice } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
@@ -91,7 +91,7 @@ function Pricing() {
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Stat label="Consultation" value={consultation ? currency(consultation.price) : "Not set"}
               tone={consultation ? undefined : "warn"} icon={<IconReceipt size={16} />}
-              hint={consultation ? "Quoted on every visit" : "Billing will suggest zero"} />
+              hint={consultation ? "The clinic default — a doctor's own fee overrides it" : "Billing will suggest zero"} />
         <Stat label="Priced tests and scans" value={labPriced} icon={<IconFlask size={16} />}
               hint={`For ${tenant.clinical_type} orders`} />
         <Stat label="Procedures" value={counts.procedure ?? 0} icon={<IconCard size={16} />}
@@ -174,6 +174,8 @@ function Pricing() {
         )}
       </Card>
 
+      <DoctorFeesCard />
+
       <Card className="mt-5">
         <CardHeader title="Where these are quoted" />
         <CardBody className="pt-1">
@@ -181,7 +183,8 @@ function Pricing() {
             <li>
               <span className="font-medium text-ink">Consultation</span> — one row, code{" "}
               <code className="font-mono text-[0.75rem]">CONSULTATION</code>. Every invoice composed from a
-              visit starts with it.
+              visit starts with it, unless the visiting doctor has their own fee set below, which takes
+              precedence.
             </li>
             <li>
               <span className="font-medium text-ink">Lab and scans</span> — one row per test code, so an
@@ -206,6 +209,89 @@ function Pricing() {
       />
       <ImportModal open={importing} onClose={() => setImporting(false)} />
     </>
+  );
+}
+
+/**
+ * Each doctor's own consultation fee, distinct from the clinic default above.
+ *
+ * The box is backed by a raw string, not `NumberInput`'s number: "blank"
+ * (revert to the default) has to stay distinguishable from "explicitly
+ * zero", and a numeric-only control collapses both to the same value.
+ */
+function DoctorFeesCard() {
+  const { setDoctorFee, notify } = useApp();
+  const { data: doctors, isPending } = useDoctors();
+  const { data: prices } = useServicePrices();
+  const [drafts, setDrafts] = React.useState<Record<string, string>>({});
+  const [saving, setSaving] = React.useState<string | null>(null);
+
+  const clinicDefault = prices.find((p) => p.kind === "consultation" && p.active);
+
+  const save = async (doctorId: string, raw: string) => {
+    const trimmed = raw.trim();
+    const fee = trimmed === "" ? null : Number(trimmed);
+    if (fee !== null && (Number.isNaN(fee) || fee < 0)) {
+      notify({ tone: "warn", title: "Enter a valid amount, or leave it blank for the default" });
+      return;
+    }
+    setSaving(doctorId);
+    try {
+      await setDoctorFee(doctorId, fee);
+      notify({ tone: "ok", title: fee === null ? "Reverted to clinic default" : "Fee saved" });
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  return (
+    <Card className="mt-5 overflow-hidden">
+      <CardHeader
+        title="Consultations by doctor"
+        subtitle={`Leave blank to use the clinic default${clinicDefault ? ` (${currency(clinicDefault.price)})` : ""}. A doctor's own fee overrides it wherever their visits are billed.`}
+      />
+      {isPending ? (
+        <CardBody><p className="text-[0.8125rem] text-ink-2">Loading…</p></CardBody>
+      ) : doctors.length === 0 ? (
+        <EmptyState compact title="No doctors yet" body="Add a clinician to set their consultation fee." />
+      ) : (
+        <TableWrap>
+          <Table>
+            <THead>
+              <tr><TH>Doctor</TH><TH align="right">Fee</TH></tr>
+            </THead>
+            <TBody>
+              {doctors.map((d) => {
+                const draft = drafts[d.id] ?? (d.consultation_fee != null ? String(d.consultation_fee) : "");
+                return (
+                  <TR key={d.id}>
+                    <TD>
+                      <span className="block text-ink">{d.name}</span>
+                      {d.speciality && <span className="block text-[0.75rem] text-ink-3">{d.speciality}</span>}
+                    </TD>
+                    <TD align="right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          placeholder={clinicDefault ? String(clinicDefault.price) : "0"}
+                          value={draft}
+                          onChange={(e) => setDrafts((p) => ({ ...p, [d.id]: e.target.value }))}
+                          onBlur={(e) => void save(d.id, e.target.value)}
+                          className="w-28 text-right"
+                          disabled={saving === d.id}
+                        />
+                      </div>
+                    </TD>
+                  </TR>
+                );
+              })}
+            </TBody>
+          </Table>
+        </TableWrap>
+      )}
+    </Card>
   );
 }
 

@@ -138,6 +138,8 @@ export interface User {
   email: string;
   initials: string;
   speciality?: string;
+  /** This doctor's own consultation fee; `null`/unset means bill the clinic default. */
+  consultation_fee?: number | null;
   status: AccountStatus;
   /** consecutive failed sign-ins; five locks the account */
   failed_attempts: number;
