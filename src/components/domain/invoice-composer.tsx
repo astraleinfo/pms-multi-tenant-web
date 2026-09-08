@@ -95,7 +95,7 @@ export function InvoiceComposer({
         ),
       ];
     }
-    return (suggested ?? []).map((line) =>
+    return (suggested?.lines ?? []).map((line) =>
       row(
         {
           description: line.description,
@@ -108,6 +108,11 @@ export function InvoiceComposer({
       ),
     );
   }, [suggested, encounterId, tariff, config.tax_pct]);
+
+  /* Items already invoiced (and possibly paid) through the pharmacy counter
+     or a department account — offered separately so they aren't silently
+     billed twice. */
+  const alreadyBilled = suggested?.already_billed ?? [];
 
   const [lines, setLines] = React.useState<Draft[]>([]);
   const [issue, setIssue] = React.useState(true);
@@ -334,6 +339,42 @@ export function InvoiceComposer({
             </Button>
           </Field>
         </div>
+
+        {alreadyBilled.length > 0 && (
+          <details className="rounded-[var(--r)] border border-line bg-surface-2 p-3">
+            <summary className="cursor-pointer text-[0.8125rem] font-medium text-ink-2">
+              Already billed ({alreadyBilled.length})
+            </summary>
+            <ul className="mt-2.5 space-y-2">
+              {alreadyBilled.map((b, i) => {
+                const invoice = b.invoices[0];
+                return (
+                  <li key={i} className="flex items-center justify-between gap-3 rounded-[var(--r)] border border-line-soft bg-surface px-3 py-2 text-[0.8125rem]">
+                    <div>
+                      <p className="text-ink">{b.description} × {b.qty}</p>
+                      <p className="text-ink-3">
+                        Invoice {invoice?.invoice_number}
+                        {invoice?.invoice_status === "paid" && " · already paid"}
+                        {invoice?.invoice_status === "partially_paid" && " · part paid"}
+                        {invoice?.invoice_status === "issued" && " · issued, not yet paid"}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setLines((prev) => [
+                        ...prev,
+                        row({ description: b.description, source: b.source, qty: b.qty, unit_price: b.unit_price, tax_pct: b.tax_pct }),
+                      ])}
+                    >
+                      Add anyway
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+          </details>
+        )}
 
         <div className="rounded-[var(--r)] border border-line bg-surface-2 p-3">
           <dl className="space-y-1.5">

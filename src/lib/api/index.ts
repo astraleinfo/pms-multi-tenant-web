@@ -7,7 +7,8 @@ import type {
   LabResultLine, NewAppointment, NewEncounter, NewInventoryItem, NewServicePrice, Patient,
   PatientAccount, Payment, Prescription, PrescriptionItem, PricingMode, QueueEntry, Role,
   ServiceKind,
-  ServicePrice, ServicePricePatch, SuggestedLine, Tenant, TenantConfig, TenantFeature, User,
+  ServicePrice, ServicePricePatch, SuggestedLinesResponse, Tenant, TenantConfig, TenantFeature,
+  User,
 } from "@/lib/types";
 import {
   ApiError, del, get, patch as patch_, post, put as put_, requestBlob, setAccessToken, upload,
@@ -738,7 +739,7 @@ export const takeCounterPayment = (
 /** What this visit would bill for — the consultation, its labs, its dispenses,
  *  each priced from the clinic's own tariff. */
 export const suggestedInvoiceLines = (encounterId: Id) =>
-  get<SuggestedLine[]>("/v1/billing/invoices/suggestions", { encounter_id: encounterId });
+  get<SuggestedLinesResponse>("/v1/billing/invoices/suggestions", { encounter_id: encounterId });
 
 /* ---- the tariff (§3.12) ---------------------------------------------------
 

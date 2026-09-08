@@ -513,6 +513,26 @@ export interface SuggestedLine {
   priced: boolean;
 }
 
+/**
+ * A line already invoiced (and possibly paid) through the pharmacy-counter or
+ * department-account flow — surfaced so the composer can avoid re-billing it
+ * silently.
+ */
+export interface AlreadyBilledLine {
+  description: string;
+  source: LineItemSource;
+  department: BillingDepartment;
+  qty: number;
+  unit_price: number;
+  tax_pct: number;
+  invoices: Array<{ invoice_number: string; invoice_status: string; qty: number }>;
+}
+
+export interface SuggestedLinesResponse {
+  lines: SuggestedLine[];
+  already_billed: AlreadyBilledLine[];
+}
+
 export interface Payment {
   id: Id;
   invoice_id: Id;
