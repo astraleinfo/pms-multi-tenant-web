@@ -166,7 +166,7 @@ const TX_LABEL: Record<InventoryTxType, string> = {
 };
 
 function Inventory() {
-  const { session, today } = useApp();
+  const { session, today, config } = useApp();
   const db = useClinicDb();
   const t = session.tenantId;
   /* the stock table is computed from the item list, the ledger from the
@@ -184,7 +184,7 @@ function Inventory() {
   const items = selectInventoryItems(db, t);
   const tx = selectInventoryTx(db, t).sort((a, b) => b.at.localeCompare(a.at));
   const low = lowStock(db, t);
-  const expiring = nearExpiry(db, t, today, 120);
+  const expiring = nearExpiry(db, t, today, config.expiry_alert_days);
 
   const stockValue = items.reduce((s, i) => s + stockLevel(db, t, i.id) * i.unit_price, 0);
 
@@ -229,7 +229,7 @@ function Inventory() {
         <Stat label="Below reorder" value={low.length} tone={low.length ? "warn" : "ok"} icon={<IconAlert size={16} />}
               hint={low.length ? low[0].item.name : "Everything is stocked"} />
         <Stat label="Expiring soon" value={expiring.length} tone={expiring.length ? "critical" : "ok"} icon={<IconClock size={16} />}
-              hint="Within 120 days" />
+              hint={`Within ${config.expiry_alert_days} days`} />
         <Stat label="Stock at cost" value={currency(stockValue)} icon={<IconBox size={16} />}
               hint="Sum of on-hand × unit price" />
       </section>
@@ -323,7 +323,7 @@ function Inventory() {
 
       {tab === "expiry" && (
         <Card className="overflow-hidden">
-          <CardHeader title="Expiry watch" subtitle="Batches inside 120 days, soonest first." />
+          <CardHeader title="Expiry watch" subtitle={`Batches inside ${config.expiry_alert_days} days, soonest first.`} />
           {expiring.length === 0 ? (
             <EmptyState icon={<IconClock size={20} />} title="Nothing expiring soon" />
           ) : (

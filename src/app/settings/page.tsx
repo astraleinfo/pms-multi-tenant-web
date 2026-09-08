@@ -613,6 +613,16 @@ function ConfigurationTab() {
               </Field>
             </div>
           </section>
+
+          <section>
+            <Legend>Inventory</Legend>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Expiry alert threshold (days)" help="Batches expiring within this many days show up as a warning.">
+                <NumberInput min={1} max={730} value={draft.expiry_alert_days}
+                             onChange={(n) => set("expiry_alert_days", n)} />
+              </Field>
+            </div>
+          </section>
         </CardBody>
         <CardFooter>
           <p className="text-[0.75rem] text-ink-3">

@@ -54,6 +54,8 @@ export interface TenantConfig {
   tax_pct: number;
   payment_terms_days: number;
   currency: "GBP" | "EUR" | "USD" | "INR";
+  /* inventory */
+  expiry_alert_days: number;
 }
 
 export interface ClinicalType {
