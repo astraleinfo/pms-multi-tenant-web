@@ -354,6 +354,9 @@ export interface InventoryItem {
   /** margin over cost, or discount off MRP, depending on the mode */
   margin_pct: number;
   pricing_mode: PricingMode;
+  manufacturer: string;
+  description: string;
+  hsn_code: string;
 }
 
 /** What opens a new stock line. The server owns the id and the tenant. */
@@ -370,6 +373,9 @@ export interface NewInventoryItem {
   mrp?: number;
   margin_pct?: number;
   pricing_mode?: PricingMode;
+  manufacturer?: string;
+  description?: string;
+  hsn_code?: string;
 }
 
 /** What may be changed about one. Everything sent is what changes. */
