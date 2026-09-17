@@ -25,6 +25,9 @@ import {
   IconArrowRight, IconCheck, IconExternal, IconLayers, IconLock, IconLogout,
   IconMore, IconPlus, IconShield, IconSpark, IconUsers,
 } from "@/components/ui/icons";
+import { BillingMetricsConsole } from "@/components/domain/billing-metrics";
+import { useBillingMetrics } from "@/lib/query/billing";
+import { Tabs } from "@/components/ui/tabs";
 
 /* The console's row is a clinic *plus the counts the API gathered for it* —
    one clinic at a time, each with that clinic bound to the connection. */
@@ -495,6 +498,7 @@ function Console() {
   const [q, setQ] = React.useState("");
   const [creating, setCreating] = React.useState(false);
   const [created, setCreated] = React.useState<CreatedClinic | null>(null);
+  const [view, setView] = React.useState<"clinics" | "billing">("clinics");
 
   const tenants = React.useMemo(() => snapshot?.tenants ?? [], [snapshot]);
   const rows = tenants.filter((r) => {
@@ -511,10 +515,12 @@ function Console() {
   const patients = tenants.reduce((sum, r) => sum + r.patients, 0);
   const encounters = tenants.reduce((sum, r) => sum + r.encounters, 0);
 
-  /* what the platform bills: active paid modules, per live clinic */
-  const mrr = tenants
-    .filter((r) => r.tenant.status !== "suspended")
-    .reduce((sum, r) => sum + paidModules(r).reduce((s, k) => s + FEATURE_BY_KEY[k].price_monthly, 0), 0);
+  /* What the platform bills, from the platform's own ledger.
+     This used to be added up here, in the browser, out of a feature catalogue —
+     which was right until the first plan bundled a module or discounted one.
+     The server works it out over the invoices it actually raised, so the
+     console and the invoices cannot drift apart. */
+  const { data: billing } = useBillingMetrics();
 
   return (
     <div className="min-h-dvh bg-ground">
@@ -577,17 +583,36 @@ function Console() {
           </Button>
         </div>
 
+        <Tabs
+          className="mb-5"
+          value={view}
+          onChange={setView}
+          tabs={[
+            { value: "clinics", label: "Clinics", count: tenants.length },
+            { value: "billing", label: "Billing" },
+          ]}
+        />
+
+        {view === "clinics" && (
         <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Stat label="Clinics" value={tenants.length} icon={<IconLayers size={16} />}
                 hint={`${counts.active} active · ${counts.trial} trial · ${counts.suspended} suspended`} />
           <Stat label="Patients platform-wide" value={patients} icon={<IconUsers size={16} />}
                 hint={`${encounters} encounters recorded`} />
-          <Stat label="Module revenue" value={currency(mrr)} unit="/mo" tone="ok" icon={<IconSpark size={16} />}
-                hint="Active paid modules across live clinics" />
+          <Stat label="Recurring revenue" value={billing ? currency(billing.mrr) : "—"} unit="/mo" tone="ok"
+                icon={<IconSpark size={16} />}
+                hint={billing
+                  ? `${billing.subscriptions_active} active · ${currency(billing.outstanding_total)} outstanding`
+                  : "Reading the billing ledger…"} />
           <Stat label="Suspended" value={counts.suspended} tone={counts.suspended ? "critical" : "ok"}
                 icon={<IconLock size={16} />} hint={counts.suspended ? "Their subdomains serve a notice" : "Every clinic is reachable"} />
         </section>
+        )}
 
+        {view === "billing" && <BillingMetricsConsole />}
+
+        {view === "clinics" && (
+        <>
         <Card className="mt-5 overflow-hidden">
           <CardHeader
             title="Tenants"
@@ -628,6 +653,8 @@ function Console() {
             </p>
           )}
         </div>
+        </>
+        )}
       </main>
 
       <CreateClinic

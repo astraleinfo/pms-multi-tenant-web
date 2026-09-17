@@ -53,10 +53,14 @@ export interface TenantConfig {
   invoice_prefix: string;
   tax_pct: number;
   payment_terms_days: number;
-  currency: "GBP" | "EUR" | "USD" | "INR";
   /* inventory */
   expiry_alert_days: number;
+  currency: Currency;
 }
+
+/** The four this deployment prices in. Used by both ledgers — the clinic's
+    patient invoices and the platform's subscription invoices. */
+export type Currency = "GBP" | "EUR" | "USD" | "INR";
 
 export interface ClinicalType {
   key: ClinicalTypeKey;
@@ -592,4 +596,264 @@ export interface HistoryEvent {
   meta?: string;
   href?: string;
   tone?: "accent" | "ok" | "warn" | "critical" | "info" | "neutral";
+}
+
+/* ==========================================================================
+   Platform billing (Settings → Billing)
+
+   What the clinic pays *the platform* for the software. Not to be confused
+   with everything above it in this file: `Invoice` is the clinic billing a
+   patient for a consultation, and the two ledgers share no type, no status
+   vocabulary and no endpoint.
+
+   Every figure here is output-only. No request body in `lib/api` carries an
+   amount — a plan is chosen by code and priced by the server, and the payment
+   call sends three opaque ids and a signature. A price that a browser could
+   name is a price a browser could change.
+   ========================================================================== */
+
+export type SubscriptionStatus =
+  | "pending" | "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired";
+
+export type SubscriptionInvoiceStatus =
+  | "draft" | "issued" | "partially_paid" | "paid" | "void" | "uncollectible";
+
+export type InvoiceItemKind =
+  | "base_plan" | "addon" | "proration" | "discount" | "credit" | "tax";
+
+export type SubscriptionPaymentStatus =
+  | "created" | "authorised" | "captured" | "failed" | "refunded" | "partially_refunded";
+
+export interface Plan {
+  id: Id;
+  code: string;
+  name: string;
+  description: string;
+  interval: "monthly" | "yearly";
+  amount: number;
+  currency: Currency;
+  trial_days: number;
+  active: boolean;
+}
+
+/**
+ * One module as the billing screen shows it.
+ *
+ * Four fields decide what a row says, and the combination people get wrong is
+ * the third: `active` with a `cancels_on` means the module is **still on**,
+ * still usable and already paid for. Rendering that as "cancelled" would be
+ * wrong, and offering "activate" rather than "keep" would imply a charge that
+ * is not going to happen.
+ */
+export interface BillingAddon {
+  feature_key: FeatureKey;
+  name: string;
+  active: boolean;
+  /** covered by the base plan — switched on, never invoiced separately */
+  included: boolean;
+  /** null when included: there is no price to show, and a zero would read as
+      "free extra" rather than "part of the plan" */
+  monthly_amount: number | null;
+  activated_on: string | null;
+  /** the day a scheduled cancellation takes effect; null when none is */
+  cancels_on: string | null;
+  charged_through: string | null;
+}
+
+export interface Subscription {
+  id: Id;
+  status: SubscriptionStatus;
+  plan: Plan;
+  started_on: string;
+  trial_ends_on: string | null;
+  cancel_at_cycle_end: boolean;
+  cancelled_on: string | null;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  /** 28, 29, 30 or 31 — the denominator every proration on screen used */
+  current_period_days: number | null;
+}
+
+export interface BillingAccount {
+  legal_name: string;
+  billing_email: string;
+  phone: string;
+  address: string;
+  tax_id: string;
+  country: string;
+  place_of_supply: string;
+  currency: Currency;
+}
+
+export interface SubscriptionInvoiceItem {
+  kind: InvoiceItemKind;
+  description: string;
+  quantity: number;
+  unit_amount: number;
+  amount: number;
+  period_start: string | null;
+  period_end: string | null;
+  /** the proration workings: charged days out of the cycle's real length */
+  prorated_days: number | null;
+  cycle_days: number | null;
+  tax_code: string;
+  tax_percent: number | null;
+}
+
+export interface SubscriptionInvoice {
+  id: Id;
+  number: string;
+  status: SubscriptionInvoiceStatus;
+  currency: Currency;
+  issued_on: string;
+  due_on: string;
+  period_start: string;
+  /** exclusive — the first day of the next period, not the last of this one */
+  period_end: string;
+  subtotal: number;
+  discount_total: number;
+  tax_total: number;
+  total: number;
+  paid: number;
+  balance: number;
+  payment_url: string;
+  emailed_at: string | null;
+  items: SubscriptionInvoiceItem[];
+}
+
+export interface SubscriptionPayment {
+  id: Id;
+  status: SubscriptionPaymentStatus;
+  amount: number;
+  amount_refunded: number;
+  currency: Currency;
+  method: string;
+  gateway: string;
+  gateway_payment_id: string | null;
+  captured_at: string | null;
+  failure_reason: string;
+}
+
+/** Everything the billing screen renders, in one response. */
+export interface BillingSummary {
+  subscription: Subscription | null;
+  account: BillingAccount;
+  addons: BillingAddon[];
+  /** what the next invoice comes to before tax, at today's configuration */
+  recurring_subtotal: number;
+  next_billing_on: string | null;
+  outstanding_total: number;
+  outstanding_count: number;
+  currency: Currency;
+}
+
+/**
+ * What switching a module on or off actually did.
+ *
+ * `charged` and `reinstated` are the two answers that surprise people, so the
+ * server returns them rather than leaving the screen to infer: activating
+ * something you had just cancelled charges nothing, and cancelling charges
+ * nothing either.
+ */
+export interface AddonAction {
+  feature_key: FeatureKey;
+  active: boolean;
+  charged: boolean;
+  reinstated: boolean;
+  invoice: SubscriptionInvoice | null;
+  cancels_on: string | null;
+  prorated_days: number | null;
+  cycle_days: number | null;
+  amount: number | null;
+}
+
+/**
+ * What a browser is handed to open a payment, and nothing else.
+ *
+ * `key_id` is the gateway's *public* key — the half Checkout needs. The key
+ * secret and the webhook secret have no field here and never leave the server.
+ * `amount` is the server's figure, echoed so the widget can display it; it is
+ * re-derived and re-checked server-side before any payment is believed.
+ */
+export interface Checkout {
+  gateway: string;
+  key_id: string;
+  order_id: string;
+  amount: number;
+  currency: Currency;
+  invoice_number: string;
+  customer_name: string;
+  customer_email: string;
+  description: string;
+}
+
+/* ---- the console's billing metrics --------------------------------------- */
+
+export interface AddonMetric {
+  feature_key: FeatureKey;
+  name: string;
+  active_tenants: number;
+  cancelling: number;
+  monthly_revenue: number;
+  billed_in_window: number;
+}
+
+export interface TenantBillingMetric {
+  tenant_id: Id;
+  name: string;
+  slug: string;
+  plan: string;
+  subscription_status: SubscriptionStatus | "";
+  mrr: number;
+  revenue: number;
+  outstanding: number;
+  active_addons: number;
+}
+
+/**
+ * The console's billing dashboard.
+ *
+ * Stock figures (`mrr`, `subscriptions_*`, `*_outstanding`) describe the
+ * present and ignore the date filter; movement figures (`revenue`,
+ * `subscriptions_new`, `payments_*`, `refunds_*`) describe the window. "MRR
+ * between March and April" is not a question with an answer, and the API does
+ * not pretend otherwise.
+ */
+export interface BillingMetrics {
+  mrr: number;
+  arr: number;
+  revenue: number;
+  refunded: number;
+  net_revenue: number;
+
+  subscriptions_active: number;
+  subscriptions_trialing: number;
+  subscriptions_paused: number;
+  subscriptions_past_due: number;
+  subscriptions_new: number;
+  subscriptions_cancelled: number;
+  cancellations_scheduled: number;
+
+  payments_successful: number;
+  payments_failed: number;
+  payment_success_rate: number;
+  refunds_count: number;
+
+  invoices_issued: number;
+  invoices_paid: number;
+  invoices_outstanding: number;
+  outstanding_total: number;
+
+  addons: AddonMetric[];
+  tenants: TenantBillingMetric[];
+}
+
+export interface BillingMetricsFilter {
+  start?: string;
+  end?: string;
+  tenant_id?: Id;
+  plan_id?: Id;
+  feature_key?: FeatureKey;
+  payment_status?: SubscriptionPaymentStatus;
+  subscription_status?: SubscriptionStatus;
 }

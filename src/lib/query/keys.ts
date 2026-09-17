@@ -71,4 +71,20 @@ export const qk = {
     ["tenant", t, "pricing", "services", query] as const,
 
   analytics: (t: Id, days: number) => ["tenant", t, "analytics", days] as const,
+
+  /* Platform billing — what the clinic pays *us*. Under the clinic subtree so
+     one write invalidates it along with everything else, which matters more
+     here than elsewhere: switching a module on changes both the subscription
+     and the entitlement the nav reads. */
+  billing: (t: Id) => ["tenant", t, "billing"] as const,
+  billingSummary: (t: Id) => ["tenant", t, "billing", "summary"] as const,
+  billingPlans: (t: Id) => ["tenant", t, "billing", "plans"] as const,
+  billingInvoices: (t: Id, query: Record<string, unknown> = {}) =>
+    ["tenant", t, "billing", "invoices", query] as const,
+  billingPayments: (t: Id) => ["tenant", t, "billing", "payments"] as const,
+
+  /** The console's own, outside every clinic subtree — it reads across all of
+      them, so a single clinic's write must not invalidate it. */
+  billingMetrics: (filter: Record<string, unknown> = {}) =>
+    ["platform", "billing", "metrics", filter] as const,
 } as const;

@@ -24,6 +24,8 @@ import { Tabs } from "@/components/ui/tabs";
 import { DataTable, columnHelperFor } from "@/components/ui/data-table";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { RoleGate } from "@/components/domain/gates";
+import { BillingTab } from "@/components/domain/billing";
+import { useBillingSummary } from "@/lib/query/billing";
 import { useTour } from "@/components/onboarding/tour";
 import { Monogram } from "@/components/layout/rail";
 import {
@@ -31,7 +33,7 @@ import {
   IconShield, IconSpark, IconTrash, IconUnlock, IconUser, IconUsers,
 } from "@/components/ui/icons";
 
-type Tab = "practice" | "config" | "features" | "fields" | "team" | "isolation";
+type Tab = "practice" | "config" | "features" | "billing" | "fields" | "team" | "isolation";
 
 const userCol = columnHelperFor<User>();
 
@@ -174,6 +176,11 @@ function Settings({ initial }: { initial: Tab }) {
     [queryClient, t],
   );
   const [tab, setTab] = React.useState<Tab>(initial);
+  /* Whether modules are *billed* for this practice. Until it has a
+     subscription they are a plain entitlement switch, which is what every
+     deployment not using platform billing keeps. */
+  const { data: billingSummary } = useBillingSummary();
+  const billed = !!billingSummary?.subscription;
   const [addField, setAddField] = React.useState(false);
   const [addPerson, setAddPerson] = React.useState(false);
 
@@ -211,6 +218,7 @@ function Settings({ initial }: { initial: Tab }) {
           { value: "practice", label: "Practice" },
           { value: "config", label: "Configuration" },
           { value: "features", label: "Modules", count: active.filter((k) => !FEATURES.find((f) => f.key === k)?.is_core).length },
+          { value: "billing", label: "Billing" },
           { value: "fields", label: "Custom fields", count: customFields.length },
           { value: "team", label: "Team", count: staff.length },
           { value: "isolation", label: "Isolation" },
@@ -331,6 +339,15 @@ function Settings({ initial }: { initial: Tab }) {
                         </div>
                         {f.is_core ? (
                           <Badge tone="ok" size="sm" dot>On</Badge>
+                        ) : billed ? (
+                          /* Once the practice has a subscription this module
+                             costs money, and a switch that charges without
+                             saying so is a switch nobody should trust. The
+                             state stays visible here; buying and removing
+                             happen where the price and the dates are. */
+                          <Badge tone={on ? "ok" : "neutral"} size="sm" dot={on}>
+                            {on ? "On" : "Off"}
+                          </Badge>
                         ) : (
                           <Switch
                             checked={on}
@@ -355,8 +372,19 @@ function Settings({ initial }: { initial: Tab }) {
                             </span>
                           ))}
                         </span>
-                        <span className="tnum font-mono text-[0.75rem] text-ink-3">
-                          {f.is_core ? "included" : `${currency(f.price_monthly)}/mo`}
+                        <span className="flex items-center gap-2">
+                          <span className="tnum font-mono text-[0.75rem] text-ink-3">
+                            {f.is_core ? "included" : `${currency(f.price_monthly)}/mo`}
+                          </span>
+                          {billed && !f.is_core && (
+                            <button
+                              type="button"
+                              onClick={() => setTabAndUrl("billing")}
+                              className="rounded-[var(--r-pill)] border border-line-strong bg-surface px-2 py-px text-[0.6875rem] font-medium text-accent-text transition-colors hover:bg-accent-soft"
+                            >
+                              {on ? "Manage" : "Add"} in Billing
+                            </button>
+                          )}
                         </span>
                       </div>
                     </div>
@@ -382,6 +410,8 @@ function Settings({ initial }: { initial: Tab }) {
           </Card>
         </div>
       )}
+
+      {tab === "billing" && <BillingTab />}
 
       {tab === "fields" && (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">

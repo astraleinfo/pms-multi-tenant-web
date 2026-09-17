@@ -1,15 +1,17 @@
 "use client";
 
 import type {
-  AccountStatus, Appointment, BillingDepartment, ClinicalTypeKey, Encounter, FeatureKey,
+  AccountStatus, AddonAction, Appointment, BillingAccount, BillingDepartment, BillingMetrics,
+  BillingMetricsFilter, BillingSummary, ClinicalTypeKey, Encounter, FeatureKey,
   Charge, FieldDefinition, HistoryEvent, Id, InventoryBatch, InventoryItem, InventoryItemPatch,
   InventoryTransaction, InventoryTxType, Invoice, InvoiceLineItem, LabAttachment, LabOrder,
   LabResultLine, NewAppointment, NewEncounter, NewInventoryItem, NewServicePrice, Patient,
   PatientAccount, Payment, Prescription, PrescriptionItem, PricingMode, QueueEntry, Role,
-  ServiceKind,
-  ServicePrice, ServicePricePatch, SuggestedLinesResponse, Tenant, TenantConfig, TenantFeature,
-  User,
+  ServiceKind, SuggestedLinesResponse,
+  ServicePrice, ServicePricePatch, SubscriptionInvoice, SubscriptionInvoiceStatus,
+  SubscriptionPayment, SuggestedLine, Tenant, TenantConfig, TenantFeature, User,
 } from "@/lib/types";
+import type { Checkout, Plan } from "@/lib/types";
 import {
   ApiError, del, get, patch as patch_, post, put as put_, requestBlob, setAccessToken, upload,
 } from "./client";
@@ -989,3 +991,132 @@ export interface SupportSession {
 
 export const openSupportSession = (tenantId: Id) =>
   post<SupportSession>(`/v1/platform/tenants/${tenantId}/impersonate`);
+
+/* ==========================================================================
+   Platform billing — what the clinic pays *us*.
+
+   A different ledger from the invoices above, which are what the clinic
+   charges its patients. Different endpoints, different statuses, and no shared
+   types: `/v1/billing/*` is the patient ledger, `/v1/settings/billing/*` is
+   this one.
+
+   Note what none of these functions take: an amount. A plan is chosen by code
+   and priced from the catalogue; a payment is verified from three opaque ids
+   and a signature. The server refuses unknown keys in a request body, so a
+   client cannot smuggle a price into a call that decides money even by
+   accident.
+   ========================================================================== */
+
+/** The whole billing screen, in one request. */
+export const getBillingSummary = () => get<BillingSummary>("/v1/settings/billing");
+
+export const listPlans = () => get<Plan[]>("/v1/settings/billing/plans");
+
+/** Take the mandatory base plan. The code names it; the server prices it. */
+export const subscribeToPlan = (planCode: string) =>
+  post<BillingSummary>("/v1/settings/billing/subscribe", { plan_code: planCode });
+
+/** Move to a different base plan. The unused part of the current cycle comes
+    back as a credit on the new cycle's invoice — never as a refund. */
+export const changePlan = (planCode: string) =>
+  post<BillingSummary>("/v1/settings/billing/plan", { plan_code: planCode });
+
+export const pauseSubscription = () => post<BillingSummary>("/v1/settings/billing/pause");
+export const resumeSubscription = () => post<BillingSummary>("/v1/settings/billing/resume");
+
+/** Cancel at the end of the period already paid for. There is no "cancel now"
+    here on purpose: ending a paid period early is the platform's decision. */
+export const cancelSubscription = (reason = "") =>
+  post<BillingSummary>("/v1/settings/billing/cancel", { reason });
+
+export const keepSubscription = () =>
+  post<BillingSummary>("/v1/settings/billing/resume-cancellation");
+
+export const getBillingAccount = () => get<BillingAccount>("/v1/settings/billing/account");
+
+export type BillingAccountEdit = Partial<
+  Pick<BillingAccount, "legal_name" | "billing_email" | "phone" | "address" | "tax_id" | "country" | "place_of_supply">
+>;
+
+export const updateBillingAccount = (changes: BillingAccountEdit) =>
+  patch_<BillingAccount>("/v1/settings/billing/account", changes);
+
+/**
+ * Switch a module on.
+ *
+ * On the first day of the cycle this is the full monthly charge; mid-cycle it
+ * is prorated over the days the cycle actually has and invoiced immediately;
+ * and switching one back on before a scheduled cancellation takes effect
+ * charges nothing at all. The response says which of the three happened, so
+ * the screen can be specific rather than vague.
+ */
+export const activateAddon = (key: FeatureKey) =>
+  post<AddonAction>(`/v1/settings/billing/addons/${key}`);
+
+/** Stop a module at the end of the cycle. It keeps working until then, nothing
+    is refunded, and the next invoice does not mention it. */
+export const cancelAddon = (key: FeatureKey) =>
+  del<AddonAction>(`/v1/settings/billing/addons/${key}`);
+
+export interface SubscriptionInvoicePage {
+  items: SubscriptionInvoice[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export const listSubscriptionInvoices = (query: {
+  status?: SubscriptionInvoiceStatus;
+  limit?: number;
+  offset?: number;
+} = {}) => get<SubscriptionInvoicePage>("/v1/settings/billing/invoices", query);
+
+export const getSubscriptionInvoice = (id: Id) =>
+  get<SubscriptionInvoice>(`/v1/settings/billing/invoices/${id}`);
+
+/** The PDF, rendered from the stored line items — so one downloaded next year
+    says what it said the day it was raised. */
+export const downloadSubscriptionInvoice = (id: Id) =>
+  requestBlob(`/v1/settings/billing/invoices/${id}/download`);
+
+/**
+ * Open a payment against an invoice — the "Pay Now" button.
+ *
+ * Priced from the invoice server-side. What comes back is the gateway's public
+ * key id and an order id, both of which are meant to be public.
+ */
+export const openCheckout = (invoiceId: Id) =>
+  post<Checkout>(`/v1/settings/billing/invoices/${invoiceId}/checkout`);
+
+/**
+ * Hand back what Checkout returned — a claim, not a fact.
+ *
+ * The server checks the signature, re-fetches the payment from the gateway and
+ * compares the amount against the invoice it raised. The handler firing is not
+ * proof of payment; *this* resolving is.
+ */
+export const verifyPayment = (
+  invoiceId: Id,
+  claim: { order_id: string; payment_id: string; signature: string },
+) => post<SubscriptionInvoice>(`/v1/settings/billing/invoices/${invoiceId}/verify`, claim);
+
+export const listSubscriptionPayments = () =>
+  get<SubscriptionPayment[]>("/v1/settings/billing/payments");
+
+/* ---- the console's billing metrics --------------------------------------- */
+
+/**
+ * MRR, revenue, subscriptions, payments, outstanding invoices, refunds and
+ * add-on adoption — computed by the server, one clinic at a time.
+ *
+ * The console used to add its MRR up in the browser from a feature catalogue.
+ * It no longer does: a figure a browser derives is a figure that disagrees
+ * with the invoices as soon as anyone discounts anything.
+ */
+export const billingMetrics = (filter: BillingMetricsFilter = {}) =>
+  get<BillingMetrics>("/v1/platform/billing/metrics", { ...filter });
+
+export const consolePlans = () => get<Plan[]>("/v1/platform/billing/plans");
+
+export const consoleTenantInvoices = (tenantId: Id) =>
+  get<SubscriptionInvoice[]>(`/v1/platform/billing/tenants/${tenantId}/invoices`);
