@@ -15,12 +15,16 @@
    rail will show a module the server has just started charging for.
    ========================================================================== */
 
+import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as api from "@/lib/api";
 import { qk } from "./keys";
 import { useSession } from "@/lib/store/session";
+import { openRazorpay } from "@/lib/razorpay";
+import { currency } from "@/lib/format";
 import type {
-  BillingMetricsFilter, FeatureKey, Id, SubscriptionInvoiceStatus,
+  BillingInterval, BillingMetricsFilter, FeatureKey, Id, SubscriptionInvoice,
+  SubscriptionInvoiceStatus,
 } from "@/lib/types";
 
 const useTenantId = () => useSession().session.tenantId;
@@ -99,6 +103,54 @@ export function useBillingMetrics(filter: BillingMetricsFilter = {}) {
   });
 }
 
+/**
+ * The module catalogue.
+ *
+ * Cached for a few minutes: what is for sale changes when the platform says
+ * so, not while somebody is reading about it. Buying something invalidates the
+ * whole clinic subtree, which takes this with it.
+ */
+export function useModules() {
+  const t = useTenantId();
+  const signedIn = useSignedIn();
+  return useQuery({
+    queryKey: qk.modules(t),
+    queryFn: api.listModules,
+    enabled: signedIn && !!t,
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useModule(key: FeatureKey) {
+  const t = useTenantId();
+  const signedIn = useSignedIn();
+  return useQuery({
+    queryKey: qk.module(t, key),
+    queryFn: () => api.getModule(key),
+    enabled: signedIn && !!t && !!key,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/**
+ * The cart, priced by the server.
+ *
+ * Not cached for long, and re-read on focus, because the figures in it are
+ * the server's and can move: a plan change or a catalogue change in another
+ * tab must not leave a stale total on a page with a Pay button.
+ */
+export function useCart() {
+  const t = useTenantId();
+  const signedIn = useSignedIn();
+  return useQuery({
+    queryKey: qk.cart(t),
+    queryFn: api.getCart,
+    enabled: signedIn && !!t,
+    refetchOnWindowFocus: true,
+    staleTime: 10_000,
+  });
+}
+
 /* ---- writes -------------------------------------------------------------- */
 
 /**
@@ -158,6 +210,114 @@ export const useActivateAddon = () =>
 
 export const useCancelAddon = () =>
   useBillingMutation((key: FeatureKey) => api.cancelAddon(key));
+
+/**
+ * Pay one invoice, end to end.
+ *
+ * Three steps and the middle one is somebody else's window: the server prices
+ * an order, Checkout collects the money, and the server verifies what comes
+ * back before the invoice is treated as paid. The widget's handler firing is
+ * not proof of payment — the verify call resolving is.
+ *
+ * Shared by the billing screen and the cart rather than written twice. A
+ * second copy of a payment flow is a second place for the verify step to be
+ * forgotten, and a forgotten verify step looks exactly like success.
+ *
+ * A dismissal is not an error — closing a payment window is the most common
+ * thing that happens to one — so it reports nothing at all.
+ */
+export function usePayInvoice() {
+  const verify = useVerifyPayment();
+  const { notify } = useSession();
+  const [busy, setBusy] = React.useState(false);
+
+  const pay = React.useCallback(
+    async (invoice: Pick<SubscriptionInvoice, "id">) => {
+      setBusy(true);
+      try {
+        const checkout = await api.openCheckout(invoice.id);
+        const outcome = await openRazorpay(checkout);
+
+        if (!outcome.ok) {
+          if (outcome.reason === "unavailable") {
+            notify({
+              tone: "critical",
+              title: "The payment window could not load",
+              body: "It may be blocked on this network. The invoice is unchanged.",
+            });
+          } else if (outcome.reason === "failed") {
+            notify({
+              tone: "critical",
+              title: "That payment did not go through",
+              body: outcome.message ?? "Nothing has been charged. You can try again.",
+            });
+          }
+          return; /* dismissed — say nothing */
+        }
+
+        verify.mutate(
+          {
+            invoiceId: invoice.id,
+            claim: {
+              order_id: outcome.claim.razorpay_order_id,
+              payment_id: outcome.claim.razorpay_payment_id,
+              signature: outcome.claim.razorpay_signature,
+            },
+          },
+          {
+            onSuccess: (settled) =>
+              notify({
+                tone: "ok",
+                title: `Invoice ${settled.number} settled`,
+                body:
+                  settled.balance > 0
+                    ? `${currency(settled.balance)} still outstanding.`
+                    : "Thank you — nothing further is owed on it.",
+              }),
+          },
+        );
+      } catch (error: unknown) {
+        notify({
+          tone: "critical",
+          title: "Payment could not be started",
+          body: error instanceof Error ? error.message : "Try again in a moment.",
+        });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [notify, verify],
+  );
+
+  return { pay, busy: busy || verify.isPending };
+}
+
+/* ---- the cart ------------------------------------------------------------ */
+
+export const useAddToCart = () =>
+  useBillingMutation((args: { key: FeatureKey; interval?: BillingInterval }) =>
+    api.addToCart(args.key, args.interval ?? "monthly"),
+  );
+
+export const useRemoveFromCart = () =>
+  useBillingMutation((key: FeatureKey) => api.removeFromCart(key));
+
+export const useEmptyCart = () => useBillingMutation(() => api.emptyCart());
+
+/**
+ * Buy the whole cart on one invoice.
+ *
+ * What comes back may carry no invoice at all — every module in the cart was
+ * free this cycle, or already paid for. That is a success, and the screen has
+ * to say so rather than wait for a payment that is not coming.
+ */
+export const useCheckoutCart = () => useBillingMutation(() => api.checkoutCart());
+
+/** Buy one module from its own page, leaving the cart alone. */
+export const useBuyNow = () =>
+  useBillingMutation((args: { key: FeatureKey; interval?: BillingInterval }) =>
+    api.buyNow(args.key, args.interval ?? "monthly"),
+  );
 
 /**
  * Verify a payment the browser has just been handed.

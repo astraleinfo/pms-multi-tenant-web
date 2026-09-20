@@ -14,7 +14,7 @@ export interface NavItem {
   /** RBAC (§4, step 4). tenant_admin always passes. */
   roles?: Role[];
   /** badge counter key resolved by the rail */
-  counter?: "queue" | "pendingRx" | "labPending" | "unpaid";
+  counter?: "queue" | "pendingRx" | "labPending" | "unpaid" | "cart";
   description: string;
 }
 
@@ -54,6 +54,7 @@ export const NAV: NavGroup[] = [
     items: [
       { href: "/reports", label: "Reports", icon: IconChart, roles: ["tenant_admin", "doctor"], description: "What the transactional tables add up to." },
       { href: "/pricing", label: "Pricing", icon: IconCard, roles: ["tenant_admin"], description: "What the clinic charges — consultations, procedures and each scan." },
+      { href: "/modules", label: "Modules", icon: IconBox, roles: ["tenant_admin"], counter: "cart", description: "What this clinic can switch on, what each costs, and the cart." },
       { href: "/display", label: "Waiting room", icon: IconMonitor, feature: "queue", description: "The screen patients look at." },
       { href: "/settings", label: "Settings", icon: IconSettings, roles: ["tenant_admin"], description: "Features, fields, team and tenant profile." },
     ],

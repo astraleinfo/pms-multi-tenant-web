@@ -83,6 +83,13 @@ export const qk = {
     ["tenant", t, "billing", "invoices", query] as const,
   billingPayments: (t: Id) => ["tenant", t, "billing", "payments"] as const,
 
+  /* The shop. Under the billing subtree so buying something invalidates the
+     catalogue, the cart and the subscription together — a module that has just
+     been bought must not still be offering a Buy button. */
+  modules: (t: Id) => ["tenant", t, "billing", "modules"] as const,
+  module: (t: Id, key: string) => ["tenant", t, "billing", "modules", key] as const,
+  cart: (t: Id) => ["tenant", t, "billing", "cart"] as const,
+
   /** The console's own, outside every clinic subtree — it reads across all of
       them, so a single clinic's write must not invalidate it. */
   billingMetrics: (filter: Record<string, unknown> = {}) =>

@@ -30,9 +30,8 @@ import {
   useActivateAddon, useBillingSummary, useCancelAddon, useCancelSubscription,
   useChangePlan, useKeepSubscription, usePauseSubscription, usePlans,
   useResumeSubscription, useSubscribe, useSubscriptionInvoices, useUpdateBillingAccount,
-  useVerifyPayment,
+  usePayInvoice,
 } from "@/lib/query/billing";
-import { openRazorpay } from "@/lib/razorpay";
 import { openPdfBlob } from "@/lib/pdf";
 import { currency, formatDate, pluralise, titleCase } from "@/lib/format";
 import type {
@@ -979,71 +978,16 @@ function DownloadButton({ invoice }: { invoice: SubscriptionInvoice }) {
  * it says nothing at all.
  */
 function PayNowButton({ invoice }: { invoice: SubscriptionInvoice }) {
-  const verify = useVerifyPayment();
-  const { notify } = useSession();
-  const [busy, setBusy] = React.useState(false);
-
-  const pay = async () => {
-    setBusy(true);
-    try {
-      const checkout = await api.openCheckout(invoice.id);
-      const outcome = await openRazorpay(checkout);
-
-      if (!outcome.ok) {
-        if (outcome.reason === "unavailable") {
-          notify({
-            tone: "critical",
-            title: "The payment window could not load",
-            body: "It may be blocked on this network. The invoice is unchanged.",
-          });
-        } else if (outcome.reason === "failed") {
-          notify({
-            tone: "critical",
-            title: "That payment did not go through",
-            body: outcome.message ?? "Nothing has been charged. You can try again.",
-          });
-        }
-        return; /* dismissed — say nothing */
-      }
-
-      verify.mutate(
-        {
-          invoiceId: invoice.id,
-          claim: {
-            order_id: outcome.claim.razorpay_order_id,
-            payment_id: outcome.claim.razorpay_payment_id,
-            signature: outcome.claim.razorpay_signature,
-          },
-        },
-        {
-          onSuccess: (settled) => notify({
-            tone: "ok",
-            title: `Invoice ${settled.number} settled`,
-            body: settled.balance > 0
-              ? `${currency(settled.balance)} still outstanding.`
-              : "Thank you — nothing further is owed on it.",
-          }),
-        },
-      );
-    } catch (error: unknown) {
-      notify({
-        tone: "critical",
-        title: "Payment could not be started",
-        body: error instanceof Error ? error.message : "Try again in a moment.",
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
+  const { pay, busy } = usePayInvoice();
 
   return (
     <Button
       size="sm"
       variant="primary"
-      disabled={busy || verify.isPending}
-      onClick={(e) => { e.stopPropagation(); void pay(); }}
+      disabled={busy}
+      onClick={(e) => { e.stopPropagation(); void pay(invoice); }}
     >
-      {busy || verify.isPending ? "Opening…" : "Pay now"}
+      {busy ? "Opening…" : "Pay now"}
     </Button>
   );
 }

@@ -11,7 +11,9 @@ import type {
   ServicePrice, ServicePricePatch, SubscriptionInvoice, SubscriptionInvoiceStatus,
   SubscriptionPayment, SuggestedLine, Tenant, TenantConfig, TenantFeature, User,
 } from "@/lib/types";
-import type { Checkout, Plan } from "@/lib/types";
+import type {
+  BillingInterval, CartQuote, Checkout, CheckoutResult, ModuleCard, Plan,
+} from "@/lib/types";
 import {
   ApiError, del, get, patch as patch_, post, put as put_, requestBlob, setAccessToken, upload,
 } from "./client";
@@ -1057,6 +1059,59 @@ export const activateAddon = (key: FeatureKey) =>
     is refunded, and the next invoice does not mention it. */
 export const cancelAddon = (key: FeatureKey) =>
   del<AddonAction>(`/v1/settings/billing/addons/${key}`);
+
+/* ---- the module catalogue, the cart and checkout -------------------------- */
+
+/**
+ * Every published module, priced for this clinic's plan.
+ *
+ * One request rather than three, because a card has to answer what the module
+ * is, what it costs and whether the clinic already has it all at once — and a
+ * page that fetched those separately would render a Buy button before it knew
+ * the module was already bought.
+ */
+export const listModules = () => get<ModuleCard[]>("/v1/settings/billing/modules");
+
+export const getModule = (key: FeatureKey) =>
+  get<ModuleCard>(`/v1/settings/billing/modules/${key}`);
+
+/**
+ * The cart, priced.
+ *
+ * Re-priced by the server on every read rather than remembered by the
+ * browser: a catalogue change between putting a module in the cart and paying
+ * for it shows up here instead of being honoured silently.
+ */
+export const getCart = () => get<CartQuote>("/v1/settings/billing/cart");
+
+/** Put a module in the cart. Adding one twice replaces the line rather than
+    adding a second — the same module at two intervals is a contradiction. */
+export const addToCart = (key: FeatureKey, interval: BillingInterval = "monthly") =>
+  post<CartQuote>("/v1/settings/billing/cart/items", { feature_key: key, interval });
+
+export const removeFromCart = (key: FeatureKey) =>
+  del<CartQuote>(`/v1/settings/billing/cart/items/${key}`);
+
+export const emptyCart = () => del<CartQuote>("/v1/settings/billing/cart");
+
+/**
+ * Buy everything in the cart, on one invoice and one payment.
+ *
+ * Every module is switched on together or none is. The invoice that comes
+ * back is paid through the ordinary `openCheckout`/`verifyPayment` pair —
+ * there is no second payment path, and nothing in the browser decides an
+ * amount on either of them.
+ */
+export const checkoutCart = () =>
+  post<CheckoutResult>("/v1/settings/billing/cart/checkout", {});
+
+/** Buy one module straight from its page. Leaves the cart untouched, so a
+    half-filled one is not closed underneath somebody. */
+export const buyNow = (key: FeatureKey, interval: BillingInterval = "monthly") =>
+  post<CheckoutResult>("/v1/settings/billing/cart/buy-now", {
+    feature_key: key,
+    interval,
+  });
 
 export interface SubscriptionInvoicePage {
   items: SubscriptionInvoice[];

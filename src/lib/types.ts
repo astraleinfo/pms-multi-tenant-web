@@ -688,6 +688,10 @@ export interface BillingAccount {
 export interface SubscriptionInvoiceItem {
   kind: InvoiceItemKind;
   description: string;
+  /** which module this line is for, or null on the base plan, a discount or
+      tax. A cart checkout puts several add-on lines on one invoice, and
+      without this they can only be told apart by reading the description. */
+  feature_key: FeatureKey | null;
   quantity: number;
   unit_amount: number;
   amount: number;
@@ -785,6 +789,110 @@ export interface Checkout {
   customer_name: string;
   customer_email: string;
   description: string;
+}
+
+/* ---- the module catalogue, the cart and checkout -------------------------- */
+
+/**
+ * One module as its card and its page show it.
+ *
+ * `monthly` and `yearly` are null when the catalogue sells nothing at that
+ * interval, and that is **not** the same as free. `included` is what free
+ * means here: bundled by the base plan, switched on, never invoiced on its
+ * own. Rendering a null as 0 would read as "free extra" and be wrong.
+ */
+export interface ModuleScreenshot {
+  url: string;
+  alt: string;
+  caption?: string;
+}
+
+export interface ModuleDocLink {
+  label: string;
+  url: string;
+}
+
+export interface ModuleCard {
+  feature_key: FeatureKey;
+  name: string;
+  summary: string;
+  is_core: boolean;
+
+  headline: string;
+  long_description: string;
+  highlights: string[];
+  video_url: string;
+  video_poster_url: string;
+  video_duration_s: number | null;
+  screenshots: ModuleScreenshot[];
+  doc_links: ModuleDocLink[];
+  category: string;
+  badge: string;
+
+  currency: Currency;
+  monthly: number | null;
+  yearly: number | null;
+
+  included: boolean;
+  subscribed: boolean;
+  cancels_on: string | null;
+  in_cart: boolean;
+  purchasable: boolean;
+}
+
+export type BillingInterval = "monthly" | "yearly";
+
+/**
+ * One module in the cart, priced two ways.
+ *
+ * `list_amount` is what recurs every cycle; `amount_now` is this payment's
+ * share of the cycle already in flight, and is smaller whenever the module is
+ * bought partway through one. A screen that showed only one of them would be
+ * read as the other — so both are always rendered, with the day count beside
+ * the smaller one to explain itself.
+ */
+export interface CartLine {
+  feature_key: FeatureKey;
+  name: string;
+  interval: BillingInterval;
+  list_amount: number;
+  amount_now: number;
+  prorated_days: number | null;
+  cycle_days: number | null;
+  reinstated: boolean;
+  already_paid: boolean;
+  /** why this line cannot be bought, or null — carried per line so the cart
+      can show every problem at once rather than failing on the first */
+  blocked: string | null;
+}
+
+export interface CartQuote {
+  lines: CartLine[];
+  currency: Currency;
+  /** charged now, before tax */
+  subtotal: number;
+  tax_total: number;
+  /** charged now, in full — the figure the payment is for */
+  total: number;
+  /** what these modules add to every invoice after this one */
+  recurring_total: number;
+  period_start: string;
+  period_end: string;
+  purchasable: boolean;
+}
+
+/**
+ * What a checkout did.
+ *
+ * `invoice` is null when nothing was owed — every module was free this cycle
+ * or already paid for. That is a success, and `reinstated` says which modules
+ * came back on without a charge, because "why was I not billed" is the
+ * question that follows.
+ */
+export interface CheckoutResult {
+  invoice: SubscriptionInvoice | null;
+  activated: FeatureKey[];
+  reinstated: FeatureKey[];
 }
 
 /* ---- the console's billing metrics --------------------------------------- */

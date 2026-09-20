@@ -444,6 +444,7 @@ export function useInvoice(id: Id) {
 export function useRailCounters() {
   const t = useTenantId();
   const signedIn = useSignedIn();
+  const { role } = useTenant();
   const hasLab = useFeatureEnabled("lab");
   const hasBilling = useFeatureEnabled("billing");
 
@@ -467,12 +468,23 @@ export function useRailCounters() {
     enabled: signedIn && hasBilling,
   });
 
+  /* The cart is the practice admin's alone — the endpoint answers 403 to
+     everyone else, so asking on their behalf would be a failed request on
+     every page load rather than a badge. */
+  const cart = useQuery({
+    queryKey: qk.cart(t),
+    queryFn: api.getCart,
+    enabled: signedIn && !!t && role === "tenant_admin",
+    staleTime: 10_000,
+  });
+
   const counts = rx.data?.counts ?? {};
   return {
     queue: (queue ?? EMPTY).filter((e) => e.status === "waiting" || e.status === "called").length,
     pendingRx: (counts.pending ?? 0) + (counts.partially_dispensed ?? 0),
     labPending: lab.data?.total ?? 0,
     unpaid: unpaid.data?.total ?? 0,
+    cart: cart.data?.lines.length ?? 0,
   };
 }
 
