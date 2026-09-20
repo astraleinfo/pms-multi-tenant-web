@@ -19,7 +19,7 @@ import { Stat } from "@/components/ui/stat";
 import { DataTable, columnHelperFor } from "@/components/ui/data-table";
 import { Modal, Drawer } from "@/components/ui/modal";
 import {
-  Checkbox, ChoiceGroup, Combobox, Field, Input, NumberInput, SearchInput, Select,
+  Checkbox, ChoiceGroup, Combobox, Field, Input, NumberInput, SearchInput, Select, Textarea,
   type ComboOption,
 } from "@/components/ui/field";
 import { Tabs } from "@/components/ui/tabs";
@@ -166,7 +166,7 @@ const TX_LABEL: Record<InventoryTxType, string> = {
 };
 
 function Inventory() {
-  const { session, today } = useApp();
+  const { session, today, config } = useApp();
   const db = useClinicDb();
   const t = session.tenantId;
   /* the stock table is computed from the item list, the ledger from the
@@ -184,7 +184,7 @@ function Inventory() {
   const items = selectInventoryItems(db, t);
   const tx = selectInventoryTx(db, t).sort((a, b) => b.at.localeCompare(a.at));
   const low = lowStock(db, t);
-  const expiring = nearExpiry(db, t, today, 120);
+  const expiring = nearExpiry(db, t, today, config.expiry_alert_days);
 
   const stockValue = items.reduce((s, i) => s + stockLevel(db, t, i.id) * i.unit_price, 0);
 
@@ -229,7 +229,7 @@ function Inventory() {
         <Stat label="Below reorder" value={low.length} tone={low.length ? "warn" : "ok"} icon={<IconAlert size={16} />}
               hint={low.length ? low[0].item.name : "Everything is stocked"} />
         <Stat label="Expiring soon" value={expiring.length} tone={expiring.length ? "critical" : "ok"} icon={<IconClock size={16} />}
-              hint="Within 120 days" />
+              hint={`Within ${config.expiry_alert_days} days`} />
         <Stat label="Stock at cost" value={currency(stockValue)} icon={<IconBox size={16} />}
               hint="Sum of on-hand × unit price" />
       </section>
@@ -323,7 +323,7 @@ function Inventory() {
 
       {tab === "expiry" && (
         <Card className="overflow-hidden">
-          <CardHeader title="Expiry watch" subtitle="Batches inside 120 days, soonest first." />
+          <CardHeader title="Expiry watch" subtitle={`Batches inside ${config.expiry_alert_days} days, soonest first.`} />
           {expiring.length === 0 ? (
             <EmptyState icon={<IconClock size={20} />} title="Nothing expiring soon" />
           ) : (
@@ -390,7 +390,13 @@ function Inventory() {
               <KV label="Basis" value={priceBasis(detail)} />
               <KV label="Cost price" value={currency(detail.cost_price)} />
               <KV label="MRP" value={detail.mrp ? currency(detail.mrp) : "—"} />
+              <KV label="Manufacturer" value={detail.manufacturer || "—"} />
+              <KV label="HSN code" value={detail.hsn_code || "—"} />
             </dl>
+
+            {detail.description && (
+              <p className="mt-2 text-[0.8125rem] leading-snug text-ink-2">{detail.description}</p>
+            )}
 
             <div>
               <Legend>Batches</Legend>
@@ -552,6 +558,9 @@ function ItemModal({
   const [cost, setCost] = React.useState(0);
   const [mrp, setMrp] = React.useState(0);
   const [margin, setMargin] = React.useState(0);
+  const [manufacturer, setManufacturer] = React.useState("");
+  const [hsnCode, setHsnCode] = React.useState("");
+  const [description, setDescription] = React.useState("");
   /* Opening stock. A new line is at nothing on hand until the ledger says
      otherwise, so what is typed here becomes its first purchase — a real
      movement, not a counter someone can drift. */
@@ -578,6 +587,9 @@ function ItemModal({
     setCost(item?.cost_price ?? 0);
     setMrp(item?.mrp ?? 0);
     setMargin(item?.margin_pct ?? 0);
+    setManufacturer(item?.manufacturer ?? "");
+    setHsnCode(item?.hsn_code ?? "");
+    setDescription(item?.description ?? "");
     setError(null);
     setSaving(false);
   }, [open, item]);
@@ -602,6 +614,9 @@ function ItemModal({
       mrp,
       margin_pct: margin,
       pricing_mode: mode,
+      manufacturer: manufacturer.trim(),
+      hsn_code: hsnCode.trim(),
+      description: description.trim(),
     };
     /* Two writes, in this order: the line has to exist before anything can
        move into it. They are kept apart so a refusal says which half failed —
@@ -718,6 +733,19 @@ function ItemModal({
             <NumberInput min={0} value={reorder} onChange={setReorder} />
           </Field>
         </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Manufacturer">
+            <Input value={manufacturer} onChange={(e) => setManufacturer(e.target.value)} placeholder="Cipla" />
+          </Field>
+          <Field label="HSN code" help="For GST-compliant invoicing.">
+            <Input value={hsnCode} onChange={(e) => setHsnCode(e.target.value)} placeholder="3004" />
+          </Field>
+        </div>
+
+        <Field label="Description">
+          <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Notes on this line — usage, storage, anything worth remembering." />
+        </Field>
 
         <PricingFields
           mode={mode} onMode={setMode}

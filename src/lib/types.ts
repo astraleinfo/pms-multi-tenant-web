@@ -54,6 +54,8 @@ export interface TenantConfig {
   tax_pct: number;
   payment_terms_days: number;
   currency: "GBP" | "EUR" | "USD" | "INR";
+  /* inventory */
+  expiry_alert_days: number;
 }
 
 export interface ClinicalType {
@@ -136,6 +138,8 @@ export interface User {
   email: string;
   initials: string;
   speciality?: string;
+  /** This doctor's own consultation fee; `null`/unset means bill the clinic default. */
+  consultation_fee?: number | null;
   status: AccountStatus;
   /** consecutive failed sign-ins; five locks the account */
   failed_attempts: number;
@@ -354,6 +358,9 @@ export interface InventoryItem {
   /** margin over cost, or discount off MRP, depending on the mode */
   margin_pct: number;
   pricing_mode: PricingMode;
+  manufacturer: string;
+  description: string;
+  hsn_code: string;
 }
 
 /** What opens a new stock line. The server owns the id and the tenant. */
@@ -370,6 +377,9 @@ export interface NewInventoryItem {
   mrp?: number;
   margin_pct?: number;
   pricing_mode?: PricingMode;
+  manufacturer?: string;
+  description?: string;
+  hsn_code?: string;
 }
 
 /** What may be changed about one. Everything sent is what changes. */
@@ -503,6 +513,26 @@ export interface SuggestedLine {
   unit_price: number;
   tax_pct: number;
   priced: boolean;
+}
+
+/**
+ * A line already invoiced (and possibly paid) through the pharmacy-counter or
+ * department-account flow — surfaced so the composer can avoid re-billing it
+ * silently.
+ */
+export interface AlreadyBilledLine {
+  description: string;
+  source: LineItemSource;
+  department: BillingDepartment;
+  qty: number;
+  unit_price: number;
+  tax_pct: number;
+  invoices: Array<{ invoice_number: string; invoice_status: string; qty: number }>;
+}
+
+export interface SuggestedLinesResponse {
+  lines: SuggestedLine[];
+  already_billed: AlreadyBilledLine[];
 }
 
 export interface Payment {

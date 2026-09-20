@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/icons";
 
 export default function DashboardPage() {
-  const { session, today, hasFeature } = useApp();
+  const { session, today, hasFeature, config } = useApp();
   const db = useClinicDb();
   const { tenant, user } = useTenant();
   const t = session.tenantId;
@@ -80,7 +80,7 @@ export default function DashboardPage() {
         rows.push({ id: `ls-${s.item.id}`, tone: "warn", title: `${s.item.name} below reorder level`,
           detail: `${s.level} ${s.item.unit} on hand · reorder at ${s.item.reorder_level}`, href: "/inventory" });
       }
-      for (const b of nearExpiry(db, t, today, 45).slice(0, 2)) {
+      for (const b of nearExpiry(db, t, today, config.expiry_alert_days).slice(0, 2)) {
         rows.push({ id: `ex-${b.batch_no}`, tone: "critical", title: `Batch ${b.batch_no} expires soon`,
           detail: `${b.item.name} · ${b.daysLeft <= 0 ? "expired" : `${b.daysLeft} days left`}`, href: "/inventory" });
       }
@@ -94,7 +94,7 @@ export default function DashboardPage() {
         detail: "Dispense draws stock from the inventory ledger", href: "/pharmacy" });
     }
     return rows.slice(0, 7);
-  }, [db, t, today, hasFeature, money, pharm]);
+  }, [db, t, today, hasFeature, money, pharm, config]);
 
   const hour = 10;
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";

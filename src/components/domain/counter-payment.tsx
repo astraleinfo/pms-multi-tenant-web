@@ -5,6 +5,7 @@ import { useApp } from "@/lib/store/app-store";
 import { usePatientAccount } from "@/lib/query/hooks";
 import { currency } from "@/lib/format";
 import type { BillingDepartment, Charge, DepartmentAccount, Id, Payment } from "@/lib/types";
+import { PAYMENT_METHODS } from "@/lib/payment-methods";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,13 +16,6 @@ import { DEPARTMENT_LABEL } from "@/components/domain/status";
 
 /** Reading order at the desk: the visit, then what was done for it. */
 const ORDER: BillingDepartment[] = ["clinic", "lab", "pharmacy"];
-
-const METHODS: Array<{ value: Payment["method"]; label: string }> = [
-  { value: "cash", label: "Cash" },
-  { value: "card", label: "Card" },
-  { value: "upi", label: "Bank transfer / UPI" },
-  { value: "insurance", label: "Insurance" },
-];
 
 /**
  * Taking money at one counter (§3.12).
@@ -170,7 +164,7 @@ export function CounterPayment({
                 </Field>
                 <Field label="Method" required>
                   <Select value={method} onChange={(e) => setMethod(e.target.value as Payment["method"])}>
-                    {METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                    {PAYMENT_METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                   </Select>
                 </Field>
                 <Field label="Reference" className="sm:col-span-2" help="Card slip, transaction id — optional.">
@@ -414,7 +408,7 @@ export function FinalSettlement({
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Method" required>
                 <Select value={method} onChange={(e) => setMethod(e.target.value as Payment["method"])}>
-                  {METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                  {PAYMENT_METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                 </Select>
               </Field>
               <Field label="Reference" help="Card slip, transaction id — optional.">

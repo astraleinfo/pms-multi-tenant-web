@@ -123,6 +123,7 @@ interface AppContextValue {
   updateServicePrice: (id: Id, changes: ServicePricePatch) => Promise<ServicePrice>;
   deleteServicePrice: (id: Id) => void;
   importLabCataloguePrices: (price: number, taxPct?: number) => Promise<ServicePrice[]>;
+  setDoctorFee: (doctorId: Id, fee: number | null) => Promise<User>;
 
   createInvoice: (input: {
     patient_id: Id;
@@ -257,6 +258,8 @@ function AppFacade({ children }: { children: React.ReactNode }) {
   const mUpdatePrice = useTenantMutation((a: { id: Id; changes: ServicePricePatch }) =>
     api.updateServicePrice(a.id, a.changes));
   const mDeletePrice = useTenantMutation((id: Id) => api.deleteServicePrice(id));
+  const mSetDoctorFee = useTenantMutation((a: { doctorId: Id; fee: number | null }) =>
+    api.setDoctorConsultationFee(a.doctorId, a.fee));
   const mImportLabPrices = useTenantMutation((a: { price: number; taxPct: number }) =>
     api.importLabCataloguePrices(a.price, a.taxPct));
   const mCreateInvoice = useTenantMutation((i: Parameters<typeof api.createInvoice>[0]) => api.createInvoice(i));
@@ -396,6 +399,7 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     deleteServicePrice: (id) => mDeletePrice.mutate(id),
     importLabCataloguePrices: (price, taxPct = 0) =>
       mImportLabPrices.mutateAsync({ price, taxPct }),
+    setDoctorFee: (doctorId, fee) => mSetDoctorFee.mutateAsync({ doctorId, fee }),
 
     createInvoice: (input) => mCreateInvoice.mutateAsync(input),
     addPayment: (id, amount, method, reference) => mAddPayment.mutate({ id, amount, method, reference }),
