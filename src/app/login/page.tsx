@@ -76,10 +76,10 @@ export default function LoginPage() {
       <div className="flex items-center gap-3">
         <Monogram name={tenant.name} size={40} />
         <div className="min-w-0">
-          <h2 className="truncate font-display text-[1.125rem] font-semibold tracking-[-0.015em] text-ink">
+          <h2 className="truncate font-display text-title font-semibold text-ink">
             Sign in
           </h2>
-          <p className="truncate text-[0.75rem] text-ink-3">
+          <p className="truncate text-caption text-ink-3">
             {clinical.label}
           </p>
         </div>
@@ -113,7 +113,7 @@ export default function LoginPage() {
         </Field>
 
         {error && (
-          <p role="alert" className="flex items-start gap-2 rounded-[var(--r)] border border-critical-border bg-critical-soft px-3 py-2.5 text-[0.8125rem] leading-snug text-critical-text">
+          <p role="alert" className="flex items-start gap-2 rounded-[var(--r)] border border-critical-border bg-critical-soft px-3 py-2.5 text-label leading-snug text-critical-text">
             <IconAlert size={15} className="mt-px shrink-0" />
             {error}
           </p>
@@ -123,7 +123,7 @@ export default function LoginPage() {
           Sign in <IconArrowRight size={16} />
         </Button>
 
-        <p className="text-center text-[0.8125rem] text-ink-3">
+        <p className="text-center text-label text-ink-3">
           <a href="/forgot-password" className="text-accent-text underline-offset-4 hover:underline">
             Forgotten your password?
           </a>
@@ -136,7 +136,7 @@ export default function LoginPage() {
         onPick={(e, p) => { setEmail(e); setPassword(p); setError(null); }}
       />
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-line-soft pt-3 text-[0.75rem] text-ink-3">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-line-soft pt-3 text-caption text-ink-3">
         <span className="inline-flex items-center gap-1.5">
           <IconLayers size={13} />
           {clinical.label} workflow
@@ -146,7 +146,7 @@ export default function LoginPage() {
         </a>
       </div>
 
-      <p className="mt-3 flex items-start gap-1.5 text-[0.6875rem] leading-snug text-ink-3">
+      <p className="mt-3 flex items-start gap-1.5 text-micro leading-snug text-ink-3">
         <IconLock size={12} className="mt-px shrink-0" />
         Five wrong attempts lock the account until a practice admin releases it.
       </p>

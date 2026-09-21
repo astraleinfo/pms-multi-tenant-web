@@ -66,31 +66,31 @@ export default function ForgotPasswordPage() {
             <IconCheck size={20} />
           </span>
           <div>
-            <h2 className="font-display text-[1.125rem] font-semibold tracking-[-0.015em] text-ink">
+            <h2 className="font-display text-title font-semibold text-ink">
               Check your email
             </h2>
-            <p className="mt-2 text-[0.8125rem] leading-relaxed text-ink-2">
+            <p className="mt-2 text-label leading-relaxed text-ink-2">
               If <span className="tnum font-mono text-ink">{email.trim()}</span> has an account at{" "}
               {hostTenant.name}, a link is on its way. It works once and expires in a couple of
               hours.
             </p>
           </div>
-          <p className="text-[0.75rem] leading-relaxed text-ink-3">
+          <p className="text-caption leading-relaxed text-ink-3">
             Nothing has changed yet — your current password still works until you use the link.
           </p>
           <a
             href="/login"
-            className="block text-center text-[0.8125rem] text-accent-text underline-offset-4 hover:underline"
+            className="block text-center text-label text-accent-text underline-offset-4 hover:underline"
           >
             Back to sign in
           </a>
         </div>
       ) : (
         <>
-          <h2 className="font-display text-[1.125rem] font-semibold tracking-[-0.015em] text-ink">
+          <h2 className="font-display text-title font-semibold text-ink">
             Send me a link
           </h2>
-          <p className="mt-1 text-[0.8125rem] leading-relaxed text-ink-2">
+          <p className="mt-1 text-label leading-relaxed text-ink-2">
             The address you sign in to {hostTenant.name} with.
           </p>
 
@@ -115,13 +115,13 @@ export default function ForgotPasswordPage() {
           <div className="mt-4 border-t border-line-soft pt-3">
             <a
               href="/login"
-              className="text-[0.8125rem] text-accent-text underline-offset-4 hover:underline"
+              className="text-label text-accent-text underline-offset-4 hover:underline"
             >
               Back to sign in
             </a>
           </div>
 
-          <p className="mt-3 flex items-start gap-1.5 text-[0.6875rem] leading-snug text-ink-3">
+          <p className="mt-3 flex items-start gap-1.5 text-micro leading-snug text-ink-3">
             <IconLock size={12} className="mt-px shrink-0" />
             This page answers the same way whatever you type, so it cannot be used to find out
             who works here.

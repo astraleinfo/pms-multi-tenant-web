@@ -37,7 +37,7 @@ export function LabOrderPicker({
     <div className="space-y-4">
       {panels.map((panel) => (
         <div key={panel}>
-          <p className="mb-2 text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-3">{panel}</p>
+          <p className="mb-2 text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">{panel}</p>
           <div className="flex flex-wrap gap-1.5">
             {catalog.filter((c) => c.panel === panel).map((c) => {
               const on = selected.some((s) => s.code === c.code);
@@ -47,7 +47,7 @@ export function LabOrderPicker({
                   type="button"
                   onClick={() => toggle(c.code)}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-[var(--r-pill)] border px-3 py-1.5 text-[0.8125rem] transition-all duration-150",
+                    "inline-flex items-center gap-1.5 rounded-[var(--r-pill)] border px-3 py-1.5 text-label transition-all duration-150",
                     on
                       ? "border-accent bg-accent-soft font-medium text-accent-text"
                       : "border-line-strong bg-surface text-ink-2 hover:border-ink-3/50 hover:text-ink",
@@ -64,10 +64,10 @@ export function LabOrderPicker({
 
       {selected.length > 0 && (
         <div>
-          <p className="mb-1.5 text-[0.8125rem] font-medium text-ink">Note for the lab</p>
+          <p className="mb-1.5 text-label font-medium text-ink">Note for the lab</p>
           <Input value={note} onChange={(e) => onNote(e.target.value)}
                  placeholder="What is this ruling in or out?" />
-          <p className="mt-1.5 text-[0.75rem] text-ink-3">
+          <p className="mt-1.5 text-caption text-ink-3">
             Orders open as <span className="font-medium">ordered</span> and only reach the patient record once a
             technician has verified the result.
           </p>

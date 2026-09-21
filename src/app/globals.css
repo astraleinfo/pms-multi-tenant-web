@@ -3,92 +3,208 @@
 /* ==========================================================================
    Astrale PMS — design tokens
 
-   Direction: "Clinical daylight", taken from the reference platform's palette.
-   A cool blue-tinted daylight ground with white cards floating on it, and a
-   white rail rather than a dark slab. One interactive colour — royal blue —
-   carried on filled pills. Red, amber, emerald and cyan stay reserved for
-   clinical state and are never spent on decoration.
+   Direction: "Clinical daylight, long shift". The people at this screen are
+   at it for eight to twelve hours, so the whole system is tuned for staying
+   power rather than first impression: an off-white ground instead of a lit
+   one, charcoal ink instead of black, one muted blue for interaction, and
+   clinical colour spent only where a colour means something.
+
+   Two rules hold the system together:
+
+   1.  Nothing in a component names a size, a weight or a colour directly.
+       Everything comes from a token here, so a shift in comfort is a change
+       in one file and not a sweep through two hundred.
+   2.  Every foreground/background pair a screen can actually produce clears
+       WCAG AA — 4.5:1 for text, 3:1 for the dots, bars and icons that carry
+       state. Verified by hand against each surface a token can land on, not
+       assumed from the one case of ink on white.
    ========================================================================== */
 
 :root {
   color-scheme: light;
 
-  /* surfaces: white cards on a cool daylight ground */
-  --ground:        #F4F6FC;
-  --surface:       #FFFFFF;
-  --surface-2:     #F5F7FD;
-  --surface-3:     #EDF1FA;
-  --surface-inset: #E6EBF7;
+  /* ---- type ------------------------------------------------------------
+     One scale, twelve steps, named for the job rather than the size. Each
+     step carries its own line-height and tracking: small text gets air and a
+     touch of positive tracking, large text tightens up. Nothing lands below
+     12px, and a patient's name is never set in the smallest thing on screen.
+     ------------------------------------------------------------------- */
+  --fs-micro:      0.75rem;    /* 12.0px — overlines, column heads, tiny pills */
+  --fs-caption:    0.8125rem;  /* 13.0px — helper text, hints, timestamps      */
+  --fs-label:      0.875rem;   /* 14.0px — field labels, table cells, buttons  */
+  --fs-body:       0.9375rem;  /* 15.0px — body copy, inputs, default          */
+  --fs-lead:       1.0313rem;  /* 16.5px — lead paragraphs, emphasised body    */
+  --fs-title-sm:   1rem;       /* 16.0px — small card titles                   */
+  --fs-title:      1.0625rem;  /* 17.0px — section headings                    */
+  --fs-title-lg:   1.125rem;   /* 18.0px — panel headings                      */
+  --fs-h2:         1.1875rem;  /* 19.0px — major section headings              */
+  --fs-h1:         1.3125rem;  /* 21.0px — page title: named, not announced    */
+  --fs-display:    1.625rem;   /* 26.0px — stat figures                        */
+  --fs-display-lg: 1.75rem;    /* 28.0px — the one hero figure per screen      */
 
-  /* the rail is a white plane — a dark slab reads heavy in daylight */
-  --rail:            #FFFFFF;
-  --rail-2:          #F2F6FE;
-  --rail-3:          #EAEFF8;
-  --rail-line:       #EAEFF8;
-  --rail-ink:        #5A6580;
-  --rail-ink-strong: #0F1729;
-  --rail-ink-dim:    #68768F;
+  --lh-micro:      1.45;
+  --lh-caption:    1.5;
+  --lh-label:      1.45;
+  --lh-body:       1.6;
+  --lh-lead:       1.6;
+  --lh-title-sm:   1.4;
+  --lh-title:      1.38;
+  --lh-title-lg:   1.32;
+  --lh-h2:         1.28;
+  --lh-h1:         1.22;
+  --lh-display:    1.12;
+  --lh-display-lg: 1.08;
+
+  --tr-micro:       0.012em;
+  --tr-caption:     0.004em;
+  --tr-label:       0.002em;
+  --tr-body:        0em;
+  --tr-lead:       -0.003em;
+  --tr-title-sm:   -0.008em;
+  --tr-title:      -0.011em;
+  --tr-title-lg:   -0.014em;
+  --tr-h2:         -0.017em;
+  --tr-h1:         -0.02em;
+  --tr-display:    -0.022em;
+  --tr-display-lg: -0.024em;
+
+  /* Four weights, and the heaviest is 600. Hairline weights disappear on a
+     glossy clinic monitor at arm's length; 700 shouts, and a screen where
+     everything shouts has no hierarchy left. */
+  --fw-normal:   400;
+  --fw-medium:   500;
+  --fw-strong:   550;  /* patient names, figures — emphasis below "heading" */
+  --fw-semibold: 600;
+
+  /* ---- surfaces --------------------------------------------------------
+     Off-white cards on a soft cool ground. Pure white is a light source at
+     this size; after a few hours it is the thing people are squinting at.
+     ------------------------------------------------------------------- */
+  --ground:        #F1F4F9;
+  --surface:       #FCFDFF;
+  --surface-2:     #F4F7FB;
+  --surface-3:     #ECF0F6;
+  --surface-inset: #E4E9F1;
+
+  /* the rail is a quiet plane, a shade above the ground, never a dark slab */
+  --rail:            #FCFDFF;
+  --rail-2:          #EFF3F9;
+  --rail-3:          #E7ECF5;
+  --rail-line:       #E2E7F0;
+  --rail-ink:        #4F5A70;
+  --rail-ink-strong: #1B2434;
+  --rail-ink-dim:    #59657A;
 
   /* the sign-in stage and the waiting-room screen stay dark in both themes */
-  --stage:     #0F1729;
-  --stage-2:   #182238;
-  --stage-ink: #F4F7FF;
-  --stage-dim: #94A0BA;
+  --stage:     #151C28;
+  --stage-2:   #1E2634;
+  --stage-ink: #EEF2F9;
+  --stage-dim: #9BA6BB;
 
-  /* ink */
-  --ink:    #0F1729;
-  --ink-2:  #58637C;
-  --ink-3:  #68768F;
-  --ink-on: #FFFFFF;
+  /* ---- ink -------------------------------------------------------------
+     Charcoal with a cool cast, not black. 15:1 on a card is emphatic without
+     the halation that pure black on pure white throws at a tired eye.
+     ------------------------------------------------------------------- */
+  --ink:             #1B2434;  /* primary            15.2:1 on surface */
+  --ink-2:           #4C566B;  /* secondary           7.2:1 on surface */
+  --ink-3:           #59657A;  /* muted               5.7:1 on surface */
+  --ink-placeholder: #626E86;  /* placeholder         5.0:1 on surface */
+  --ink-on:          #FFFFFF;  /* on a filled accent                   */
 
-  /* hairlines only — depth comes from shadow */
-  --line:        #EAEFF8;
-  --line-strong: #DAE2F1;
-  --line-soft:   #F1F5FC;
+  /* ---- hairlines — depth comes from shadow, not from a hard outline --- */
+  --line:        #E2E7F0;
+  --line-strong: #D0D7E4;
+  --line-soft:   #EDF0F6;
 
-  /* brand: royal blue, the single interactive colour */
-  --accent:        #2F6BF3;
-  --accent-hover:  #1E56DC;
+  /* ---- tables ----------------------------------------------------------
+     A grid is the densest thing in this application and the one people read
+     longest, so it gets its own four tokens rather than borrowing the card's.
+     The head is a shade deeper than any panel behind it and is closed by a
+     rule a step stronger than the rules between rows: the eye should find
+     the boundary between "what the columns are" and "what is in them"
+     without having to look for it, and should not then be distracted by
+     twenty rules of the same weight underneath.
+     ------------------------------------------------------------------- */
+  --table-head:      #EDF1F8;
+  --table-head-line: #CFD7E5;  /* the one strong rule, under the head */
+  --row-line:        #E9EDF5;  /* between rows — quieter than --line */
+  --row-hover:       #F1F5FA;
+
+  /* ---- interaction ---------------------------------------------------- */
+  --hover:        #EFF2F8;  /* the generic wash under a hovered row or button */
+  --hover-strong: #E5EAF3;
+  --focus:        #2F62C8;
+
+  --disabled-ink:     #7E8899;
+  --disabled-surface: #F1F4F9;
+  --disabled-border:  #DFE4EE;
+
+  /* ---- brand: one muted blue, the only interactive colour -------------- */
+  --accent:        #2F62C8;  /* white on it: 5.7:1 */
+  --accent-hover:  #26529F;
   --accent-ink:    #FFFFFF;
-  --accent-soft:   #EAF1FE;
-  --accent-border: #C6DAFC;
-  --accent-text:   #1A4FCC;
+  --accent-soft:   #E9EFFB;
+  --accent-border: #C6D6F1;
+  --accent-text:   #204B9E;
 
-  /* clinical status — reserved */
-  --critical: #E14A3F;  --critical-soft: #FDEDEB;  --critical-border: #F9CCC7;  --critical-text: #B3251A;
-  --warn:     #DE8A0C;  --warn-soft:     #FDF3E4;  --warn-border:     #F6DAA6;  --warn-text:     #8E5407;
-  --ok:       #0F9D63;  --ok-soft:       #E6F7EF;  --ok-border:       #ADE4CB;  --ok-text:       #077A4C;
-  --info:     #0E93BC;  --info-soft:     #E5F4FA;  --info-border:     #A9DBEB;  --info-text:     #075E7C;
-  --neutral:  #68768F;  --neutral-soft:  #F0F3FA;  --neutral-border:  #E1E7F2;  --neutral-text:  #58637C;
+  /* ---- clinical status — reserved, and never the only signal -----------
+     Every one of these is paired with a dot, an icon or a word wherever it
+     appears. Red is for errors and clinically important alerts, not for
+     "delete" flavouring; green means done; amber means look at this.
+     ------------------------------------------------------------------- */
+  --critical: #C43D32;  --critical-soft: #FBEDEB;  --critical-border: #F0CDC8;  --critical-text: #9E2C22;
+  --warn:     #BE7C0B;  --warn-soft:     #FAF2E2;  --warn-border:     #EAD5A8;  --warn-text:     #7C4D07;
+  --ok:       #17805A;  --ok-soft:       #E7F3EE;  --ok-border:       #B5DAC7;  --ok-text:       #0E6447;
+  --info:     #27798F;  --info-soft:     #E7F1F5;  --info-border:     #B4D3DF;  --info-text:     #155F76;
+  --neutral:  #59657A;  --neutral-soft:  #EEF1F7;  --neutral-border:  #DCE2EC;  --neutral-text:  #4C566B;
+  /* Violet carries no clinical meaning and is not allowed to acquire one: it
+     exists so a screen of six panels can be told apart at a glance without
+     borrowing red, amber or green, which do mean something here. */
+  --violet:   #7A5CC4;  --violet-soft:   #F0EBFB;  --violet-border:   #DCCFF4;  --violet-text:   #5B3FA6;
 
-  /* categorical series — validated for CVD separation and chroma on white */
-  --series-1: #2F6BF3;
-  --series-2: #D9600A;
-  --series-3: #0B8FA8;
-  --series-4: #1F9E3D;
-  --series-5: #8B5CF6;
-  --series-6: #8A6D00;
-  --grid: #EBEFF8;
+  /* categorical series — separated for CVD, chroma pulled back off neon */
+  --series-1: #3A6BC9;
+  --series-2: #C0651C;
+  --series-3: #1F7F93;
+  --series-4: #2F8443;
+  --series-5: #7A5CC4;
+  --series-6: #85701B;
+  --grid: #E6EBF3;
 
   /* geometry */
-  --r-sm: 8px;
-  --r: 12px;
-  --r-lg: 18px;
-  --r-xl: 26px;
+  --r-sm: 6px;
+  --r: 8px;
+  --r-lg: 10px;
+  --r-xl: 14px;
   --r-pill: 999px;
 
-  --rail-w: 260px;
-  --rail-w-collapsed: 76px;
-  --topbar-h: 66px;
-  --page-max: 1600px;
+  --rail-w: 248px;
+  --rail-w-collapsed: 56px;
+  --topbar-h: 54px;
+  --page-max: 1520px;
 
-  /* elevation — shadows tinted blue with the ink, never neutral black */
+  /* ---- spacing rhythm --------------------------------------------------
+     One ladder for the whole application, so a gap between two sections is
+     the same gap on every screen. Components reach for these rather than
+     inventing a number, and a change in density is a change here.
+     ------------------------------------------------------------------- */
+  --sp-row:     0.6875rem;  /* 11px — inside a settings/list row, label→control */
+  --sp-field:   0.875rem;   /* 14px — between two fields in a form              */
+  --sp-block:   1.25rem;    /* 20px — between blocks inside a section           */
+  --sp-section: 1.5rem;     /* 24px — between sections on a page                */
+  --pad-card:   1rem;       /* 16px — a card's own inset                        */
+
+  /* elevation — shadows tinted with the ink, never neutral black, and kept
+     shallow: a page of cards each throwing a drop shadow is visual noise */
   --sh: 222 42% 24%;
-  --shadow-1: 0 1px 2px hsl(var(--sh) / .04), 0 2px 4px -2px hsl(var(--sh) / .05);
-  --shadow-2: 0 1px 2px hsl(var(--sh) / .04), 0 6px 12px -4px hsl(var(--sh) / .07), 0 16px 28px -12px hsl(var(--sh) / .10);
-  --shadow-3: 0 2px 4px hsl(var(--sh) / .05), 0 12px 24px -6px hsl(var(--sh) / .10), 0 32px 60px -16px hsl(var(--sh) / .18);
-  --shadow-4: 0 4px 8px hsl(var(--sh) / .07), 0 24px 44px -10px hsl(var(--sh) / .16), 0 60px 110px -28px hsl(var(--sh) / .28);
-  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+  /* 1 is almost nothing on purpose — a resting card is held by its hairline.
+     Shadow starts meaning something at 2, where a thing has actually left the
+     page: a menu, a popover, a dialogue. */
+  --shadow-1: 0 1px 1px hsl(var(--sh) / .025);
+  --shadow-2: 0 1px 2px hsl(var(--sh) / .04), 0 4px 10px -4px hsl(var(--sh) / .06);
+  --shadow-3: 0 2px 4px hsl(var(--sh) / .05), 0 10px 22px -8px hsl(var(--sh) / .10);
+  --shadow-4: 0 4px 8px hsl(var(--sh) / .07), 0 20px 40px -12px hsl(var(--sh) / .16);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--focus) 22%, transparent);
 
   /* motion */
   --ease: cubic-bezier(.22, .8, .3, 1);
@@ -99,70 +215,151 @@
   --d-3: 380ms;
 }
 
-/* dark: night shift — selected, not flipped */
+/* dark: night shift — a slate room, not a switched-off one. Pure black with
+   near-white text is the harshest pairing a screen can make; both ends are
+   pulled in so the difference is legible without being a strobe. */
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --ground:        #080D18;
-  --surface:       #121A2B;
-  --surface-2:     #182135;
-  --surface-3:     #212C43;
-  --surface-inset: #0D1424;
+  --ground:        #141A24;
+  --surface:       #1B2230;
+  --surface-2:     #222A3A;
+  --surface-3:     #2B3446;
+  --surface-inset: #111721;
 
-  --rail:            #0B1220;
-  --rail-2:          #161F33;
-  --rail-3:          #212C43;
-  --rail-line:       #1F2A40;
-  --rail-ink:        #AEBAD1;
-  --rail-ink-strong: #F1F5FF;
-  --rail-ink-dim:    #8592AC;
+  --rail:            #161C28;
+  --rail-2:          #212936;
+  --rail-3:          #2B3446;
+  --rail-line:       #2B3446;
+  --rail-ink:        #A9B4C7;
+  --rail-ink-strong: #E6EBF4;
+  --rail-ink-dim:    #959FB4;
 
-  --stage:     #080D18;
-  --stage-2:   #121A2B;
-  --stage-ink: #F1F5FF;
-  --stage-dim: #8792AC;
+  --stage:     #111721;
+  --stage-2:   #1B2230;
+  --stage-ink: #E6EBF4;
+  --stage-dim: #959FB4;
 
-  --ink:    #E8EDF8;
-  --ink-2:  #9AA6BE;
-  --ink-3:  #8592AC;
-  --ink-on: #080D18;
+  --ink:             #DFE5F0;  /* off-white, not #FFF   12.6:1 on surface */
+  --ink-2:           #A3AEC2;  /*                        7.1:1 on surface */
+  --ink-3:           #959FB4;  /*                        6.0:1 on surface */
+  --ink-placeholder: #8A95AB;  /*                        5.3:1 on surface */
+  --ink-on:          #0B1220;
 
-  --line:        #212C43;
-  --line-strong: #32405C;
-  --line-soft:   #1A2438;
+  --line:        #2B3446;
+  --line-strong: #3B475D;
+  --line-soft:   #232B39;
 
-  --accent:        #6E9BFF;
-  --accent-hover:  #8CB0FF;
-  --accent-ink:    #08122B;
-  --accent-soft:   #16203C;
-  --accent-border: #2C3D68;
-  --accent-text:   #9DBAFF;
+  --table-head:      #232C3C;
+  --table-head-line: #3B475D;
+  --row-line:        #252E3D;
+  --row-hover:       #242D3D;
 
-  --critical: #F0705E;  --critical-soft: #2A1512;  --critical-border: #57251E;  --critical-text: #F58F7E;
-  --warn:     #E0A147;  --warn-soft:     #271C0C;  --warn-border:     #513818;  --warn-text:     #ECB264;
-  --ok:       #3FBF89;  --ok-soft:       #0D2620;  --ok-border:       #1D4A3B;  --ok-text:       #61CFA1;
-  --info:     #62B6DA;  --info-soft:     #0E1F28;  --info-border:     #24414F;  --info-text:     #8ACBE7;
-  --neutral:  #8592AC;  --neutral-soft:  #182135;  --neutral-border:  #2A3550;  --neutral-text:  #9AA6BE;
+  --hover:        #242D3D;
+  --hover-strong: #2E384A;
+  --focus:        #7C9FE8;
+
+  --disabled-ink:     #6F7A8E;
+  --disabled-surface: #1F2734;
+  --disabled-border:  #2E3849;
+
+  --accent:        #7C9FE8;
+  --accent-hover:  #9AB6F0;
+  --accent-ink:    #0B1220;
+  --accent-soft:   #1E2942;
+  --accent-border: #334463;
+  --accent-text:   #A6C0F5;
+
+  --critical: #E8776A;  --critical-soft: #2B1A18;  --critical-border: #57302B;  --critical-text: #F09A8C;
+  --warn:     #D9A253;  --warn-soft:     #2A2113;  --warn-border:     #513F1E;  --warn-text:     #E8B873;
+  --ok:       #4FBB8D;  --ok-soft:       #142A24;  --ok-border:       #2A5041;  --ok-text:       #6FCFA6;
+  --info:     #6DB4D2;  --info-soft:     #152530;  --info-border:     #2B4655;  --info-text:     #93C9E2;
+  --neutral:  #959FB4;  --neutral-soft:  #222A3A;  --neutral-border:  #333D50;  --neutral-text:  #A3AEC2;
+  --violet:   #9B84DE;  --violet-soft:   #241E3A;  --violet-border:   #413465;  --violet-text:   #BBA9EF;
 
   /* re-stepped against the dark card, not derived from the light set */
-  --series-1: #5C82E8;
-  --series-2: #D2762F;
-  --series-3: #2FA3BE;
-  --series-4: #3FA84A;
-  --series-5: #8E6FE0;
-  --series-6: #A88C22;
-  --grid: #212C43;
+  --series-1: #6D93DE;
+  --series-2: #D08A4F;
+  --series-3: #4FA3BC;
+  --series-4: #5AAE6B;
+  --series-5: #9B84DE;
+  --series-6: #B39B4A;
+  --grid: #2B3446;
 
   --sh: 222 50% 2%;
-  --shadow-1: 0 1px 2px hsl(var(--sh) / .6);
-  --shadow-2: 0 1px 2px hsl(var(--sh) / .5), 0 8px 20px -8px hsl(var(--sh) / .7);
-  --shadow-3: 0 2px 6px hsl(var(--sh) / .5), 0 24px 50px -14px hsl(var(--sh) / .85);
-  --shadow-4: 0 4px 10px hsl(var(--sh) / .6), 0 48px 90px -22px hsl(var(--sh) / .95);
-  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+  --shadow-1: 0 1px 1px hsl(var(--sh) / .35);
+  --shadow-2: 0 1px 2px hsl(var(--sh) / .4), 0 6px 16px -8px hsl(var(--sh) / .55);
+  --shadow-3: 0 2px 5px hsl(var(--sh) / .4), 0 18px 40px -14px hsl(var(--sh) / .7);
+  --shadow-4: 0 4px 9px hsl(var(--sh) / .5), 0 36px 70px -22px hsl(var(--sh) / .8);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--focus) 30%, transparent);
 }
 
-/* ---------------------------------------------------------------- theme --- */
+/* ---------------------------------------------------------------- theme ---
+   The tokens above, handed to Tailwind. Components say `text-label`,
+   `text-ink-2`, `bg-surface` — never a raw size or a hex.
+   -------------------------------------------------------------------- */
 @theme inline {
+  /* type scale: each step brings its own line-height and tracking, so
+     `text-caption` is already comfortable without a `leading-*` beside it */
+  --text-micro:       var(--fs-micro);
+  --text-micro--line-height:    var(--lh-micro);
+  --text-micro--letter-spacing: var(--tr-micro);
+  --text-caption:     var(--fs-caption);
+  --text-caption--line-height:    var(--lh-caption);
+  --text-caption--letter-spacing: var(--tr-caption);
+  --text-label:       var(--fs-label);
+  --text-label--line-height:    var(--lh-label);
+  --text-label--letter-spacing: var(--tr-label);
+  --text-body:        var(--fs-body);
+  --text-body--line-height:    var(--lh-body);
+  --text-body--letter-spacing: var(--tr-body);
+  --text-lead:        var(--fs-lead);
+  --text-lead--line-height:    var(--lh-lead);
+  --text-lead--letter-spacing: var(--tr-lead);
+  --text-title-sm:    var(--fs-title-sm);
+  --text-title-sm--line-height:    var(--lh-title-sm);
+  --text-title-sm--letter-spacing: var(--tr-title-sm);
+  --text-title:       var(--fs-title);
+  --text-title--line-height:    var(--lh-title);
+  --text-title--letter-spacing: var(--tr-title);
+  --text-title-lg:    var(--fs-title-lg);
+  --text-title-lg--line-height:    var(--lh-title-lg);
+  --text-title-lg--letter-spacing: var(--tr-title-lg);
+  --text-h2:          var(--fs-h2);
+  --text-h2--line-height:    var(--lh-h2);
+  --text-h2--letter-spacing: var(--tr-h2);
+  --text-h1:          var(--fs-h1);
+  --text-h1--line-height:    var(--lh-h1);
+  --text-h1--letter-spacing: var(--tr-h1);
+  --text-display:     var(--fs-display);
+  --text-display--line-height:    var(--lh-display);
+  --text-display--letter-spacing: var(--tr-display);
+  --text-display-lg:  var(--fs-display-lg);
+  --text-display-lg--line-height:    var(--lh-display-lg);
+  --text-display-lg--letter-spacing: var(--tr-display-lg);
+
+  /* weights. The thin end is folded back to 400 so a stray `font-light`
+     cannot put hairline text in front of someone at hour nine, and the
+     heavy end stops at 650 so `font-bold` never turns into a shout. */
+  --font-weight-thin:       var(--fw-normal);
+  --font-weight-extralight: var(--fw-normal);
+  --font-weight-light:      var(--fw-normal);
+  --font-weight-normal:     var(--fw-normal);
+  --font-weight-medium:     var(--fw-medium);
+  --font-weight-strong:     var(--fw-strong);
+  --font-weight-semibold:   var(--fw-semibold);
+  --font-weight-bold:       650;
+  --font-weight-extrabold:  650;
+  --font-weight-black:      650;
+
+  /* line-heights, loosened from Tailwind's defaults for long sittings */
+  --leading-none:    1;
+  --leading-tight:   1.3;
+  --leading-snug:    1.45;
+  --leading-normal:  1.55;
+  --leading-relaxed: 1.68;
+  --leading-loose:   1.9;
+
   --color-ground: var(--ground);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
@@ -185,11 +382,24 @@
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
   --color-ink-3: var(--ink-3);
+  --color-ink-placeholder: var(--ink-placeholder);
   --color-ink-on: var(--ink-on);
 
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
   --color-line-soft: var(--line-soft);
+
+  --color-table-head: var(--table-head);
+  --color-table-head-line: var(--table-head-line);
+  --color-row-line: var(--row-line);
+  --color-row-hover: var(--row-hover);
+
+  --color-hover: var(--hover);
+  --color-hover-strong: var(--hover-strong);
+  --color-focus: var(--focus);
+  --color-disabled-ink: var(--disabled-ink);
+  --color-disabled-surface: var(--disabled-surface);
+  --color-disabled-border: var(--disabled-border);
 
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
@@ -218,6 +428,10 @@
   --color-neutral-soft: var(--neutral-soft);
   --color-neutral-border: var(--neutral-border);
   --color-neutral-text: var(--neutral-text);
+  --color-violet: var(--violet);
+  --color-violet-soft: var(--violet-soft);
+  --color-violet-border: var(--violet-border);
+  --color-violet-text: var(--violet-text);
 
   --color-series-1: var(--series-1);
   --color-series-2: var(--series-2);
@@ -227,14 +441,25 @@
   --color-series-6: var(--series-6);
   --color-grid: var(--grid);
 
-  --font-display: var(--font-fraunces), Georgia, serif;
-  --font-sans: var(--font-inter-tight), ui-sans-serif, system-ui, sans-serif;
+  /* One sans for the whole application. A display serif on page titles is a
+     second typeface to read all day for no gain in comprehension, so the
+     display slot points at the same family, set tighter. */
+  --font-display: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, Menlo, monospace;
 
   --radius-sm: var(--r-sm);
   --radius-DEFAULT: var(--r);
   --radius-lg: var(--r-lg);
   --radius-xl: var(--r-xl);
+
+  /* the spacing ladder, as utilities: `gap-block`, `space-y-section`,
+     `p-card` — so a screen names the rhythm it wants instead of a number */
+  --spacing-row: var(--sp-row);
+  --spacing-field: var(--sp-field);
+  --spacing-block: var(--sp-block);
+  --spacing-section: var(--sp-section);
+  --spacing-card: var(--pad-card);
 
   --shadow-e1: var(--shadow-1);
   --shadow-e2: var(--shadow-2);
@@ -245,7 +470,16 @@
   --ease-spring: cubic-bezier(.34, 1.35, .5, 1);
 }
 
-/* ----------------------------------------------------------------- base --- */
+/* ----------------------------------------------------------------- base ---
+   These go in `@layer base` rather than standing unlayered, and that is not a
+   tidiness point. An unlayered rule beats every layered one in the cascade
+   whatever its specificity, so an unlayered `h1 { color: var(--ink) }` wins
+   against `class="text-stage-ink"` — the heading on the dark sign-in stage
+   came out charcoal on charcoal, unreadable, and no class could talk it
+   round. Inside `base`, a utility overrides the element default, which is
+   what anybody writing the class is entitled to expect.
+   -------------------------------------------------------------------- */
+@layer base {
 * { border-color: var(--line); }
 
 html { -webkit-text-size-adjust: 100%; }
@@ -254,35 +488,57 @@ body {
   background: var(--ground);
   color: var(--ink);
   font-family: var(--font-sans);
-  font-size: 0.9063rem;
-  line-height: 1.6;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  letter-spacing: var(--tr-body);
+  font-weight: var(--fw-normal);
   -webkit-font-smoothing: antialiased;
-  font-feature-settings: "cv05" 1;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-optical-sizing: auto;
+  /* Inter's disambiguating alternates. In a system where a dose can read
+     "15 ml" or "l5 ml", the tailed lowercase l and the serifed capital I
+     are not a stylistic preference. */
+  font-feature-settings: "cv05" 1, "cv08" 1;
 }
 
-::selection { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+/* Headings inherit the scale rather than the browser's, so a bare <h1> in a
+   page body is never larger than the page title above it. */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: var(--fw-semibold);
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+/* Long prose stops before it becomes a tracking exercise for the eye. */
+p { text-wrap: pretty; }
+
+::selection { background: color-mix(in srgb, var(--accent) 20%, transparent); }
+
+::placeholder { color: var(--ink-placeholder); opacity: 1; }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
   border-radius: 4px;
 }
-
-/* numerals in data contexts always line up */
-.tnum { font-variant-numeric: tabular-nums; }
 
 /* scrollbars, quietly */
 * { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
 *::-webkit-scrollbar { width: 9px; height: 9px; }
 *::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
 *::-webkit-scrollbar-track { background: transparent; }
+}
+
+/* numerals in data contexts always line up */
+.tnum { font-variant-numeric: tabular-nums; }
 
 /* ------------------------------------------------------------- motion --- */
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pop { from { opacity: 0; transform: scale(.97) translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes sweep { from { background-position: 200% 0; } to { background-position: -200% 0; } }
-@keyframes pulsedot { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+@keyframes pulsedot { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
 @keyframes drawline { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 
 @keyframes spin { to { transform: rotate(360deg); } }

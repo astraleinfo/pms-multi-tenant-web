@@ -187,7 +187,7 @@ function CreateClinic({
               invalid={!!slugError}
               className="rounded-r-none"
             />
-            <span className="tnum inline-flex items-center rounded-r-[var(--r)] border border-l-0 border-line-strong bg-surface-2 px-3 font-mono text-[0.8125rem] text-ink-3">
+            <span className="tnum inline-flex items-center rounded-r-[var(--r)] border border-l-0 border-line-strong bg-surface-2 px-3 font-mono text-label text-ink-3">
               .{host.root}{host.port ? `:${host.port}` : ""}
             </span>
           </div>
@@ -218,7 +218,7 @@ function CreateClinic({
         </Field>
       </div>
 
-      <div className="mt-4 flex items-start gap-2 rounded-[var(--r)] border border-accent-border bg-accent-soft px-3 py-2.5 text-[0.75rem] leading-relaxed text-accent-text">
+      <div className="mt-4 flex items-start gap-2 rounded-[var(--r)] border border-accent-border bg-accent-soft px-3 py-2.5 text-caption leading-relaxed text-accent-text">
         <IconLock size={13} className="mt-0.5 shrink-0" />
         <span>
           No password is set here, by anyone. The account is created without one and this
@@ -228,12 +228,12 @@ function CreateClinic({
       </div>
 
       <div className="mt-4 rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5">
-        <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-3">Seeded on creation</p>
+        <p className="text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">Seeded on creation</p>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {FEATURES.filter((f) => f.is_core).map((f) => (
             <Badge key={f.key} tone="accent" size="sm" dot={false}>{f.name}</Badge>
           ))}
-          <span className={cn("text-[0.75rem] text-ink-3", "self-center")}>
+          <span className={cn("text-caption text-ink-3", "self-center")}>
             — paid modules stay off until the platform switches them on
           </span>
         </div>
@@ -285,17 +285,17 @@ function CreatedReceipt({
       {created && (
         <div className="space-y-4">
           <div className="rounded-[var(--r)] border border-line bg-surface-2 p-3.5 text-center">
-            <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-3">Address</p>
-            <p className="tnum mt-1.5 break-all font-mono text-[0.9375rem] font-medium text-ink">
+            <p className="text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">Address</p>
+            <p className="tnum mt-1.5 break-all font-mono text-body font-medium text-ink">
               {created.slug}.{host.root}{host.port ? `:${host.port}` : ""}
             </p>
           </div>
           <InvitationPanel created={created} onResent={onChange} />
-          <dl className="grid grid-cols-2 gap-4">
+          <dl className="grid grid-cols-2 gap-x-4">
             <KV label="Plan" value="Trial" />
             <KV label="Modules" value="Core loop only" />
           </dl>
-          <p className="text-[0.75rem] leading-relaxed text-ink-2">
+          <p className="text-caption leading-relaxed text-ink-2">
             Nothing about this clinic can be reached from another clinic&apos;s address, and its data
             starts empty. Until its administrator follows the link, the account has no password at
             all — so there is nothing to guess and nothing to leak.
@@ -385,20 +385,20 @@ export function InvitationPanel({
         <div className="min-w-0">
           <p
             className={cn(
-              "text-[0.6875rem] font-semibold uppercase tracking-[0.09em]",
+              "text-micro font-semibold uppercase tracking-[0.09em]",
               created.invitationSent ? "text-accent-text" : "text-critical-text",
             )}
           >
             {created.invitationSent ? "Invitation sent" : "Invitation not sent"}
           </p>
-          <p className="tnum mt-1 break-all font-mono text-[0.8125rem] text-ink">{created.email}</p>
+          <p className="tnum mt-1 break-all font-mono text-label text-ink">{created.email}</p>
         </div>
         <Button variant="ghost" size="sm" onClick={() => { void resend(); }} disabled={busy}>
           {busy ? "Sending…" : "Resend"}
         </Button>
       </div>
 
-      <p className="mt-2 text-[0.75rem] leading-relaxed text-ink-2">
+      <p className="mt-2 text-caption leading-relaxed text-ink-2">
         {created.invitationSent
           ? "They choose their own password from the link. It works once and expires."
           : "Nobody can sign in to this clinic until a link reaches them."}
@@ -406,16 +406,16 @@ export function InvitationPanel({
 
       {created.invitationUrl && (
         <div className="mt-2.5 border-t border-line-soft pt-2.5">
-          <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-3">
+          <p className="text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">
             Development link
           </p>
-          <p className="mt-1 text-[0.6875rem] leading-snug text-ink-3">
+          <p className="mt-1 text-micro leading-snug text-ink-3">
             Shown only because mail is going to the log. Configure a real transport and this
             disappears — the link then exists in one inbox and nowhere else.
           </p>
           <a
             href={created.invitationUrl}
-            className="tnum mt-1.5 block break-all font-mono text-[0.75rem] text-accent-text underline-offset-4 hover:underline"
+            className="tnum mt-1.5 block break-all font-mono text-caption text-accent-text underline-offset-4 hover:underline"
           >
             {created.invitationUrl}
           </a>

@@ -287,6 +287,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const platformSignOut = React.useCallback(async () => {
+    /* The jobs section may have left a cookie that opens Flower's own pages.
+       It is short-lived and scoped to that one route, but a browser holding a
+       key to the monitor after its owner signed out is not what "sign out"
+       means. Handing it back first, and never letting it fail the sign-out. */
+    await api.closeFlowerSession();
     await api.signOut();
     endSession();
   }, [endSession]);

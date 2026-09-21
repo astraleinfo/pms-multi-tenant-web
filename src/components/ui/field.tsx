@@ -4,12 +4,19 @@ import * as React from "react";
 import { cn } from "@/lib/cn";
 import { IconCheck, IconChevronDown, IconSearch } from "./icons";
 
+/**
+ * Placeholder text is a token, not a faded copy of the muted ink. Diluting
+ * `--ink-3` to 80% put it at 4.3:1 — under AA, and it is often the only hint
+ * of what a field wants. `--ink-placeholder` is tuned to clear 4.5:1 against
+ * both the live and the disabled field ground.
+ */
 const controlBase =
   "w-full rounded-[var(--r)] border border-line-strong bg-surface text-ink " +
-  "placeholder:text-ink-3/80 shadow-[inset_0_1px_2px_hsl(var(--sh)/.04)] " +
+  "placeholder:text-ink-placeholder shadow-[inset_0_1px_2px_hsl(var(--sh)/.04)] " +
   "transition-[border-color,box-shadow,background-color] duration-150 ease-[var(--ease-brand)] " +
-  "focus:outline-none focus:border-accent focus:shadow-[var(--focus-ring)] " +
-  "disabled:bg-surface-2 disabled:text-ink-3 disabled:cursor-not-allowed";
+  "focus:outline-none focus:border-focus focus:shadow-[var(--focus-ring)] " +
+  "disabled:bg-disabled-surface disabled:text-disabled-ink disabled:border-disabled-border " +
+  "disabled:cursor-not-allowed";
 
 export function Label({
   htmlFor, children, required, hint, className,
@@ -23,23 +30,23 @@ export function Label({
   return (
     <label
       htmlFor={htmlFor}
-      className={cn("mb-1.5 flex items-baseline justify-between gap-2 text-[0.8125rem] font-medium text-ink", className)}
+      className={cn("mb-1.5 flex items-baseline justify-between gap-2 text-label font-medium text-ink", className)}
     >
       <span>
         {children}
         {required && <span className="ml-1 text-accent" aria-hidden>*</span>}
       </span>
-      {hint && <span className="text-[0.75rem] font-normal text-ink-3">{hint}</span>}
+      {hint && <span className="text-caption font-normal text-ink-3">{hint}</span>}
     </label>
   );
 }
 
 export function Help({ children }: { children: React.ReactNode }) {
-  return <p className="mt-1.5 text-[0.75rem] leading-snug text-ink-3">{children}</p>;
+  return <p className="mt-1.5 text-caption leading-snug text-ink-3">{children}</p>;
 }
 
 export function ErrorText({ children }: { children: React.ReactNode }) {
-  return <p className="mt-1.5 text-[0.75rem] font-medium leading-snug text-critical-text">{children}</p>;
+  return <p className="mt-1.5 text-caption font-medium leading-snug text-critical-text">{children}</p>;
 }
 
 export function Field({
@@ -68,7 +75,7 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
     return (
       <input
         ref={ref}
-        className={cn(controlBase, "h-9.5 px-3 text-[0.875rem]", invalid && "border-critical focus:border-critical", className)}
+        className={cn(controlBase, "h-9.5 px-3 text-body", invalid && "border-critical focus:border-critical", className)}
         {...rest}
       />
     );
@@ -81,7 +88,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTML
       <textarea
         ref={ref}
         rows={rows}
-        className={cn(controlBase, "resize-y px-3 py-2.5 text-[0.875rem] leading-relaxed", invalid && "border-critical", className)}
+        className={cn(controlBase, "resize-y px-3 py-2.5 text-body leading-relaxed", invalid && "border-critical", className)}
         {...rest}
       />
     );
@@ -165,7 +172,7 @@ export function NumberInput({
         onBlur?.(e);
       }}
       className={cn(
-        controlBase, "h-9.5 px-3 text-[0.875rem]",
+        controlBase, "h-9.5 px-3 text-body",
         invalid && "border-critical focus:border-critical", className,
       )}
       {...rest}
@@ -180,7 +187,7 @@ export function Select({
     <div className="relative">
       <select
         className={cn(
-          controlBase, "h-9.5 appearance-none pl-3 pr-9 text-[0.875rem]",
+          controlBase, "h-9.5 appearance-none pl-3 pr-9 text-body",
           invalid && "border-critical", className,
         )}
         {...rest}
@@ -203,7 +210,7 @@ export function SearchInput({
       <IconSearch size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
       <input
         type="search"
-        className={cn(controlBase, "h-9.5 pl-9 pr-3 text-[0.875rem] [&::-webkit-search-cancel-button]:appearance-none", className)}
+        className={cn(controlBase, "h-9.5 pl-9 pr-3 text-body [&::-webkit-search-cancel-button]:appearance-none", className)}
         {...rest}
       />
     </div>
@@ -319,7 +326,7 @@ export function Combobox({
           }
         }}
         className={cn(
-          controlBase, "h-9.5 pl-3 pr-9 text-[0.875rem]",
+          controlBase, "h-9.5 pl-3 pr-9 text-body",
           invalid && "border-critical focus:border-critical",
         )}
       />
@@ -335,7 +342,7 @@ export function Combobox({
           className="pop absolute left-0 right-0 z-40 mt-1.5 max-h-64 overflow-y-auto rounded-[var(--r)] border border-line bg-surface p-1.5 shadow-e3"
         >
           {matches.length === 0 && (
-            <li className="px-3 py-5 text-center text-[0.8125rem] text-ink-3">{emptyText}</li>
+            <li className="px-3 py-5 text-center text-label text-ink-3">{emptyText}</li>
           )}
           {matches.map((option, i) => (
             <li key={option.value} role="option" aria-selected={option.value === value}>
@@ -347,13 +354,13 @@ export function Combobox({
                 onMouseEnter={() => setActive(i)}
                 className={cn(
                   "flex w-full items-center justify-between gap-3 rounded-[var(--r-sm)] px-2.5 py-2 text-left transition-colors",
-                  i === active ? "bg-surface-2" : "",
+                  i === active ? "bg-hover" : "",
                   option.value === value ? "bg-accent-soft" : "",
                 )}
               >
-                <span className="min-w-0 flex-1 truncate text-[0.8438rem] text-ink">{option.label}</span>
+                <span className="min-w-0 flex-1 truncate text-label text-ink">{option.label}</span>
                 {option.hint && (
-                  <span className="shrink-0 text-[0.75rem] text-ink-3">{option.hint}</span>
+                  <span className="shrink-0 text-caption text-ink-3">{option.hint}</span>
                 )}
               </button>
             </li>
@@ -375,7 +382,7 @@ export function Checkbox({
   className?: string;
 }) {
   return (
-    <label className={cn("group flex cursor-pointer items-start gap-2.5", disabled && "cursor-not-allowed opacity-50", className)}>
+    <label className={cn("group flex cursor-pointer items-start gap-2.5", disabled && "cursor-not-allowed opacity-65", className)}>
       <span
         className={cn(
           "mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] border transition-all duration-150 ease-[var(--ease-brand)]",
@@ -393,8 +400,8 @@ export function Checkbox({
       />
       {(label || description) && (
         <span className="min-w-0">
-          {label && <span className="block text-[0.8438rem] leading-snug text-ink">{label}</span>}
-          {description && <span className="mt-0.5 block text-[0.75rem] leading-snug text-ink-3">{description}</span>}
+          {label && <span className="block text-label leading-snug text-ink">{label}</span>}
+          {description && <span className="mt-0.5 block text-caption leading-snug text-ink-3">{description}</span>}
         </span>
       )}
     </label>
@@ -411,7 +418,7 @@ export function Switch({
   className?: string;
 }) {
   return (
-    <label className={cn("inline-flex cursor-pointer items-center gap-2.5", disabled && "cursor-not-allowed opacity-50", className)}>
+    <label className={cn("inline-flex cursor-pointer items-center gap-2.5", disabled && "cursor-not-allowed opacity-65", className)}>
       <button
         type="button"
         role="switch"
@@ -423,14 +430,17 @@ export function Switch({
           checked ? "bg-accent" : "bg-line-strong",
         )}
       >
+        {/* The knob takes the ink of whatever it is sitting on, so it stays
+            visible on the accent track and on the grey one, in both themes —
+            a white knob vanishes against the night-shift accent. */}
         <span
           className={cn(
-            "absolute top-[3px] h-4 w-4 rounded-full bg-white shadow-e1 transition-[left] duration-200 ease-[var(--ease-spring)]",
-            checked ? "left-[19px]" : "left-[3px]",
+            "absolute top-[3px] h-4 w-4 rounded-full shadow-e1 transition-[left,background-color] duration-200 ease-[var(--ease-spring)]",
+            checked ? "left-[19px] bg-accent-ink" : "left-[3px] bg-surface",
           )}
         />
       </button>
-      {label && <span className="text-[0.8438rem] text-ink">{label}</span>}
+      {label && <span className="text-label text-ink">{label}</span>}
     </label>
   );
 }
@@ -457,18 +467,27 @@ export function ChoiceGroup<T extends string>({
             key={o.value}
             type="button"
             onClick={() => onChange(o.value)}
+            /* One ring, not two. The old active state drew an accent border
+               and an inset accent shadow on top of it, which at this size
+               reads as a 2px slab and makes the chosen option the heaviest
+               thing on the page rather than simply the chosen one. */
             className={cn(
-              "rounded-[var(--r)] border px-3 py-2.5 text-left transition-all duration-150 ease-[var(--ease-brand)]",
+              "rounded-[var(--r)] border px-3 py-2 text-left transition-colors duration-150 ease-[var(--ease-brand)]",
               on
-                ? "border-accent bg-accent-soft shadow-[inset_0_0_0_1px_var(--accent)]"
-                : "border-line-strong bg-surface hover:border-ink-3/50 hover:bg-surface-2",
+                ? "border-accent bg-accent-soft"
+                : "border-line-strong bg-surface hover:border-line-strong hover:bg-hover",
             )}
           >
-            <span className={cn("block text-[0.8438rem] font-medium", on ? "text-accent-text" : "text-ink")}>
+            <span className={cn("block text-label font-medium", on ? "text-accent-text" : "text-ink")}>
               {o.label}
             </span>
             {o.description && (
-              <span className="mt-0.5 block text-[0.75rem] leading-snug text-ink-3">{o.description}</span>
+              <span className={cn(
+                "mt-0.5 block text-caption leading-snug",
+                on ? "text-accent-text/80" : "text-ink-3",
+              )}>
+                {o.description}
+              </span>
             )}
           </button>
         );
@@ -498,10 +517,10 @@ export function ChipMulti({
             type="button"
             onClick={() => toggle(o)}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-[var(--r-pill)] border px-3 py-1.5 text-[0.8125rem] transition-all duration-150",
+              "inline-flex items-center gap-1.5 rounded-[var(--r-pill)] border px-2.5 py-1 text-label transition-colors duration-150",
               on
-                ? "border-accent bg-accent-soft font-medium text-accent-text"
-                : "border-line-strong bg-surface text-ink-2 hover:border-ink-3/50 hover:text-ink",
+                ? "border-accent-border bg-accent-soft font-medium text-accent-text"
+                : "border-line-strong bg-surface text-ink-2 hover:bg-hover hover:text-ink",
             )}
           >
             {on && <IconCheck size={12} strokeWidth={2.6} />}

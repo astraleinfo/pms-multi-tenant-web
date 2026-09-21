@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { usePlatformEntitlements, usePlatformSnapshot } from "@/lib/query/hooks";
 import { TODAY, compactCurrency, currency, formatDate, pluralise } from "@/lib/format";
 import {
@@ -26,7 +27,7 @@ import {
   BILLING_LABEL, BillingBadge, ModulePrice, useModuleSwitch,
 } from "@/components/platform/module-controls";
 import {
-  IconGrid, IconLayers, IconLock, IconReceipt, IconSpark,
+  IconChart, IconGrid, IconLayers, IconLock, IconReceipt, IconSpark, IconUsers
 } from "@/components/ui/icons";
 
 /* ==========================================================================
@@ -41,14 +42,27 @@ import {
 
 type Tab = "catalogue" | "access" | "activity";
 
-export default function ModulesPage() {
-  return <ConsolePage><ModuleConsole /></ConsolePage>;
+const TABS: Tab[] = ["catalogue", "access", "activity"];
+
+export default function ModulesPage(props: PageProps<"/platform/modules">) {
+  const sp = React.use(props.searchParams);
+  const opening = TABS.find((t) => t === sp.tab) ?? "catalogue";
+  return <ConsolePage><ModuleConsole opening={opening} /></ConsolePage>;
 }
 
-function ModuleConsole() {
+function ModuleConsole({ opening }: { opening: Tab }) {
+  const router = useRouter();
   const { data: snapshot, isPending } = usePlatformSnapshot();
   const { byTenant, isPending: entitlementsPending } = usePlatformEntitlements();
-  const [tab, setTab] = React.useState<Tab>("catalogue");
+  /* Addressable, the way Settings is: the overview links at three different
+     parts of this screen, and without a tab in the URL all three arrived at
+     the catalogue and read as three links to the same place — which is what
+     they were. */
+  const [tab, setTab] = React.useState<Tab>(opening);
+  const openTab = (next: Tab) => {
+    setTab(next);
+    router.replace(`/platform/modules?tab=${next}`, { scroll: false });
+  };
   const [focus, setFocus] = React.useState<FeatureKey | "any">("any");
 
   const rows = React.useMemo(
@@ -60,7 +74,7 @@ function ModuleConsole() {
   const paidStats = React.useMemo(() => stats.filter((s) => !s.feature.is_core), [stats]);
 
   /* Jump from a catalogue card straight to that module's tenants. */
-  const manage = (key: FeatureKey) => { setFocus(key); setTab("access"); };
+  const manage = (key: FeatureKey) => { setFocus(key); openTab("access"); };
 
   return (
     <>
@@ -70,11 +84,11 @@ function ModuleConsole() {
         description="What the platform sells, what each module costs, which clinics hold it, and what that adds up to. Core modules are seeded with every clinic and are not sold separately."
         meta={
           <>
-            <span className="text-[0.8125rem] text-ink-2">
+            <span className="text-label text-ink-2">
               {PAID_FEATURES.length} paid modules · {pluralise(totals.tenants, "clinic")}
             </span>
             {entitlementsPending && (
-              <span className="text-[0.75rem] text-ink-3">reading entitlements…</span>
+              <span className="text-caption text-ink-3">reading entitlements…</span>
             )}
           </>
         }
@@ -104,12 +118,12 @@ function ModuleConsole() {
 
       <Tabs
         value={tab}
-        onChange={setTab}
+        onChange={openTab}
         className="my-5"
         tabs={[
-          { value: "catalogue", label: "Catalogue & pricing", count: PAID_FEATURES.length },
-          { value: "access", label: "Tenant access", count: totals.tenants },
-          { value: "activity", label: "Billing activity", count: totals.subscriptions },
+          { value: "catalogue", label: "Catalogue & pricing", icon: <IconLayers size={15} />, count: PAID_FEATURES.length },
+          { value: "access", label: "Tenant access", icon: <IconUsers size={15} />, count: totals.tenants },
+          { value: "activity", label: "Billing activity", icon: <IconReceipt size={15} />, count: totals.subscriptions },
         ]}
       />
 
@@ -150,8 +164,8 @@ function CatalogueTab({
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader
-            title="Revenue by module"
-            subtitle="What each one contributes to the monthly run rate."
+            icon={<IconReceipt size={15} />} tone="ok" title="Revenue by module"
+            hint="What each one contributes to the monthly run rate."
           />
           <CardBody>
             {byRevenue.some((s) => s.mrr > 0) ? (
@@ -164,7 +178,7 @@ function CatalogueTab({
                 format={currency}
               />
             ) : (
-              <p className="py-6 text-center text-[0.8125rem] text-ink-3">
+              <p className="py-6 text-center text-label text-ink-3">
                 Nothing is being billed yet.
               </p>
             )}
@@ -173,22 +187,22 @@ function CatalogueTab({
 
         <Card>
           <CardHeader
-            title="Core modules"
-            subtitle="Seeded with every clinic, in every plan, and never sold separately."
+            icon={<IconLayers size={15} />} tone="violet" title="Core modules"
+            hint="Seeded with every clinic, in every plan, and never sold separately."
           />
           <CardBody>
             <ul className="divide-y divide-line-soft">
               {core.map((s) => (
                 <li key={s.feature.key} className="flex items-start justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
                   <div className="min-w-0">
-                    <p className="text-[0.875rem] font-medium text-ink">{s.feature.name}</p>
-                    <p className="mt-0.5 text-[0.75rem] leading-snug text-ink-3">{s.feature.summary}</p>
+                    <p className="text-body font-medium text-ink">{s.feature.name}</p>
+                    <p className="mt-0.5 text-caption leading-snug text-ink-3">{s.feature.summary}</p>
                   </div>
-                  <span className="shrink-0 self-center text-[0.75rem] text-ink-3">Included</span>
+                  <span className="shrink-0 self-center text-caption text-ink-3">Included</span>
                 </li>
               ))}
             </ul>
-            <p className="mt-4 border-t border-line-soft pt-3 text-[0.75rem] leading-relaxed text-ink-3">
+            <p className="mt-4 border-t border-line-soft pt-3 text-caption leading-relaxed text-ink-3">
               The product does not work without these five, so they carry no price and no switch.
               The server refuses to deactivate one however it is asked.
             </p>
@@ -206,10 +220,10 @@ function ModuleCard({ stat, onManage }: { stat: ModuleStats; onManage: (key: Fea
     <Card className="flex flex-col">
       <div className="flex items-start justify-between gap-3 px-5 pt-4.5">
         <div className="min-w-0">
-          <h3 className="text-[0.9375rem] font-semibold leading-tight tracking-[-0.01em] text-ink">
+          <h3 className="text-body font-semibold leading-tight text-ink">
             {feature.name}
           </h3>
-          <p className="mt-1 text-[0.8125rem] leading-snug text-ink-2">{feature.summary}</p>
+          <p className="mt-1 text-label leading-snug text-ink-2">{feature.summary}</p>
         </div>
         <Badge tone="neutral" size="sm" dot={false}>
           {stat.billed ? "Selling" : "Unsold"}
@@ -218,11 +232,11 @@ function ModuleCard({ stat, onManage }: { stat: ModuleStats; onManage: (key: Fea
 
       <div className="mt-3.5 border-y border-line-soft bg-surface-2 px-5 py-3">
         <ModulePrice feature={feature} size="lg" />
-        <p className="mt-1 text-[0.75rem] text-ink-3">{feature.pricing_note}</p>
+        <p className="mt-1 text-caption text-ink-3">{feature.pricing_note}</p>
       </div>
 
       <CardBody className="flex-1 pt-4">
-        <div className="mb-1.5 flex items-baseline justify-between gap-3 text-[0.75rem]">
+        <div className="mb-1.5 flex items-baseline justify-between gap-3 text-caption">
           <span className="text-ink-2">Adoption</span>
           <span className="tnum font-mono text-ink-3">
             {stat.subscribers} of {stat.lines.length} clinics · {Math.round(stat.adoption * 100)}%
@@ -230,7 +244,7 @@ function ModuleCard({ stat, onManage }: { stat: ModuleStats; onManage: (key: Fea
         </div>
         <Meter value={stat.subscribers} max={Math.max(1, stat.lines.length)} tone="accent" />
 
-        <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
+        <dl className="mt-4 grid grid-cols-2 gap-x-4">
           <KV label="Billed" value={stat.billed} />
           <KV label="On trial" value={stat.trial || "—"} />
           <KV label="On hold" value={stat.held || "—"} />
@@ -246,7 +260,7 @@ function ModuleCard({ stat, onManage }: { stat: ModuleStats; onManage: (key: Fea
       <div className="flex items-center justify-between gap-3 border-t border-line-soft px-5 py-3">
         <Link
           href={`/modules/${feature.key}`}
-          className="text-[0.75rem] text-ink-3 underline-offset-4 hover:text-ink hover:underline"
+          className="text-caption text-ink-3 underline-offset-4 hover:text-ink hover:underline"
         >
           What clinics are shown
         </Link>
@@ -311,8 +325,8 @@ function AccessTab({
     <div className="space-y-5">
       <Card className="overflow-hidden">
         <CardHeader
-          title="Module access"
-          subtitle="One cell per clinic per module. Click a cell to change it — you will be asked first."
+          icon={<IconLayers size={15} />} tone="violet" title="Module access"
+          hint="One cell per clinic per module. Click a cell to change it — you will be asked first."
           actions={
             <div className="flex flex-wrap items-center gap-2">
               <AccessLegend />
@@ -363,7 +377,7 @@ function AccessTab({
                   {columns.map((f) => (
                     <TH key={f.key} align="center">
                       <span className="block">{f.name}</span>
-                      <span className="tnum block font-mono text-[0.6875rem] font-normal normal-case tracking-normal text-ink-3">
+                      <span className="tnum block font-mono text-micro font-normal normal-case tracking-normal text-ink-3">
                         {currency(f.price_monthly)}
                       </span>
                     </TH>
@@ -380,7 +394,7 @@ function AccessTab({
                         className="block min-w-0 hover:underline"
                       >
                         <p className="truncate font-medium text-ink">{row.tenant.name}</p>
-                        <p className="tnum truncate font-mono text-[0.75rem] text-ink-3">
+                        <p className="tnum truncate font-mono text-caption text-ink-3">
                           {row.tenant.slug}
                         </p>
                       </Link>
@@ -398,7 +412,7 @@ function AccessTab({
                       );
                     })}
                     <TD align="right">
-                      <span className={cn("tnum font-mono text-[0.8125rem]", row.mrr ? "text-ink" : "text-ink-3")}>
+                      <span className={cn("tnum font-mono text-label", row.mrr ? "text-ink" : "text-ink-3")}>
                         {row.mrr ? `${currency(row.mrr)}` : "—"}
                       </span>
                     </TD>
@@ -409,7 +423,7 @@ function AccessTab({
           </TableWrap>
         )}
 
-        <p className="border-t border-line-soft px-5 py-2.5 text-[0.75rem] text-ink-3">
+        <p className="border-t border-line-soft px-5 py-2.5 text-caption text-ink-3">
           {shown.length} of {rows.length} clinics ·{" "}
           {currency(shown.reduce((sum, r) => sum + r.mrr, 0))}/mo between them
         </p>
@@ -461,8 +475,8 @@ function AccessCell({
       aria-label={`${line.feature.name} at ${line.tenant.name} is ${BILLING_LABEL[line.state]}. Click to ${action}.`}
       className={cn(
         "inline-flex h-6 min-w-14 items-center justify-center rounded-[var(--r-pill)] border",
-        "text-[0.6875rem] font-medium transition-[filter,border-color,color] duration-150",
-        "disabled:opacity-45",
+        "text-micro font-medium transition-[filter,border-color,color] duration-150",
+        "disabled:opacity-65",
         CELL_CLASS[line.state],
       )}
     >
@@ -476,7 +490,7 @@ function AccessLegend() {
   return (
     <div className="flex flex-wrap items-center gap-2.5">
       {states.map((s) => (
-        <span key={s} className="flex items-center gap-1.5 text-[0.6875rem] text-ink-3">
+        <span key={s} className="flex items-center gap-1.5 text-micro text-ink-3">
           <span
             className={cn("inline-block h-3 w-6 rounded-[var(--r-pill)] border", CELL_CLASS[s])}
             aria-hidden
@@ -513,8 +527,8 @@ function ActivityTab({ rows, stats }: { rows: ConsoleRow[]; stats: ModuleStats[]
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader
-            title="Monthly run rate"
-            subtitle="Rebuilt from the day each live subscription was switched on."
+            icon={<IconChart size={15} />} tone="ok" title="Monthly run rate"
+            hint="Rebuilt from the day each live subscription was switched on."
           />
           <CardBody>
             {series.some((p) => p.mrr > 0) ? (
@@ -525,11 +539,11 @@ function ActivityTab({ rows, stats }: { rows: ConsoleRow[]; stats: ModuleStats[]
                 highlight={series.length - 1}
               />
             ) : (
-              <p className="py-10 text-center text-[0.8125rem] text-ink-3">
+              <p className="py-10 text-center text-label text-ink-3">
                 Nothing is being billed yet, so there is no run rate to plot.
               </p>
             )}
-            <p className="mt-3 text-[0.75rem] leading-relaxed text-ink-3">
+            <p className="mt-3 text-caption leading-relaxed text-ink-3">
               Reconstructed rather than recorded: only subscriptions that are still on carry a date,
               so this traces the growth of what the platform bills today and never dips. A real
               invoice table would replace it outright.
@@ -538,7 +552,7 @@ function ActivityTab({ rows, stats }: { rows: ConsoleRow[]; stats: ModuleStats[]
         </Card>
 
         <Card>
-          <CardHeader title="Where the money is" subtitle="This month's run rate, split by module." />
+          <CardHeader icon={<IconReceipt size={15} />} tone="ok" title="Where the money is" hint="This month's run rate, split by module." />
           <CardBody>
             {stats.some((s) => s.mrr > 0) ? (
               <RankBar
@@ -549,7 +563,7 @@ function ActivityTab({ rows, stats }: { rows: ConsoleRow[]; stats: ModuleStats[]
                 format={currency}
               />
             ) : (
-              <p className="py-10 text-center text-[0.8125rem] text-ink-3">No billed modules yet.</p>
+              <p className="py-10 text-center text-label text-ink-3">No billed modules yet.</p>
             )}
           </CardBody>
         </Card>
@@ -557,14 +571,14 @@ function ActivityTab({ rows, stats }: { rows: ConsoleRow[]; stats: ModuleStats[]
 
       <Card className="overflow-hidden">
         <CardHeader
-          title="Subscription activity"
-          subtitle="Every paid module that is on, and the day the platform started charging for it."
+          icon={<IconReceipt size={15} />} tone="ok" title="Subscription activity"
+          hint="Every paid module that is on, and the day the platform started charging for it."
           actions={
             <div className="flex items-center gap-2">
               <Select
                 value={module}
                 onChange={(e) => setModule(e.target.value as FeatureKey | "any")}
-                className="h-8 text-[0.8125rem]"
+                className="h-8 text-label"
               >
                 <option value="any">All modules</option>
                 {PAID_FEATURES.map((f) => <option key={f.key} value={f.key}>{f.name}</option>)}
@@ -572,7 +586,7 @@ function ActivityTab({ rows, stats }: { rows: ConsoleRow[]; stats: ModuleStats[]
               <Select
                 value={state}
                 onChange={(e) => setState(e.target.value as BillingState | "any")}
-                className="h-8 text-[0.8125rem]"
+                className="h-8 text-label"
               >
                 <option value="any">Any status</option>
                 <option value="billed">Billed</option>
@@ -613,7 +627,7 @@ function ActivityTab({ rows, stats }: { rows: ConsoleRow[]; stats: ModuleStats[]
           </TableWrap>
         )}
 
-        <div className="border-t border-line-soft px-5 py-3 text-[0.75rem] leading-relaxed text-ink-3">
+        <div className="border-t border-line-soft px-5 py-3 text-caption leading-relaxed text-ink-3">
           <p>
             An activation ledger, not a payment history: it says when the platform started charging
             for something, not that money moved. A module switched on and later off leaves nothing
@@ -635,12 +649,12 @@ function LedgerRow({ entry }: { entry: LedgerEntry }) {
   return (
     <TR>
       <TD>
-        <span className="tnum font-mono text-[0.8125rem] text-ink-2">{formatDate(entry.date)}</span>
+        <span className="tnum font-mono text-label text-ink-2">{formatDate(entry.date)}</span>
       </TD>
       <TD>
         <Link href={`/platform/tenants/${entry.tenant.id}`} className="min-w-0 hover:underline">
           <span className="block truncate font-medium text-ink">{entry.tenant.name}</span>
-          <span className="tnum block truncate font-mono text-[0.75rem] text-ink-3">
+          <span className="tnum block truncate font-mono text-caption text-ink-3">
             {entry.tenant.slug}
           </span>
         </Link>
@@ -648,7 +662,7 @@ function LedgerRow({ entry }: { entry: LedgerEntry }) {
       <TD><span className="text-ink-2">{entry.feature.name}</span></TD>
       <TD><BillingBadge state={entry.state} /></TD>
       <TD align="right">
-        <span className={cn("tnum font-mono text-[0.8125rem]", entry.state === "billed" ? "text-ink" : "text-ink-3")}>
+        <span className={cn("tnum font-mono text-label", entry.state === "billed" ? "text-ink" : "text-ink-3")}>
           {currency(entry.amount)}
         </span>
       </TD>

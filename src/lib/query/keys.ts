@@ -19,6 +19,9 @@ export const qk = {
   /** one clinic as the console sees it, not as the clinic sees itself */
   platformFeatures: (t: Id) => ["platform", "tenants", t, "features"] as const,
   platformUsers: (t: Id) => ["platform", "tenants", t, "users"] as const,
+  /** The job monitor. The query is part of the key, so changing a filter is a
+      fetch of its own and going back to a previous one is instant. */
+  platformJobs: (query: Record<string, unknown>) => ["platform", "jobs", query] as const,
   tenant: (t: Id) => ["tenant", t] as const,
 
   users: (t: Id) => ["tenant", t, "users"] as const,

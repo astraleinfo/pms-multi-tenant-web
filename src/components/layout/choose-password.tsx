@@ -128,14 +128,14 @@ export function ChoosePassword({ mode }: { mode: "invite" | "reset" }) {
     >
       {!preview.valid ? (
         <div className="space-y-4">
-          <div className="flex items-start gap-2.5 rounded-[var(--r)] border border-critical-border bg-critical-soft px-3 py-3 text-[0.8125rem] leading-snug text-critical-text">
+          <div className="flex items-start gap-2.5 rounded-[var(--r)] border border-critical-border bg-critical-soft px-3 py-3 text-label leading-snug text-critical-text">
             <IconAlert size={16} className="mt-px shrink-0" />
             <div>
               <p className="font-medium">This link cannot be used.</p>
               <p className="mt-1">{preview.problem}</p>
             </div>
           </div>
-          <p className="text-[0.8125rem] leading-relaxed text-ink-2">
+          <p className="text-label leading-relaxed text-ink-2">
             Links expire, and sending a new one retires the old. Ask for another and use the
             most recent email.
           </p>
@@ -149,7 +149,7 @@ export function ChoosePassword({ mode }: { mode: "invite" | "reset" }) {
           </Button>
           <a
             href="/login"
-            className="block text-center text-[0.8125rem] text-accent-text underline-offset-4 hover:underline"
+            className="block text-center text-label text-accent-text underline-offset-4 hover:underline"
           >
             Back to sign in
           </a>
@@ -159,10 +159,10 @@ export function ChoosePassword({ mode }: { mode: "invite" | "reset" }) {
           <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-ok-soft text-ok-text">
             <IconCheck size={20} />
           </span>
-          <h2 className="font-display text-[1.125rem] font-semibold tracking-[-0.015em] text-ink">
+          <h2 className="font-display text-title font-semibold text-ink">
             Your password is set
           </h2>
-          <p className="text-[0.8125rem] leading-relaxed text-ink-2">
+          <p className="text-label leading-relaxed text-ink-2">
             Taking you to sign in.
           </p>
         </div>
@@ -171,10 +171,10 @@ export function ChoosePassword({ mode }: { mode: "invite" | "reset" }) {
           <div className="flex items-center gap-3">
             <Monogram name={clinicName} size={40} />
             <div className="min-w-0">
-              <h2 className="truncate font-display text-[1.125rem] font-semibold tracking-[-0.015em] text-ink">
+              <h2 className="truncate font-display text-title font-semibold text-ink">
                 {preview.name}
               </h2>
-              <p className="tnum truncate font-mono text-[0.75rem] text-ink-3">{preview.email}</p>
+              <p className="tnum truncate font-mono text-caption text-ink-3">{preview.email}</p>
             </div>
           </div>
 
@@ -219,7 +219,7 @@ export function ChoosePassword({ mode }: { mode: "invite" | "reset" }) {
             {error && (
               <p
                 role="alert"
-                className="flex items-start gap-2 rounded-[var(--r)] border border-critical-border bg-critical-soft px-3 py-2.5 text-[0.8125rem] leading-snug text-critical-text"
+                className="flex items-start gap-2 rounded-[var(--r)] border border-critical-border bg-critical-soft px-3 py-2.5 text-label leading-snug text-critical-text"
               >
                 <IconAlert size={15} className="mt-px shrink-0" />
                 {error}
@@ -232,7 +232,7 @@ export function ChoosePassword({ mode }: { mode: "invite" | "reset" }) {
             </Button>
           </form>
 
-          <p className="mt-4 flex items-start gap-1.5 border-t border-line-soft pt-3 text-[0.6875rem] leading-snug text-ink-3">
+          <p className="mt-4 flex items-start gap-1.5 border-t border-line-soft pt-3 text-micro leading-snug text-ink-3">
             <IconLock size={12} className="mt-px shrink-0" />
             This link works once. After you use it, it is spent — and so is every other link
             this account was sent.

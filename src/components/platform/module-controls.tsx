@@ -92,20 +92,20 @@ export function ModulePrice({
 }) {
   if (feature.is_core) {
     return (
-      <span className={cn("text-[0.8125rem] text-ink-3", className)}>Included in every plan</span>
+      <span className={cn("text-label text-ink-3", className)}>Included in every plan</span>
     );
   }
   const sizes = {
-    sm: "text-[0.8125rem]",
-    md: "text-[0.9375rem]",
-    lg: "text-[1.25rem]",
+    sm: "text-label",
+    md: "text-body",
+    lg: "text-title-lg",
   };
   return (
     <span className={cn("tnum inline-flex items-baseline gap-1 font-medium text-ink", className)}>
       <span className={cn("font-display tracking-[-0.02em]", sizes[size])}>
         {currency(feature.price_monthly)}
       </span>
-      <span className="text-[0.75rem] font-normal text-ink-3">/clinic/mo</span>
+      <span className="text-caption font-normal text-ink-3">/clinic/mo</span>
     </span>
   );
 }
@@ -213,8 +213,8 @@ function SwitchConsequences({ tenant, feature, next, current }: Pending) {
       <div className="rounded-[var(--r)] border border-line bg-surface-2 px-3.5 py-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[0.875rem] font-medium text-ink">{feature.name}</p>
-            <p className="mt-0.5 text-[0.75rem] leading-snug text-ink-3">{feature.summary}</p>
+            <p className="text-body font-medium text-ink">{feature.name}</p>
+            <p className="mt-0.5 text-caption leading-snug text-ink-3">{feature.summary}</p>
           </div>
           <ModulePrice feature={feature} className="shrink-0" size="sm" />
         </div>
@@ -262,7 +262,7 @@ function SwitchConsequences({ tenant, feature, next, current }: Pending) {
       )}
 
       {tenant.status === "suspended" && (
-        <p className="rounded-[var(--r)] border border-warn-border bg-warn-soft px-3 py-2 text-[0.75rem] leading-relaxed text-warn-text">
+        <p className="rounded-[var(--r)] border border-warn-border bg-warn-soft px-3 py-2 text-caption leading-relaxed text-warn-text">
           {tenant.name} is suspended, so its subdomain is serving a notice rather than the app.
           This change is recorded and takes effect the moment the clinic is reactivated.
         </p>
@@ -293,7 +293,7 @@ export function ModuleSwitch({
 }) {
   if (feature.is_core) {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1.5 text-[0.75rem] text-ink-3">
+      <span className="inline-flex shrink-0 items-center gap-1.5 text-caption text-ink-3">
         <IconLock size={12} /> Always on
       </span>
     );

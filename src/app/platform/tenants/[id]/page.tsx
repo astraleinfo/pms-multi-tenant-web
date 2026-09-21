@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useApp } from "@/lib/store/app-store";
 import {
   usePlatformSnapshot, usePlatformTenantFeatures, usePlatformTenantUsers,
@@ -22,6 +21,8 @@ import { Tabs } from "@/components/ui/tabs";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { Field, Input, Select } from "@/components/ui/field";
 import { PageLoader } from "@/components/ui/loader";
+import { PageHeader } from "@/components/ui/page-header";
+import { Callout } from "@/components/ui/callout";
 import { Monogram } from "@/components/layout/rail";
 import { ConsolePage, TenantAddress, useEnterClinic } from "@/components/platform/chrome";
 import { TenantStatusButton } from "@/components/platform/tenant-actions";
@@ -29,7 +30,7 @@ import {
   AccountBadge, BillingBadge, ModulePrice, ModuleSwitch, useModuleSwitch,
 } from "@/components/platform/module-controls";
 import {
-  IconChevronLeft, IconLayers, IconReceipt, IconShield, IconUsers,
+  IconChevronLeft, IconInfo, IconLayers, IconReceipt, IconShield, IconUsers
 } from "@/components/ui/icons";
 
 /* ==========================================================================
@@ -100,9 +101,9 @@ function TenantConsole({ id }: { id: string }) {
         onChange={setTab}
         className="mb-5"
         tabs={[
-          { value: "details", label: "Details" },
-          { value: "modules", label: "Modules", count: paidOn.length },
-          { value: "staff", label: "Staff", count: row.users },
+          { value: "details", label: "Details", icon: <IconInfo size={15} /> },
+          { value: "modules", label: "Modules", icon: <IconLayers size={15} />, count: paidOn.length },
+          { value: "staff", label: "Staff", icon: <IconUsers size={15} />, count: row.users },
         ]}
       />
 
@@ -117,6 +118,7 @@ function NotHere() {
   return (
     <Card className="mx-auto max-w-lg">
       <EmptyState
+        icon={<IconLayers size={26} />}
         title="No such clinic"
         body="It is not on this platform, or it has been removed. The console reads the snapshot, so a clinic created elsewhere appears here as soon as that refreshes."
         action={
@@ -136,55 +138,51 @@ function TenantHeader({ row }: { row: ConsoleRow }) {
   const tenant = row.tenant;
 
   return (
-    <header className="mb-6">
-      <Link
-        href="/platform/tenants"
-        className="mb-3 inline-flex items-center gap-1.5 text-[0.8125rem] text-ink-2 transition-colors hover:text-ink"
-      >
-        <IconChevronLeft size={14} /> All tenants
-      </Link>
-
-      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
-        <div className="flex min-w-0 items-start gap-3.5">
-          <Monogram name={tenant.name} size={46} />
-          <div className="min-w-0">
-            <h1 className="font-display text-[1.625rem] font-semibold leading-[1.15] tracking-[-0.025em] text-ink">
-              {tenant.name}
-            </h1>
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
-              <Badge
-                tone={tenant.status === "active" ? "ok" : tenant.status === "trial" ? "warn" : "critical"}
-                size="sm"
-                dot
-              >
-                {titleCase(tenant.status)}
-              </Badge>
-              <AccountBadge state={row.state} />
-              <TenantAddress tenant={tenant} />
-            </div>
-          </div>
-        </div>
-
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <Button
-            variant="secondary"
-            disabled={entering === tenant.id}
-            onClick={() => { void enter(tenant); }}
+    <>
+      {/* the same header the clinic-side record pages use: this one used to be
+          a hand-built copy of it, and drifted a size and a gap away from them */}
+      <PageHeader
+        back={{ href: "/platform/tenants", label: "All tenants" }}
+        leading={<Monogram name={tenant.name} size={46} />}
+        title={tenant.name}
+        status={
+          <Badge
+            tone={tenant.status === "active" ? "ok" : tenant.status === "trial" ? "warn" : "critical"}
+            size="sm"
+            dot
           >
-            <IconShield size={15} /> {entering === tenant.id ? "Opening…" : "Open as support"}
-          </Button>
-          <TenantStatusButton tenant={tenant} />
-        </div>
-      </div>
+            {titleCase(tenant.status)}
+          </Badge>
+        }
+        meta={
+          <>
+            <AccountBadge state={row.state} />
+            <TenantAddress tenant={tenant} />
+          </>
+        }
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              disabled={entering === tenant.id}
+              onClick={() => { void enter(tenant); }}
+            >
+              <IconShield size={15} /> {entering === tenant.id ? "Opening…" : "Open as support"}
+            </Button>
+            <TenantStatusButton tenant={tenant} />
+          </>
+        }
+        className={tenant.status === "suspended" ? "mb-3" : undefined}
+      />
 
       {tenant.status === "suspended" && (
-        <p className="mt-4 rounded-[var(--r)] border border-critical-border bg-critical-soft px-3.5 py-2.5 text-[0.8125rem] leading-relaxed text-critical-text">
-          This clinic is suspended. Its subdomain serves a notice rather than the app, nobody can
-          sign in, and the {currency(row.held.reduce((t, s) => t + s.feature.price_monthly, 0))}/mo of
-          modules it holds is collected by nobody until it is reactivated.
-        </p>
+        <Callout tone="critical" title="Suspended" className="mb-6">
+          Its subdomain serves a notice rather than the app, nobody can sign in, and the{" "}
+          {currency(row.held.reduce((t, s) => t + s.feature.price_monthly, 0))}/mo of modules it
+          holds is collected by nobody until it is reactivated.
+        </Callout>
       )}
-    </header>
+    </>
   );
 }
 
@@ -252,8 +250,8 @@ function DetailsTab({ row }: { row: ConsoleRow }) {
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
       <Card>
         <CardHeader
-          title="Clinic record"
-          subtitle="What this clinic is called and how it is set up. Its address and its status are changed elsewhere."
+          icon={<IconUsers size={15} />} tone="accent" title="Clinic record"
+          hint="What this clinic is called and how it is set up. Its address and its status are changed elsewhere."
         />
         <CardBody>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -280,7 +278,7 @@ function DetailsTab({ row }: { row: ConsoleRow }) {
           </div>
         </CardBody>
         <CardFooter>
-          <p className="text-[0.75rem] text-ink-3">
+          <p className="text-caption text-ink-3">
             {dirty ? "Unsaved changes." : "Everything here matches the server."}
           </p>
           <div className="flex items-center gap-2">
@@ -298,9 +296,9 @@ function DetailsTab({ row }: { row: ConsoleRow }) {
 
       <div className="space-y-5">
         <Card>
-          <CardHeader title="Facts" subtitle="Set when the clinic was created, and fixed for its life." />
+          <CardHeader icon={<IconInfo size={15} />} tone="neutral" title="Facts" hint="Set when the clinic was created, and fixed for its life." />
           <CardBody>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-4">
+            <dl className="grid grid-cols-2 gap-x-4">
               <KV
                 label="Subdomain"
                 mono
@@ -316,7 +314,7 @@ function DetailsTab({ row }: { row: ConsoleRow }) {
                 value={row.last_activity ? formatDate(row.last_activity, "long") : "—"}
               />
             </dl>
-            <p className="mt-4 border-t border-line-soft pt-3 text-[0.75rem] leading-relaxed text-ink-3">
+            <p className="mt-4 border-t border-line-soft pt-3 text-caption leading-relaxed text-ink-3">
               The subdomain cannot be changed. It is inside every live session token, so renaming it
               would sign the whole practice out and break every bookmark at once.
             </p>
@@ -324,9 +322,9 @@ function DetailsTab({ row }: { row: ConsoleRow }) {
         </Card>
 
         <Card>
-          <CardHeader title="What this clinic holds" subtitle="Its own data, counted by the API one tenant at a time." />
+          <CardHeader icon={<IconLayers size={15} />} tone="violet" title="What this clinic holds" hint="Its own data, counted by the API one tenant at a time." />
           <CardBody>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-4">
+            <dl className="grid grid-cols-2 gap-x-4">
               <KV label="Patients" value={row.patients} mono />
               <KV label="Encounters" value={row.encounters} mono />
               <KV label="Appointments" value={row.appointments} mono />
@@ -362,8 +360,8 @@ function ModulesTab({ row, loading }: { row: ConsoleRow; loading: boolean }) {
     <div className="space-y-5">
       <Card>
         <CardHeader
-          title="Subscription"
-          subtitle="What this clinic is charged a month, and what it is charged for."
+          icon={<IconReceipt size={15} />} tone="ok" title="Subscription"
+          hint="What this clinic is charged a month, and what it is charged for."
         />
         <CardBody>
           <div className="grid grid-cols-2 gap-x-4 gap-y-5 lg:grid-cols-4">
@@ -374,7 +372,7 @@ function ModulesTab({ row, loading }: { row: ConsoleRow; loading: boolean }) {
           </div>
 
           <div className="mt-5">
-            <div className="mb-1.5 flex items-baseline justify-between gap-3 text-[0.75rem]">
+            <div className="mb-1.5 flex items-baseline justify-between gap-3 text-caption">
               <span className="text-ink-2">Paid modules held</span>
               <span className="tnum font-mono text-ink-3">
                 {paid.length - row.locked.length} of {paid.length}
@@ -387,7 +385,7 @@ function ModulesTab({ row, loading }: { row: ConsoleRow; loading: boolean }) {
             />
           </div>
 
-          <p className="mt-4 text-[0.75rem] leading-relaxed text-ink-3">
+          <p className="mt-4 text-caption leading-relaxed text-ink-3">
             Figures are the catalogue price of what is switched on, not an invoice — the platform
             has no billing service behind it yet. Enabling a module starts counting it from today;
             a suspended clinic is held rather than billed.
@@ -397,9 +395,9 @@ function ModulesTab({ row, loading }: { row: ConsoleRow; loading: boolean }) {
 
       <Card className="overflow-hidden">
         <CardHeader
-          title="Paid modules"
-          subtitle="The switch is the platform's. Nobody inside a clinic can throw it."
-          actions={loading ? <span className="text-[0.75rem] text-ink-3">Reading entitlements…</span> : undefined}
+          icon={<IconLayers size={15} />} tone="violet" title="Paid modules"
+          hint="The switch is the platform's. Nobody inside a clinic can throw it."
+          actions={loading ? <span className="text-caption text-ink-3">Reading entitlements…</span> : undefined}
         />
         <div className="divide-y divide-line-soft border-t border-line-soft">
           {paid.map((line) => (
@@ -415,8 +413,8 @@ function ModulesTab({ row, loading }: { row: ConsoleRow; loading: boolean }) {
 
       <Card className="overflow-hidden">
         <CardHeader
-          title="Core modules"
-          subtitle="Seeded when the clinic was created. In every plan, and not switchable."
+          icon={<IconLayers size={15} />} tone="violet" title="Core modules"
+          hint="Seeded when the clinic was created. In every plan, and not switchable."
         />
         <div className="divide-y divide-line-soft border-t border-line-soft">
           {core.map((line) => (
@@ -451,17 +449,17 @@ function ModuleRow({
             "Always on" — four chips for one fact. It keeps the one word that
             names what it is; the switch column says the rest. */}
         <div className="flex flex-wrap items-center gap-2">
-          <p className="text-[0.875rem] font-medium text-ink">{feature.name}</p>
+          <p className="text-body font-medium text-ink">{feature.name}</p>
           {feature.is_core
             ? <Badge tone="neutral" size="sm" dot={false}>Core</Badge>
             : <BillingBadge state={line.state} />}
         </div>
-        <p className="mt-1 max-w-xl text-[0.75rem] leading-snug text-ink-3">{feature.summary}</p>
+        <p className="mt-1 max-w-xl text-caption leading-snug text-ink-3">{feature.summary}</p>
         {/* The activation date is only true of a module that is on: the server
             keeps `activated_at` when one is switched off, so a dormant row
             would otherwise claim to have been running since the day it was
             last deactivated. */}
-        <p className="mt-1.5 text-[0.75rem] text-ink-3">
+        <p className="mt-1.5 text-caption text-ink-3">
           Unlocks {feature.unlocks.join(", ")}
           {line.since && line.state !== "dormant" && <> · on since {formatDate(line.since)}</>}
         </p>
@@ -500,8 +498,8 @@ function StaffTab({ row }: { row: ConsoleRow }) {
   return (
     <Card className="overflow-hidden">
       <CardHeader
-        title="Staff accounts"
-        subtitle="Everyone with a sign-in at this clinic. Support sessions are not accounts and are not listed."
+        icon={<IconUsers size={15} />} tone="accent" title="Staff accounts"
+        hint="Everyone with a sign-in at this clinic. Support sessions are not accounts and are not listed."
       />
       {users.length === 0 ? (
         <EmptyState
@@ -529,13 +527,13 @@ function StaffTab({ row }: { row: ConsoleRow }) {
                       <Avatar name={u.name} initials={u.initials} size="sm" tintKey={u.id} />
                       <div className="min-w-0">
                         <p className="truncate font-medium text-ink">{u.name}</p>
-                        <p className="truncate text-[0.75rem] text-ink-3">{u.email}</p>
+                        <p className="truncate text-caption text-ink-3">{u.email}</p>
                       </div>
                     </div>
                   </TD>
                   <TD>
                     <span className="text-ink-2">{ROLE_LABEL[u.role]}</span>
-                    {u.speciality && <span className="ml-1.5 text-[0.75rem] text-ink-3">{u.speciality}</span>}
+                    {u.speciality && <span className="ml-1.5 text-caption text-ink-3">{u.speciality}</span>}
                   </TD>
                   <TD>
                     <Badge
@@ -546,13 +544,13 @@ function StaffTab({ row }: { row: ConsoleRow }) {
                       {titleCase(u.status)}
                     </Badge>
                     {u.status === "locked" && (
-                      <span className="ml-2 text-[0.75rem] text-ink-3">
+                      <span className="ml-2 text-caption text-ink-3">
                         {pluralise(u.failed_attempts, "failed attempt")}
                       </span>
                     )}
                   </TD>
                   <TD>
-                    <span className={cn("tnum font-mono text-[0.8125rem]", u.last_sign_in ? "text-ink-2" : "text-ink-3")}>
+                    <span className={cn("tnum font-mono text-label", u.last_sign_in ? "text-ink-2" : "text-ink-3")}>
                       {u.last_sign_in ? formatDate(u.last_sign_in) : "never"}
                     </span>
                   </TD>
@@ -565,7 +563,7 @@ function StaffTab({ row }: { row: ConsoleRow }) {
 
       <div className="border-t border-line-soft px-5 py-3">
         <Legend>Why there is no "add staff" here</Legend>
-        <p className="text-[0.75rem] leading-relaxed text-ink-3">
+        <p className="text-caption leading-relaxed text-ink-3">
           Staff are a clinic's own business: its practice admin invites colleagues from inside its
           settings, and the invitation goes to an inbox the platform never reads. The console
           creates exactly one account per clinic — the first admin — because until that exists

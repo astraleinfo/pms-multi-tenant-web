@@ -93,14 +93,14 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={onKey}
             placeholder="Search patients by name, MRN or phone — or jump to a module"
-            className="h-14 w-full bg-transparent text-[0.9375rem] text-ink outline-none placeholder:text-ink-3/80"
+            className="h-14 w-full bg-transparent text-body text-ink outline-none placeholder:text-ink-placeholder"
           />
           <Kbd>Esc</Kbd>
         </div>
 
         <div className="max-h-[54vh] overflow-y-auto p-2">
           {rows.length === 0 && (
-            <p className="px-3 py-8 text-center text-[0.875rem] text-ink-3">
+            <p className="px-3 py-8 text-center text-body text-ink-3">
               Nothing matches “{q}”.
             </p>
           )}
@@ -110,7 +110,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             return (
               <React.Fragment key={r.group + r.id}>
                 {header && (
-                  <p className="px-3 pb-1 pt-2.5 text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-ink-3">
+                  <p className="px-3 pb-1 pt-2.5 text-micro font-semibold uppercase tracking-[0.1em] text-ink-3">
                     {header}
                   </p>
                 )}
@@ -119,13 +119,13 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                   onClick={() => go(r.href)}
                   className={cn(
                     "flex w-full items-center gap-3 rounded-[var(--r)] px-3 py-2.5 text-left transition-colors",
-                    i === cursor ? "bg-accent-soft" : "hover:bg-surface-2",
+                    i === cursor ? "bg-accent-soft" : "hover:bg-hover",
                   )}
                 >
                   <span className={cn("shrink-0", i === cursor ? "text-accent-text" : "text-ink-3")}>{r.icon}</span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[0.875rem] font-medium text-ink">{r.title}</span>
-                    <span className="block truncate text-[0.75rem] text-ink-3">{r.sub}</span>
+                    <span className="block truncate text-body font-medium text-ink">{r.title}</span>
+                    <span className="block truncate text-caption text-ink-3">{r.sub}</span>
                   </span>
                   {i === cursor && <IconArrowRight size={15} className="shrink-0 text-accent-text" />}
                 </button>
@@ -134,7 +134,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
           })}
         </div>
 
-        <div className="flex items-center gap-4 border-t border-line-soft bg-surface-2 px-4 py-2.5 text-[0.75rem] text-ink-3">
+        <div className="flex items-center gap-4 border-t border-line-soft bg-surface-2 px-4 py-2.5 text-caption text-ink-3">
           <span className="flex items-center gap-1.5"><Kbd>↑</Kbd><Kbd>↓</Kbd> navigate</span>
           <span className="flex items-center gap-1.5"><Kbd>↵</Kbd> open</span>
           <span className="ml-auto">Tenant-scoped — results never cross clinics.</span>

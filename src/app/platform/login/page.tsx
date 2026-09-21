@@ -56,10 +56,10 @@ export default function PlatformLoginPage() {
           <IconShield size={19} />
         </span>
         <div className="min-w-0">
-          <h2 className="truncate font-display text-[1.125rem] font-semibold tracking-[-0.015em] text-ink">
+          <h2 className="truncate font-display text-title font-semibold text-ink">
             Platform sign-in
           </h2>
-          <p className="truncate text-[0.75rem] text-ink-3">Astrale staff only</p>
+          <p className="truncate text-caption text-ink-3">Astrale staff only</p>
         </div>
       </div>
 
@@ -76,7 +76,7 @@ export default function PlatformLoginPage() {
         </Field>
 
         {error && (
-          <p role="alert" className="flex items-start gap-2 rounded-[var(--r)] border border-critical-border bg-critical-soft px-3 py-2.5 text-[0.8125rem] leading-snug text-critical-text">
+          <p role="alert" className="flex items-start gap-2 rounded-[var(--r)] border border-critical-border bg-critical-soft px-3 py-2.5 text-label leading-snug text-critical-text">
             <IconAlert size={15} className="mt-px shrink-0" />
             {error}
           </p>

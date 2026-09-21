@@ -12,14 +12,17 @@ import { ROLE_LABEL, modulePath } from "@/lib/nav";
 import { currency, formatDate, formatTime12, pluralise, titleCase } from "@/lib/format";
 import type { FieldDefinition, FieldType, Role, User } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
-import { Card, CardBody, CardFooter, CardHeader, Legend } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, Legend } from "@/components/ui/card";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, EmptyState, KV } from "@/components/ui/misc";
+import { Avatar, EmptyState } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import {
-  ChoiceGroup, Checkbox, Field, Input, NumberInput, Select,
+  ChoiceGroup, Checkbox, Field, Input, NumberInput, Select, Switch,
 } from "@/components/ui/field";
+import {
+  SettingLinkRow, SettingRow, SettingToggleRow, SettingValueRow, SettingsActions, SettingsSection,
+} from "@/components/ui/settings";
 import { Tabs } from "@/components/ui/tabs";
 import { DataTable, columnHelperFor } from "@/components/ui/data-table";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
@@ -27,9 +30,11 @@ import { RoleGate } from "@/components/domain/gates";
 import { useTour } from "@/components/onboarding/tour";
 import { Monogram } from "@/components/layout/rail";
 import {
-  IconAlert, IconCheck, IconKey, IconLayers, IconLock, IconMail, IconPlus, IconRefresh,
-  IconShield, IconSpark, IconTrash, IconUnlock, IconUser, IconUsers,
+  IconAlert, IconCheck, IconChevronRight, IconGrid, IconKey, IconLayers, IconList, IconLock, IconMail,
+  IconPlus, IconRefresh, IconSettings, IconShield, IconSpark, IconTrash, IconUnlock, IconUser,
+  IconUsers
 } from "@/components/ui/icons";
+import { InfoHint, Tooltip } from "@/components/ui/info";
 
 type Tab = "practice" | "config" | "features" | "fields" | "team" | "isolation";
 
@@ -48,9 +53,9 @@ const teamColumns = userCol.columns([
     header: "Sign-in",
     cell: ({ row }) => (
       <>
-        <span className="tnum block truncate font-mono text-[0.75rem] text-ink-2">{row.original.email}</span>
+        <span className="tnum block truncate font-mono text-caption text-ink-2">{row.original.email}</span>
         {row.original.failed_attempts > 0 && (
-          <span className="text-[0.6875rem] text-critical-text">
+          <span className="text-micro text-critical-text">
             {pluralise(row.original.failed_attempts, "failed attempt")}
           </span>
         )}
@@ -75,7 +80,7 @@ const teamColumns = userCol.columns([
   userCol.display({
     id: "actions",
     header: "",
-    meta: { align: "right", width: 210 },
+    meta: { align: "right", width: 140 },
     cell: ({ row }) => (
       <div className="flex items-center justify-end gap-1.5">
         <PasswordControl user={row.original} />
@@ -95,9 +100,21 @@ function PasswordControl({ user }: { user: User }) {
   const invited = user.status === "invited";
   return (
     <>
-      <Button size="sm" variant={invited ? "secondary" : "ghost"} onClick={() => setOpen(true)}>
-        <IconKey size={14} /> {invited ? "Set password" : "Reset"}
-      </Button>
+      {/* An invited row has no password at all, so that one keeps its words —
+          it is the action the row exists for. A reset is a repair on a working
+          account and does not need a label taking up a column. */}
+      {invited ? (
+        <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
+          <IconKey size={14} /> Set password
+        </Button>
+      ) : (
+        <Tooltip label={`Reset ${user.name}'s password`} side="top">
+          <Button size="icon-sm" variant="ghost" onClick={() => setOpen(true)}
+                  aria-label={`Reset ${user.name}'s password`}>
+            <IconKey size={14} />
+          </Button>
+        </Tooltip>
+      )}
       <SetPasswordModal user={user} open={open} onClose={() => setOpen(false)} />
     </>
   );
@@ -113,7 +130,7 @@ function TeamPerson({ user }: { user: User }) {
           {user.name}
           {user.id === session.userId && <Badge tone="accent" size="sm" dot={false}>You</Badge>}
         </p>
-        <p className="truncate text-[0.75rem] text-ink-3">{user.speciality ?? user.email}</p>
+        <p className="truncate text-caption text-ink-3">{user.speciality ?? user.email}</p>
       </div>
     </div>
   );
@@ -121,29 +138,35 @@ function TeamPerson({ user }: { user: User }) {
 
 function LockControl({ user }: { user: User }) {
   const { session, setUserStatus, notify } = useApp();
-  if (user.id === session.userId) return <span className="text-[0.6875rem] text-ink-3">—</span>;
+  if (user.id === session.userId) return <span className="text-micro text-ink-3">—</span>;
   return user.status === "locked" ? (
-    <Button
-      size="sm"
-      variant="secondary"
-      onClick={() => {
-        setUserStatus(user.id, "active");
-        notify({ tone: "ok", title: `${user.name} unlocked`, body: "They can sign in again." });
-      }}
-    >
-      <IconUnlock size={14} /> Unlock
-    </Button>
+    <Tooltip label={`Unlock ${user.name}`} side="top">
+      <Button
+        size="icon-sm"
+        variant="secondary"
+        aria-label={`Unlock ${user.name}`}
+        onClick={() => {
+          setUserStatus(user.id, "active");
+          notify({ tone: "ok", title: `${user.name} unlocked`, body: "They can sign in again." });
+        }}
+      >
+        <IconUnlock size={14} />
+      </Button>
+    </Tooltip>
   ) : (
-    <Button
-      size="sm"
-      variant="ghost"
-      onClick={() => {
-        setUserStatus(user.id, "locked");
-        notify({ tone: "warn", title: `${user.name} locked`, body: "Their sign-in is refused until released." });
-      }}
-    >
-      <IconLock size={14} /> Lock
-    </Button>
+    <Tooltip label={`Lock ${user.name} out`} side="top">
+      <Button
+        size="icon-sm"
+        variant="ghost"
+        aria-label={`Lock ${user.name} out`}
+        onClick={() => {
+          setUserStatus(user.id, "locked");
+          notify({ tone: "warn", title: `${user.name} locked`, body: "Their sign-in is refused until released." });
+        }}
+      >
+        <IconLock size={14} />
+      </Button>
+    </Tooltip>
   );
 }
 
@@ -198,198 +221,179 @@ function Settings({ initial }: { initial: Tab }) {
           <>
             <Badge tone="accent" size="sm">{clinical.label}</Badge>
             <Badge tone={tenant.status === "trial" ? "warn" : "ok"} size="sm">{titleCase(tenant.status)}</Badge>
-            <span className="text-[0.8125rem] text-ink-2">Since {formatDate(tenant.since, "long")}</span>
+            <span className="text-label text-ink-2">Since {formatDate(tenant.since, "long")}</span>
           </>
         }
       />
 
       <Tabs
-        className="mb-5"
+        className="mb-block"
         value={tab}
         onChange={setTabAndUrl}
         tabs={[
-          { value: "practice", label: "Practice" },
-          { value: "config", label: "Configuration" },
-          { value: "features", label: "Modules", count: active.filter((k) => !FEATURES.find((f) => f.key === k)?.is_core).length },
-          { value: "fields", label: "Custom fields", count: customFields.length },
-          { value: "team", label: "Team", count: staff.length },
-          { value: "isolation", label: "Isolation" },
+          { value: "practice", label: "Practice", icon: <IconGrid size={15} /> },
+          { value: "config", label: "Configuration", icon: <IconSettings size={15} /> },
+          { value: "features", label: "Modules", icon: <IconLayers size={15} />, count: active.filter((k) => !FEATURES.find((f) => f.key === k)?.is_core).length },
+          { value: "fields", label: "Custom fields", icon: <IconList size={15} />, count: customFields.length },
+          { value: "team", label: "Team", icon: <IconUsers size={15} />, count: staff.length },
+          { value: "isolation", label: "Isolation", icon: <IconShield size={15} /> },
         ]}
       />
 
       {tab === "practice" && (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
-          <Card>
-            <CardHeader title="Practice profile" subtitle="Identity of the tenant everything else hangs off." />
-            <CardBody className="space-y-5">
-              <div className="flex items-center gap-4">
-                <Monogram name={tenant.name} size={56} />
-                <div>
-                  <p className="font-display text-[1.25rem] font-semibold tracking-[-0.02em] text-ink">{tenant.name}</p>
-                  <p className="text-[0.8125rem] text-ink-2">{tenant.city} · {tenant.plan}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="Clinic name"><Input defaultValue={tenant.name} /></Field>
-                <Field label="City"><Input defaultValue={tenant.city} /></Field>
-                <Field label="Clinical type" help="Changing this would re-resolve every dynamic form. Fixed for the demo.">
-                  <Select value={tenant.clinical_type} disabled>
-                    {CLINICAL_TYPES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-                  </Select>
-                </Field>
-                <Field label="Status">
-                  <Select defaultValue={tenant.status} disabled>
-                    <option value="trial">Trial</option>
-                    <option value="active">Active</option>
-                    <option value="suspended">Suspended</option>
-                  </Select>
-                </Field>
-              </div>
-
-              <p className="rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-[0.75rem] leading-relaxed text-ink-2">
-                Profile edits are cosmetic in this demo. The two things that genuinely change the app —
-                entitlements and custom fields — are on the next two tabs and are wired end to end.
-              </p>
-
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[var(--r)] border border-line-strong bg-surface-2 px-3 py-3">
+        <div className="grid grid-cols-1 gap-block lg:grid-cols-[minmax(0,1fr)_19rem]">
+          <div className="min-w-0 space-y-block">
+            <SettingsSection
+              title="Practice profile"
+              hint="The identity of the tenant everything else hangs off. Profile edits are cosmetic in this demo — the two things that genuinely change the app, entitlements and custom fields, are on their own tabs and are wired end to end."
+            >
+              {/* who this is, once, at the top — not repeated in the header */}
+              <div className="flex items-center gap-3 px-4 py-3">
+                <Monogram name={tenant.name} size={38} />
                 <div className="min-w-0">
-                  <p className="text-[0.8438rem] font-medium text-ink">The guided tour</p>
-                  <p className="mt-0.5 text-[0.75rem] leading-snug text-ink-2">
-                    Six stops through the four ideas this product is built on. Everyone here sees it once; you can
-                    run it again whenever you like.
-                  </p>
+                  <p className="truncate text-body font-semibold text-ink">{tenant.name}</p>
+                  <p className="truncate text-caption text-ink-3">{tenant.city} · {tenant.plan}</p>
                 </div>
-                <Button variant="secondary" onClick={() => tour.start()}>
-                  <IconSpark size={15} /> Take the tour
-                </Button>
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--r)] border border-line-strong bg-surface-2 px-3 py-3">
-                <div className="min-w-0">
-                  <p className="text-[0.8438rem] font-medium text-ink">Where this data lives</p>
-                  <p className="mt-0.5 text-[0.75rem] leading-snug text-ink-2">
-                    On the server, in this clinic&rsquo;s own rows. Every change you make here is a request, and every
-                    row it touches carries {tenant.name}&rsquo;s id — no other clinic can read it, and nothing is
-                    kept in this browser.
-                  </p>
-                </div>
-                <Button variant="secondary" onClick={() => { void refetchEverything(); }}>
-                  <IconRefresh size={15} /> Refresh
-                </Button>
-              </div>
-            </CardBody>
-          </Card>
+              <SettingRow label="Clinic name" htmlFor="pr-name">
+                <Input id="pr-name" defaultValue={tenant.name} />
+              </SettingRow>
+              <SettingRow label="City" htmlFor="pr-city" width="md">
+                <Input id="pr-city" defaultValue={tenant.city} />
+              </SettingRow>
+              <SettingRow
+                label="Clinical type"
+                htmlFor="pr-type"
+                hint="Changing this would re-resolve every dynamic form in the clinic, so it is fixed for the demo."
+              >
+                <Select id="pr-type" value={tenant.clinical_type} disabled>
+                  {CLINICAL_TYPES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+                </Select>
+              </SettingRow>
+              <SettingRow
+                label="Status"
+                htmlFor="pr-status"
+                hint="Trial, active or suspended. Only the platform console can move a clinic between them."
+              >
+                <Select id="pr-status" defaultValue={tenant.status} disabled>
+                  <option value="trial">Trial</option>
+                  <option value="active">Active</option>
+                  <option value="suspended">Suspended</option>
+                </Select>
+              </SettingRow>
+            </SettingsSection>
 
-          <Card>
-            <CardHeader icon={<IconLayers size={16} />} title="Clinical type" subtitle={clinical.label} />
-            <CardBody className="pt-0">
-              <p className="text-[0.875rem] leading-relaxed text-ink-2">{clinical.blurb}</p>
-              <dl className="mt-4 space-y-3 border-t border-line-soft pt-4">
-                <KV label="Exam payload" value={clinical.examLabel} />
-                <KV label="Patient fields added" value={db.fieldDefinitions.filter((f) => f.scope === "clinical_type" && f.clinical_type === tenant.clinical_type && f.entity === "patient").length} />
-                <KV label="Encounter fields added" value={db.fieldDefinitions.filter((f) => f.scope === "clinical_type" && f.clinical_type === tenant.clinical_type && f.entity === "encounter").length} />
-              </dl>
-              <p className="mt-4 text-[0.75rem] leading-relaxed text-ink-3">
-                Clinical type never gates a module. A dental clinic without a pharmacy still prescribes;
-                an eye clinic with a lab still uses the same encounter table.
-              </p>
-            </CardBody>
-          </Card>
+            <SettingsSection title="This workspace">
+              <SettingLinkRow
+                label="Guided tour"
+                hint="Six stops through the four ideas this product is built on. Everyone here sees it once; you can run it again whenever you like."
+              >
+                <Button variant="secondary" size="sm" onClick={() => tour.start()}>
+                  <IconSpark size={14} /> Take the tour
+                </Button>
+              </SettingLinkRow>
+              <SettingLinkRow
+                label="Where this data lives"
+                hint={`On the server, in this clinic's own rows. Every change you make here is a request, and every row it touches carries ${tenant.name}'s id — no other clinic can read it, and nothing is kept in this browser.`}
+              >
+                <Button variant="secondary" size="sm" onClick={() => { void refetchEverything(); }}>
+                  <IconRefresh size={14} /> Refresh
+                </Button>
+              </SettingLinkRow>
+            </SettingsSection>
+          </div>
+
+          <aside className="space-y-block">
+            <SettingsSection
+              title="Clinical type"
+              hint={`${clinical.blurb} A clinical type never gates a module: a dental clinic without a pharmacy still prescribes, and an eye clinic with a lab still uses the same encounter table.`}
+            >
+              <SettingValueRow label="Workflow" value={clinical.label} />
+              <SettingValueRow label="Exam payload" value={clinical.examLabel} />
+              <SettingValueRow
+                label="Patient fields added"
+                value={db.fieldDefinitions.filter((f) => f.scope === "clinical_type" && f.clinical_type === tenant.clinical_type && f.entity === "patient").length}
+              />
+              <SettingValueRow
+                label="Encounter fields added"
+                value={db.fieldDefinitions.filter((f) => f.scope === "clinical_type" && f.clinical_type === tenant.clinical_type && f.entity === "encounter").length}
+              />
+            </SettingsSection>
+          </aside>
         </div>
       )}
 
       {tab === "config" && <ConfigurationTab />}
 
       {tab === "features" && (
-        <div className="space-y-5">
-          <Card data-tour="settings-features">
-            <CardHeader
-              icon={<IconSpark size={16} />}
-              title="Modules"
-              subtitle="Core modules ship with every tenant. The rest are entitlements the Astrale team grants — open a locked one to see what it does, what it costs, and how to ask for it."
-            />
-            <CardBody className="pt-0">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {FEATURES.map((f) => {
-                  const on = hasFeature(f.key);
-                  return (
-                    <div
-                      key={f.key}
-                      className={[
-                        "rounded-[var(--r)] border p-4 transition-colors",
-                        on ? "border-accent-border bg-accent-soft/40" : "border-line bg-surface",
-                      ].join(" ")}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="flex items-center gap-2 text-[0.9375rem] font-semibold text-ink">
-                            {f.name}
-                            {f.is_core && <Badge tone="neutral" size="sm">Core</Badge>}
-                          </p>
-                          <p className="mt-1 text-[0.8125rem] leading-snug text-ink-2">{f.summary}</p>
-                        </div>
-                        {on ? (
-                          <Badge tone="ok" size="sm" dot>On</Badge>
-                        ) : (
-                          <Badge tone="neutral" size="sm"><IconLock size={11} /> Locked</Badge>
+        <div className="space-y-block">
+          {/* One row per module rather than one card per module. Twenty-odd
+              cards in a grid is a page you read; a list with a state badge and
+              a price on a shared right edge is a page you scan. */}
+          <SettingsSection
+            title="Modules"
+            hint="Core modules ship with every tenant. The rest are entitlements the Astrale team grants — open a locked one to see what it does, what it costs, and how to ask for it."
+            className="[&>div]:divide-line-soft"
+          >
+            <div data-tour="settings-features" className="divide-y divide-line-soft">
+              {FEATURES.map((f) => {
+                const on = hasFeature(f.key);
+                return (
+                  <div key={f.key} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-row">
+                    <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                      <span className="truncate text-label font-medium text-ink">{f.name}</span>
+                      <InfoHint label={`About ${f.name}`}>
+                        {f.summary}
+                        {f.unlocks.length > 0 && (
+                          <span className="mt-1.5 block text-ink-3">Unlocks {f.unlocks.join(", ")}.</span>
                         )}
-                      </div>
-
-                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line-soft pt-3">
-                        <span className="flex flex-wrap gap-1.5">
-                          {f.unlocks.map((u) => (
-                            <span key={u} className="rounded-[var(--r-pill)] border border-line-strong bg-surface px-2 py-px text-[0.6875rem] text-ink-2">
-                              {u}
-                            </span>
-                          ))}
-                        </span>
-                        <span className="flex items-center gap-2">
-                          <span className="tnum font-mono text-[0.75rem] text-ink-3">
-                            {f.is_core ? "included" : `${currency(f.price_monthly)}/mo`}
-                          </span>
-                          {!f.is_core && (
-                            <ButtonLink href={modulePath(f.key)} size="sm" variant={on ? "ghost" : "secondary"}>
-                              {on ? "Details" : "View details"}
-                            </ButtonLink>
-                          )}
-                        </span>
-                      </div>
+                      </InfoHint>
+                      {f.is_core && <Badge tone="neutral" size="sm">Core</Badge>}
                     </div>
-                  );
-                })}
-              </div>
-            </CardBody>
-          </Card>
+                    <span className="tnum shrink-0 font-mono text-caption text-ink-3">
+                      {f.is_core ? "included" : `${currency(f.price_monthly)}/mo`}
+                    </span>
+                    <span className="w-[5.5rem] shrink-0 text-right">
+                      {on ? (
+                        <Badge tone="ok" size="sm" dot>On</Badge>
+                      ) : (
+                        <Badge tone="neutral" size="sm"><IconLock size={11} /> Locked</Badge>
+                      )}
+                    </span>
+                    <span className="w-[5.5rem] shrink-0 text-right">
+                      {!f.is_core && (
+                        <ButtonLink href={modulePath(f.key)} size="sm" variant="ghost">
+                          Details <IconChevronRight size={13} />
+                        </ButtonLink>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </SettingsSection>
 
-          <Card>
-            <CardHeader icon={<IconShield size={16} />} title="What the guard actually does" />
-            <CardBody className="pt-0">
-              <pre className="overflow-x-auto rounded-[var(--r)] border border-line bg-surface-inset p-3.5 font-mono text-[0.75rem] leading-relaxed text-ink-2">
+          <SettingsSection
+            title="What the guard actually does"
+            hint="Hiding a nav item is a courtesy; the server check is the enforcement, which is why every gated page renders through the same FeatureGate rather than each module inventing its own locked state. Which row exists is not a practice admin's decision — a module is switched on for this clinic by a super admin in the platform console, and a padlock leads to that module's page, where support can be asked for it."
+          >
+            <div className="px-4 py-3">
+              <pre className="overflow-x-auto rounded-[var(--r-sm)] border border-line bg-surface-inset p-3 font-mono text-caption leading-relaxed text-ink-2">
 {`if not TenantFeature.is_active(tenant_id, feature_key):
     return 403 "Feature not enabled"`}
               </pre>
-              <p className="mt-3 text-[0.8125rem] leading-relaxed text-ink-2">
-                Hiding a nav item is a courtesy. The server check is the enforcement — which is why every gated
-                page in this app renders through the same <span className="font-mono text-[0.75rem]">FeatureGate</span>{" "}
-                rather than each module inventing its own locked state.
-              </p>
-              <p className="mt-4 border-t border-line-soft pt-3 text-[0.75rem] leading-relaxed text-ink-3">
-                Which row exists is not a practice admin's decision. A module is switched on for this clinic by a
-                super admin in the platform console; a padlock here leads to that module's page, where support can
-                be asked for it.
-              </p>
-            </CardBody>
-          </Card>
+            </div>
+          </SettingsSection>
         </div>
       )}
 
       {tab === "fields" && (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="grid grid-cols-1 gap-block lg:grid-cols-[minmax(0,1fr)_20rem]">
           <Card className="overflow-hidden">
             <CardHeader
-              title="Custom fields"
-              subtitle="Added by this clinic, layered on top of the common and clinical-type sets."
+              icon={<IconLayers size={15} />} tone="violet" title="Custom fields"
+              hint="Added by this clinic, layered on top of the common and clinical-type sets."
               actions={<Button size="sm" variant="primary" onClick={() => setAddField(true)}><IconPlus size={14} /> Add field</Button>}
             />
             {customFields.length === 0 ? (
@@ -409,7 +413,7 @@ function Settings({ initial }: { initial: Tab }) {
                     {customFields.map((f) => (
                       <TR key={f.id}>
                         <TD className="font-medium">{f.label}</TD>
-                        <TD className="tnum font-mono text-[0.75rem] text-ink-2">{f.field_key}</TD>
+                        <TD className="tnum font-mono text-caption text-ink-2">{f.field_key}</TD>
                         <TD className="text-ink-2">{titleCase(f.entity)}</TD>
                         <TD className="text-ink-2">{titleCase(f.type)}</TD>
                         <TD>{f.required ? <Badge tone="warn" size="sm" dot={false}>Required</Badge> : <span className="text-ink-3">Optional</span>}</TD>
@@ -432,12 +436,12 @@ function Settings({ initial }: { initial: Tab }) {
       )}
 
       {tab === "team" && (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_19rem]">
+        <div className="grid grid-cols-1 gap-block lg:grid-cols-[minmax(0,1fr)_19rem]">
           <Card className="overflow-hidden">
             <CardHeader
               icon={<IconUsers size={16} />}
               title="Team"
-              subtitle="Role decides which modules a person sees. Locking an account stops them signing in without deleting anything they recorded."
+              hint="Role decides which modules a person sees. Locking an account stops them signing in without deleting anything they recorded."
               actions={
                 can("user:manage") && (
                   <Button variant="primary" size="sm" onClick={() => setAddPerson(true)}>
@@ -459,18 +463,18 @@ function Settings({ initial }: { initial: Tab }) {
           </Card>
 
           <Card>
-            <CardHeader icon={<IconLock size={16} />} title="Locking an account" />
+            <CardHeader
+              tone="neutral" icon={<IconLock size={16} />}
+              title="Locking an account"
+              hint="Suspending a whole clinic is the platform's job, not a practice admin's — that switch lives in the console and takes the subdomain offline."
+            />
             <CardBody className="pt-0">
-              <ul className="space-y-2.5 text-[0.8125rem] leading-snug text-ink-2">
+              <ul className="space-y-2.5 text-label leading-snug text-ink-2">
                 <li className="flex gap-2"><span className="text-ink-3">·</span> Five wrong passwords lock an account automatically.</li>
                 <li className="flex gap-2"><span className="text-ink-3">·</span> A locked person is signed out of this browser straight away.</li>
                 <li className="flex gap-2"><span className="text-ink-3">·</span> Unlocking clears the failed-attempt counter.</li>
                 <li className="flex gap-2"><span className="text-ink-3">·</span> Everything they recorded stays exactly where it is.</li>
               </ul>
-              <p className="mt-4 border-t border-line-soft pt-3 text-[0.75rem] leading-relaxed text-ink-3">
-                Suspending a whole clinic is the platform's job, not a practice admin's — that switch lives in the
-                console and takes the subdomain offline.
-              </p>
             </CardBody>
           </Card>
         </div>
@@ -493,6 +497,12 @@ function Settings({ initial }: { initial: Tab }) {
  * §3.3 — tenant configuration. Not entitlements (what the clinic may use) and
  * not custom fields (what it collects): this is how it has set the product up,
  * and every value below changes behaviour elsewhere in the app.
+ *
+ * Laid out as a list rather than as a form of stacked cards: five sections,
+ * each a run of rows, each row a label on the left and its control on a shared
+ * right-hand edge. Everything that used to be a sentence under a field is on
+ * the ⓘ beside its label, so the column of controls is unbroken from the top
+ * of the page to the save bar.
  */
 function ConfigurationTab() {
   const { config, updateConfig, notify } = useApp();
@@ -514,184 +524,178 @@ function ConfigurationTab() {
     return out;
   }, [draft.day_start, draft.day_end, draft.slot_minutes, draft.default_duration]);
 
+  const save = () => {
+    updateConfig(draft);
+    notify({ tone: "ok", title: "Configuration saved", body: "Numbering, the diary and billing follow it from now on." });
+  };
+
   return (
-    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
-      <Card>
-        <CardHeader
-          title="Configuration"
-          subtitle="Wired end to end — changing these changes how records are numbered, how the diary is laid out and how invoices are raised."
-        />
-        <CardBody className="space-y-6">
-          <section>
-            <Legend>Contact</Legend>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Phone">
-                <Input value={draft.contact_phone} onChange={(e) => set("contact_phone", e.target.value)}
-                       placeholder="+44 …" />
-              </Field>
-              <Field label="Email">
-                <Input type="email" value={draft.contact_email} onChange={(e) => set("contact_email", e.target.value)}
-                       placeholder="hello@clinic.example" />
-              </Field>
-              <Field label="Address" className="sm:col-span-2" help="Printed on every invoice.">
-                <Input value={draft.address} onChange={(e) => set("address", e.target.value)} />
-              </Field>
-            </div>
-          </section>
+    <div className="grid grid-cols-1 gap-block lg:grid-cols-[minmax(0,1fr)_19rem]">
+      <div className="min-w-0 space-y-block">
+        <SettingsSection
+          title="Contact"
+          hint="How this clinic is reached, and what is printed at the top of its invoices."
+        >
+          <SettingRow label="Phone" htmlFor="cfg-phone">
+            <Input id="cfg-phone" value={draft.contact_phone} placeholder="+44 …"
+                   onChange={(e) => set("contact_phone", e.target.value)} />
+          </SettingRow>
+          <SettingRow label="Email" htmlFor="cfg-email">
+            <Input id="cfg-email" type="email" value={draft.contact_email} placeholder="hello@clinic.example"
+                   onChange={(e) => set("contact_email", e.target.value)} />
+          </SettingRow>
+          <SettingRow label="Address" htmlFor="cfg-address" hint="Printed on every invoice.">
+            <Input id="cfg-address" value={draft.address} onChange={(e) => set("address", e.target.value)} />
+          </SettingRow>
+        </SettingsSection>
 
-          <section>
-            <Legend>Records</Legend>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Record number prefix" required help="New patients are numbered from this.">
-                <Input value={draft.mrn_prefix} maxLength={4}
-                       onChange={(e) => set("mrn_prefix", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))} />
-              </Field>
-              <Field label="Queue token prefix" help="Shown on the waiting-room screen.">
-                <Input value={draft.token_prefix} maxLength={2}
-                       onChange={(e) => set("token_prefix", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))} />
-              </Field>
-            </div>
-            <Checkbox
-              className="mt-3"
-              checked={draft.urgent_first}
-              onChange={(v) => set("urgent_first", v)}
-              label="Call urgent tokens before routine ones"
-              description="Turn this off and the board is strictly first come, first served."
-            />
-          </section>
+        <SettingsSection title="Records">
+          <SettingRow
+            label="Record number prefix"
+            htmlFor="cfg-mrn" width="sm"
+            hint="New patients are numbered from this. Existing record numbers keep the prefix they were issued with."
+          >
+            <Input id="cfg-mrn" value={draft.mrn_prefix} maxLength={4} className="tnum font-mono"
+                   onChange={(e) => set("mrn_prefix", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))} />
+          </SettingRow>
+          <SettingRow
+            label="Queue token prefix"
+            htmlFor="cfg-token" width="sm"
+            hint="Shown on the waiting-room screen and on the token itself."
+          >
+            <Input id="cfg-token" value={draft.token_prefix} maxLength={2} className="tnum font-mono"
+                   onChange={(e) => set("token_prefix", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))} />
+          </SettingRow>
+          <SettingToggleRow
+            label="Call urgent tokens first"
+            hint="Off, and the board is strictly first come, first served."
+          >
+            <Switch checked={draft.urgent_first} onChange={(v) => set("urgent_first", v)} />
+          </SettingToggleRow>
+        </SettingsSection>
 
-          <section>
-            <Legend>Appointments</Legend>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Day starts" required>
-                <Input type="time" value={draft.day_start} onChange={(e) => set("day_start", e.target.value)} />
-              </Field>
-              <Field label="Day ends" required>
-                <Input type="time" value={draft.day_end} onChange={(e) => set("day_end", e.target.value)} />
-              </Field>
-              <Field label="Slot interval" required>
-                <Select value={String(draft.slot_minutes)}
-                        onChange={(e) => set("slot_minutes", Number(e.target.value) as 15 | 20 | 30)}>
-                  {[15, 20, 30].map((m) => <option key={m} value={m}>{m} minutes</option>)}
-                </Select>
-              </Field>
-              <Field label="Default appointment length" required>
-                <Select value={String(draft.default_duration)}
-                        onChange={(e) => set("default_duration", Number(e.target.value))}>
-                  {[15, 20, 30, 45, 60].map((m) => <option key={m} value={m}>{m} minutes</option>)}
-                </Select>
-              </Field>
-            </div>
-          </section>
+        <SettingsSection title="Appointments">
+          <SettingRow label="Day starts" htmlFor="cfg-start" width="md">
+            <Input id="cfg-start" type="time" value={draft.day_start}
+                   onChange={(e) => set("day_start", e.target.value)} />
+          </SettingRow>
+          <SettingRow label="Day ends" htmlFor="cfg-end" width="md">
+            <Input id="cfg-end" type="time" value={draft.day_end}
+                   onChange={(e) => set("day_end", e.target.value)} />
+          </SettingRow>
+          <SettingRow label="Slot interval" htmlFor="cfg-slot" width="md" hint="How far apart the diary's bookable slots sit.">
+            <Select id="cfg-slot" value={String(draft.slot_minutes)}
+                    onChange={(e) => set("slot_minutes", Number(e.target.value) as 15 | 20 | 30)}>
+              {[15, 20, 30].map((m) => <option key={m} value={m}>{m} minutes</option>)}
+            </Select>
+          </SettingRow>
+          <SettingRow label="Default length" htmlFor="cfg-dur" width="md" hint="What a new booking is given unless it is changed.">
+            <Select id="cfg-dur" value={String(draft.default_duration)}
+                    onChange={(e) => set("default_duration", Number(e.target.value))}>
+              {[15, 20, 30, 45, 60].map((m) => <option key={m} value={m}>{m} minutes</option>)}
+            </Select>
+          </SettingRow>
+        </SettingsSection>
 
-          <section>
-            <Legend>Billing</Legend>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Invoice prefix" required>
-                <Input value={draft.invoice_prefix}
-                       onChange={(e) => set("invoice_prefix", e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ""))} />
-              </Field>
-              <Field label="Currency" required help="Every figure in the app follows this.">
-                <Select value={draft.currency}
-                        onChange={(e) => set("currency", e.target.value as typeof draft.currency)}>
-                  <option value="INR">Indian rupee (₹)</option>
-                  <option value="GBP">Pound sterling (£)</option>
-                  <option value="EUR">Euro (€)</option>
-                  <option value="USD">US dollar ($)</option>
-                </Select>
-              </Field>
-              <Field label="Tax rate" help="Applied to new invoice lines.">
-                <NumberInput min={0} max={40} step="0.5" value={draft.tax_pct}
-                             onChange={(n) => set("tax_pct", n)} />
-              </Field>
-              <Field label="Payment terms" required>
-                <Select value={String(draft.payment_terms_days)}
-                        onChange={(e) => set("payment_terms_days", Number(e.target.value))}>
-                  {[0, 7, 14, 30].map((d) => (
-                    <option key={d} value={d}>{d === 0 ? "Due immediately" : `${d} days`}</option>
-                  ))}
-                </Select>
-              </Field>
-            </div>
-          </section>
+        <SettingsSection title="Billing">
+          <SettingRow label="Invoice prefix" htmlFor="cfg-inv" width="sm">
+            <Input id="cfg-inv" value={draft.invoice_prefix} className="tnum font-mono"
+                   onChange={(e) => set("invoice_prefix", e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ""))} />
+          </SettingRow>
+          <SettingRow label="Currency" htmlFor="cfg-ccy" width="md" hint="Every figure in the app follows this.">
+            <Select id="cfg-ccy" value={draft.currency}
+                    onChange={(e) => set("currency", e.target.value as typeof draft.currency)}>
+              <option value="INR">Indian rupee (₹)</option>
+              <option value="GBP">Pound sterling (£)</option>
+              <option value="EUR">Euro (€)</option>
+              <option value="USD">US dollar ($)</option>
+            </Select>
+          </SettingRow>
+          <SettingRow label="Tax rate" htmlFor="cfg-tax" hint="Applied to new invoice lines. Invoices already raised keep the rate they were raised at." suffix="%" width="sm">
+            <NumberInput id="cfg-tax" min={0} max={40} step="0.5" value={draft.tax_pct}
+                         onChange={(n) => set("tax_pct", n)} />
+          </SettingRow>
+          <SettingRow label="Payment terms" htmlFor="cfg-terms" width="md">
+            <Select id="cfg-terms" value={String(draft.payment_terms_days)}
+                    onChange={(e) => set("payment_terms_days", Number(e.target.value))}>
+              {[0, 7, 14, 30].map((d) => (
+                <option key={d} value={d}>{d === 0 ? "Due immediately" : `${d} days`}</option>
+              ))}
+            </Select>
+          </SettingRow>
+        </SettingsSection>
 
-          <section>
-            <Legend>Inventory</Legend>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Expiry alert threshold (days)" help="Batches expiring within this many days show up as a warning.">
-                <NumberInput min={1} max={730} value={draft.expiry_alert_days}
-                             onChange={(n) => set("expiry_alert_days", n)} />
-              </Field>
-            </div>
-          </section>
-        </CardBody>
-        <CardFooter>
-          <p className="text-[0.75rem] text-ink-3">
-            {dirty ? "Unsaved changes" : "Saved — every module reads these values."}
-          </p>
-          <div className="flex items-center gap-2.5">
-            <Button variant="ghost" onClick={() => setDraft(config)} disabled={!dirty}>Discard</Button>
-            <Button
-              variant="primary"
-              disabled={!dirty}
-              onClick={() => {
-                updateConfig(draft);
-                notify({ tone: "ok", title: "Configuration saved", body: "Numbering, the diary and billing follow it from now on." });
-              }}
-            >
-              <IconCheck size={15} /> Save configuration
-            </Button>
-          </div>
-        </CardFooter>
-      </Card>
+        <SettingsSection title="Inventory">
+          <SettingRow
+            label="Expiry alert threshold"
+            htmlFor="cfg-expiry"
+            hint="A batch expiring within this many days shows up as a warning on the inventory board."
+            suffix="days"
+            width="sm"
+          >
+            <NumberInput id="cfg-expiry" min={1} max={730} value={draft.expiry_alert_days}
+                         onChange={(n) => set("expiry_alert_days", n)} />
+          </SettingRow>
+        </SettingsSection>
 
-      <aside className="space-y-5">
-        <Card>
-          <CardHeader title="What this changes" subtitle="Previewed from the values on the left." />
-          <CardBody className="space-y-3 pt-0">
-            <KV label="Next record number" value={<span className="tnum font-mono">{draft.mrn_prefix || "AS"}-1502</span>} />
-            <KV label="Next invoice" value={<span className="tnum font-mono">{draft.invoice_prefix || "INV"}-2045</span>} />
-            <KV
-              label="Payment due"
-              value={draft.payment_terms_days === 0 ? "On issue" : `${draft.payment_terms_days} days after issue`}
-            />
-            <KV label="Tax on new lines" value={`${draft.tax_pct}%`} />
-            <KV label="Money shown as" value={currency(1234.5)} />
-          </CardBody>
-        </Card>
+        {/* The save bar follows the sections rather than sitting inside the
+            last one — it commits all five, not Inventory. */}
+        <SettingsActions note={dirty ? "Unsaved changes" : "Saved — every module reads these values."}>
+          <Button variant="ghost" onClick={() => setDraft(config)} disabled={!dirty}>Discard</Button>
+          <Button variant="primary" disabled={!dirty} onClick={save}>
+            <IconCheck size={15} /> Save changes
+          </Button>
+        </SettingsActions>
+      </div>
 
-        <Card>
-          <CardHeader title="Diary shape" subtitle={`${slots.length} bookable slots a day`} />
-          <CardBody className="pt-0">
+      <aside className="space-y-block">
+        <SettingsSection
+          title="What this changes"
+          hint="Previewed from the values on the left, before they are saved."
+        >
+          <SettingValueRow label="Next record number"
+                           value={<span className="tnum font-mono">{draft.mrn_prefix || "AS"}-1502</span>} />
+          <SettingValueRow label="Next invoice"
+                           value={<span className="tnum font-mono">{draft.invoice_prefix || "INV"}-2045</span>} />
+          <SettingValueRow label="Payment due"
+                           value={draft.payment_terms_days === 0 ? "On issue" : `${draft.payment_terms_days} days after issue`} />
+          <SettingValueRow label="Tax on new lines" value={`${draft.tax_pct}%`} />
+          <SettingValueRow label="Money shown as" value={currency(1234.5)} />
+        </SettingsSection>
+
+        <SettingsSection
+          title="Diary shape"
+          hint={`${pluralise(slots.length, "bookable slot")} a day, from the times and the interval on the left.`}
+        >
+          <div className="px-4 py-row">
             {slots.length === 0 ? (
-              <p className="text-[0.8125rem] text-critical-text">
+              <p className="text-label text-critical-text">
                 The day ends before a {draft.default_duration}-minute appointment fits.
               </p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {slots.slice(0, 14).map((t) => (
-                  <span key={t} className="tnum rounded-[var(--r-sm)] border border-line-strong bg-surface-2 px-2 py-1 font-mono text-[0.6875rem] text-ink-2">
+                  <span key={t} className="tnum rounded-[var(--r-sm)] border border-line bg-surface-2 px-2 py-1 font-mono text-micro text-ink-2">
                     {formatTime12(t)}
                   </span>
                 ))}
                 {slots.length > 14 && (
-                  <span className="self-center text-[0.75rem] text-ink-3">+{slots.length - 14} more</span>
+                  <span className="self-center text-caption text-ink-3">+{slots.length - 14} more</span>
                 )}
               </div>
             )}
-          </CardBody>
-        </Card>
+          </div>
+        </SettingsSection>
 
-        <Card>
-          <CardHeader title="Not configuration" />
-          <CardBody className="pt-0">
-            <p className="text-[0.8125rem] leading-relaxed text-ink-2">
-              What {tenant.name} is <em>allowed</em> to use is an entitlement, and what it <em>collects</em> is a field
-              definition. Both are deliberately separate tabs — conflating them is what makes multi-tenant products
-              hard to reason about.
+        <SettingsSection title="Not configuration">
+          <div className="px-4 py-row">
+            <p className="text-caption leading-relaxed text-ink-2">
+              What {tenant.name} is <em>allowed</em> to use is an entitlement, and what it <em>collects</em> is a
+              field definition. Both are deliberately separate tabs — conflating them is what makes multi-tenant
+              products hard to reason about.
             </p>
-          </CardBody>
-        </Card>
+          </div>
+        </SettingsSection>
       </aside>
     </div>
   );
@@ -706,7 +710,7 @@ function SchemaPreview() {
       <Legend>{label}</Legend>
       <ul className="space-y-1.5">
         {fields.map((f) => (
-          <li key={f.id} className="flex items-center justify-between gap-2 text-[0.8125rem]">
+          <li key={f.id} className="flex items-center justify-between gap-2 text-label">
             <span className="min-w-0 truncate text-ink">{f.label}</span>
             <Badge
               tone={f.scope === "tenant" ? "accent" : f.scope === "clinical_type" ? "accent" : "neutral"}
@@ -722,14 +726,13 @@ function SchemaPreview() {
 
   return (
     <Card>
-      <CardHeader title="Resolved schema" subtitle="What the dynamic forms will render right now." />
-      <CardBody className="space-y-5 pt-0">
+      <CardHeader
+        icon={<IconLayers size={15} />} tone="violet" title="Resolved schema"
+        hint="What the dynamic forms will render right now. Order is common → clinical type → clinic, and a later scope wins on a key collision — nothing downstream knows which scope a field came from."
+      />
+      <CardBody className="space-y-block pt-0">
         {row(`Patient · ${pluralise(patient.length, "field")}`, patient)}
         {row(`Encounter · ${pluralise(encounter.length, "field")}`, encounter)}
-        <p className="border-t border-line-soft pt-3 text-[0.75rem] leading-relaxed text-ink-3">
-          Order is common → clinical type → clinic, and a later scope wins on a key collision. Nothing downstream
-          knows which scope a field came from.
-        </p>
       </CardBody>
     </Card>
   );
@@ -755,12 +758,12 @@ function IsolationTab() {
   ];
 
   return (
-    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
+    <div className="grid grid-cols-1 gap-block lg:grid-cols-[minmax(0,1fr)_20rem]">
       <Card>
         <CardHeader
-          icon={<IconShield size={16} />}
+          tone="info" icon={<IconShield size={16} />}
           title="What this session can see"
-          subtitle={`Signed in to ${tenant.name}. These are the rows this session holds — and they are all of the rows it could ever hold, because another clinic's never leave the database.`}
+          hint={`Signed in to ${tenant.name}. These are the rows this session holds — and they are all of the rows it could ever hold, because another clinic's never leave the database.`}
         />
         <CardBody className="pt-0">
           <TableWrap>
@@ -773,7 +776,7 @@ function IsolationTab() {
                   <TR key={c.label}>
                     <TD>{c.label}</TD>
                     <TD align="right" className="tnum font-mono font-medium text-ink">{c.n}</TD>
-                    <TD align="right" className="text-[0.75rem] text-ink-3">{c.note}</TD>
+                    <TD align="right" className="text-caption text-ink-3">{c.note}</TD>
                   </TR>
                 ))}
               </TBody>
@@ -783,7 +786,11 @@ function IsolationTab() {
       </Card>
 
       <Card>
-        <CardHeader icon={<IconLock size={16} />} title="Where scoping happens" />
+        <CardHeader
+          tone="neutral" icon={<IconLock size={16} />}
+          title="Where scoping happens"
+          hint="The tenant is never read from a body or query parameter. In this front end that is mirrored by the repository layer: no selector reads a collection without being handed the tenant it belongs to."
+        />
         <CardBody className="pt-0">
           <ol className="space-y-3">
             {[
@@ -794,18 +801,14 @@ function IsolationTab() {
               { n: 5, t: "Schema resolver", d: "Merges the three field scopes for dynamic forms." },
             ].map((s) => (
               <li key={s.n} className="flex items-start gap-3">
-                <span className="tnum mt-0.5 w-4 shrink-0 font-mono text-[0.75rem] text-accent-text">{s.n}</span>
+                <span className="tnum mt-0.5 w-4 shrink-0 font-mono text-caption text-accent-text">{s.n}</span>
                 <div className="min-w-0">
-                  <p className="text-[0.8438rem] font-medium text-ink">{s.t}</p>
-                  <p className="mt-0.5 text-[0.75rem] leading-snug text-ink-2">{s.d}</p>
+                  <p className="text-label font-medium text-ink">{s.t}</p>
+                  <p className="mt-0.5 text-caption leading-snug text-ink-2">{s.d}</p>
                 </div>
               </li>
             ))}
           </ol>
-          <p className="mt-4 border-t border-line-soft pt-3 text-[0.75rem] leading-relaxed text-ink-3">
-            The tenant is never read from a body or query parameter. In this front end that is mirrored by the
-            repository layer: no selector reads a collection without being handed the tenant it belongs to.
-          </p>
         </CardBody>
       </Card>
     </div>
@@ -1025,7 +1028,7 @@ function AddPersonModal({ open, onClose }: { open: boolean; onClose: () => void 
             <Avatar name={person.name} initials={person.initials} tintKey={person.id} />
             <div className="min-w-0">
               <p className="truncate font-medium text-ink">{person.name}</p>
-              <p className="truncate text-[0.75rem] text-ink-3">
+              <p className="truncate text-caption text-ink-3">
                 {ROLE_LABEL[person.role]}{person.speciality ? ` · ${person.speciality}` : ""}
               </p>
             </div>
@@ -1041,24 +1044,24 @@ function AddPersonModal({ open, onClose }: { open: boolean; onClose: () => void 
 
           {created.password ? (
             <div className="rounded-[var(--r)] border border-accent-border bg-accent-soft p-3.5">
-              <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-accent-text">
+              <p className="text-micro font-semibold uppercase tracking-[0.09em] text-accent-text">
                 Sign-in credentials
               </p>
               <dl className="mt-2 space-y-1.5">
                 <div className="flex items-baseline justify-between gap-3">
-                  <dt className="text-[0.75rem] text-ink-2">Email</dt>
-                  <dd className="tnum break-all font-mono text-[0.8125rem] text-ink">{person.email}</dd>
+                  <dt className="text-caption text-ink-2">Email</dt>
+                  <dd className="tnum break-all font-mono text-label text-ink">{person.email}</dd>
                 </div>
                 <div className="flex items-baseline justify-between gap-3">
-                  <dt className="text-[0.75rem] text-ink-2">Password</dt>
-                  <dd className="tnum font-mono text-[0.8125rem] text-ink">{created.password}</dd>
+                  <dt className="text-caption text-ink-2">Password</dt>
+                  <dd className="tnum font-mono text-label text-ink">{created.password}</dd>
                 </div>
               </dl>
             </div>
           ) : (
             <div className="flex gap-2.5 rounded-[var(--r)] border border-line bg-surface-2 p-3.5">
               <IconMail size={16} className="mt-px shrink-0 text-ink-3" />
-              <p className="text-[0.8125rem] leading-relaxed text-ink-2">
+              <p className="text-label leading-relaxed text-ink-2">
                 Invited accounts are refused at sign-in until they have a password. There is no invitation
                 email yet, so give <span className="text-ink">{person.name}</span> a password from this form
                 instead when they are ready to start.
@@ -1066,7 +1069,7 @@ function AddPersonModal({ open, onClose }: { open: boolean; onClose: () => void 
             </div>
           )}
 
-          <p className="text-[0.75rem] leading-relaxed text-ink-3">
+          <p className="text-caption leading-relaxed text-ink-3">
             They see only what {ROLE_LABEL[person.role].toLowerCase()} may see, on this clinic&apos;s address and
             no other. Locking the account later stops the sign-in without touching anything they recorded.
           </p>
@@ -1094,7 +1097,7 @@ function AddPersonModal({ open, onClose }: { open: boolean; onClose: () => void 
         {refused && (
           <div role="alert" className="flex gap-2.5 rounded-[var(--r)] border border-critical-border bg-critical-soft p-3">
             <IconAlert size={16} className="mt-px shrink-0 text-critical-text" />
-            <p className="text-[0.8125rem] leading-snug text-critical-text">{refused}</p>
+            <p className="text-label leading-snug text-critical-text">{refused}</p>
           </div>
         )}
 
@@ -1157,7 +1160,7 @@ function AddPersonModal({ open, onClose }: { open: boolean; onClose: () => void 
           )}
         </div>
 
-        <p className="flex gap-2.5 border-t border-line-soft pt-3 text-[0.75rem] leading-relaxed text-ink-3">
+        <p className="flex gap-2.5 border-t border-line-soft pt-3 text-caption leading-relaxed text-ink-3">
           <IconUser size={14} className="mt-px shrink-0" />
           <span>
             The account belongs to this clinic and is reachable only at its address. Nothing here can grant
@@ -1259,22 +1262,22 @@ function SetPasswordModal({
       {done ? (
         <div className="space-y-4">
           <div className="rounded-[var(--r)] border border-accent-border bg-accent-soft p-3.5">
-            <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-accent-text">
+            <p className="text-micro font-semibold uppercase tracking-[0.09em] text-accent-text">
               Sign-in credentials
             </p>
             <dl className="mt-2 space-y-1.5">
               <div className="flex items-baseline justify-between gap-3">
-                <dt className="text-[0.75rem] text-ink-2">Email</dt>
-                <dd className="tnum break-all font-mono text-[0.8125rem] text-ink">{user.email}</dd>
+                <dt className="text-caption text-ink-2">Email</dt>
+                <dd className="tnum break-all font-mono text-label text-ink">{user.email}</dd>
               </div>
               <div className="flex items-baseline justify-between gap-3">
-                <dt className="text-[0.75rem] text-ink-2">Password</dt>
-                <dd className="tnum font-mono text-[0.8125rem] text-ink">{password}</dd>
+                <dt className="text-caption text-ink-2">Password</dt>
+                <dd className="tnum font-mono text-label text-ink">{password}</dd>
               </div>
             </dl>
           </div>
           {locked && (
-            <p className="flex gap-2.5 rounded-[var(--r)] border border-warn-border bg-warn-soft p-3 text-[0.8125rem] leading-snug text-warn-text">
+            <p className="flex gap-2.5 rounded-[var(--r)] border border-warn-border bg-warn-soft p-3 text-label leading-snug text-warn-text">
               <IconLock size={16} className="mt-px shrink-0" />
               <span>
                 This account is still locked, so the new password will not get them in. Unlock it from
@@ -1288,15 +1291,15 @@ function SetPasswordModal({
           {refused && (
             <div role="alert" className="flex gap-2.5 rounded-[var(--r)] border border-critical-border bg-critical-soft p-3">
               <IconAlert size={16} className="mt-px shrink-0 text-critical-text" />
-              <p className="text-[0.8125rem] leading-snug text-critical-text">{refused}</p>
+              <p className="text-label leading-snug text-critical-text">{refused}</p>
             </div>
           )}
 
           <div className="flex items-center gap-3 rounded-[var(--r)] border border-line bg-surface-2 p-3">
             <Avatar name={user.name} initials={user.initials} size="sm" tintKey={user.id} />
             <div className="min-w-0">
-              <p className="truncate text-[0.8438rem] font-medium text-ink">{user.name}</p>
-              <p className="tnum truncate font-mono text-[0.75rem] text-ink-3">{user.email}</p>
+              <p className="truncate text-label font-medium text-ink">{user.name}</p>
+              <p className="tnum truncate font-mono text-caption text-ink-3">{user.email}</p>
             </div>
             <Badge className="ml-auto" tone={user.status === "active" ? "ok" : user.status === "invited" ? "warn" : "critical"} size="sm" dot>
               {titleCase(user.status)}
@@ -1315,7 +1318,7 @@ function SetPasswordModal({
             </div>
           </Field>
 
-          <ul className="space-y-2 border-t border-line-soft pt-3 text-[0.75rem] leading-snug text-ink-3">
+          <ul className="space-y-2 border-t border-line-soft pt-3 text-caption leading-snug text-ink-3">
             {invited && (
               <li className="flex gap-2">
                 <span>·</span> This accepts the invitation — the account becomes active straight away.

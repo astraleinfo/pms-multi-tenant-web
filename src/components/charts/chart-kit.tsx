@@ -44,14 +44,14 @@ export function ChartTooltip({
       }}
       role="status"
     >
-      <p className="mb-1 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-3">{tip.title}</p>
+      <p className="mb-1 text-micro font-semibold uppercase tracking-[0.08em] text-ink-3">{tip.title}</p>
       {tip.rows.map((r) => (
         <div key={r.label} className="flex items-baseline justify-between gap-4 py-px">
-          <span className="flex items-center gap-1.5 text-[0.75rem] text-ink-2">
+          <span className="flex items-center gap-1.5 text-caption text-ink-2">
             {r.color && <span className="h-2 w-2 shrink-0 rounded-[2px]" style={{ background: r.color }} />}
             {r.label}
           </span>
-          <span className="tnum font-mono text-[0.75rem] font-medium text-ink">{r.value}</span>
+          <span className="tnum font-mono text-caption font-medium text-ink">{r.value}</span>
         </div>
       ))}
     </div>
@@ -68,7 +68,7 @@ export function ChartLegend({
   return (
     <ul className={cn("flex flex-wrap items-center gap-x-4 gap-y-1.5", className)}>
       {items.map((it) => (
-        <li key={it.label} className="flex items-center gap-1.5 text-[0.75rem] text-ink-2">
+        <li key={it.label} className="flex items-center gap-1.5 text-caption text-ink-2">
           <span className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ background: it.color }} aria-hidden />
           <span>{it.label}</span>
           {it.value && <span className="tnum font-mono text-ink-3">{it.value}</span>}

@@ -7,12 +7,14 @@ import { useApp } from "@/lib/store/app-store";
 import { cn } from "@/lib/cn";
 import type { Id, Tenant } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
-import { Avatar } from "@/components/ui/misc";
+import { Button } from "@/components/ui/button";
+import { Avatar, EmptyState } from "@/components/ui/misc";
 import { Menu, MenuItem, MenuSep } from "@/components/ui/modal";
 import { StageLoader } from "@/components/ui/loader";
 import {
-  IconExternal, IconLayers, IconLogout, IconReceipt, IconShield, IconUsers,
+  IconExternal, IconLayers, IconLock, IconLogout, IconPulse, IconReceipt, IconShield, IconUsers,
 } from "@/components/ui/icons";
+import { isSuperAdmin } from "@/lib/api";
 
 /* ==========================================================================
    The console's own chrome.
@@ -23,7 +25,15 @@ import {
    one that looks enough like a clinic to be mistaken for it.
    ========================================================================== */
 
-/** Where the console goes, in the order it is worked. */
+/**
+ * Where the console goes, in the order it is worked.
+ *
+ * `superAdmin` on a section means it is not shown to the support desk. Read
+ * that as housekeeping rather than as security: the API refuses those routes
+ * to anybody but a super admin whatever this array says, and it answers 403
+ * rather than 401 so a hand-typed URL is refused on who is asking, not on
+ * whether they are signed in.
+ */
 const SECTIONS = [
   {
     href: "/platform" as const,
@@ -43,6 +53,13 @@ const SECTIONS = [
     icon: <IconReceipt size={15} />,
     blurb: "Pricing, subscriptions, access",
   },
+  {
+    href: "/platform/jobs" as const,
+    label: "Background jobs",
+    icon: <IconPulse size={15} />,
+    blurb: "Celery queues, workers and failures",
+    superAdmin: true,
+  },
 ];
 
 /**
@@ -54,9 +71,15 @@ const SECTIONS = [
  * that flashed its tenant list before redirecting would be showing every clinic
  * on the platform to somebody who is not signed in.
  */
-export function ConsolePage({ children }: { children: React.ReactNode }) {
+export function ConsolePage({
+  children, superAdmin,
+}: {
+  children: React.ReactNode;
+  /** this section is the platform's own machinery, not the support desk's */
+  superAdmin?: boolean;
+}) {
   const router = useRouter();
-  const { platformSession, ready } = useApp();
+  const { platformSession, platformUser, ready } = useApp();
 
   React.useEffect(() => {
     if (ready && !platformSession.signedIn) router.replace("/platform/login");
@@ -64,10 +87,33 @@ export function ConsolePage({ children }: { children: React.ReactNode }) {
 
   if (!ready || !platformSession.signedIn) return <StageLoader />;
 
+  /* Not a redirect. Somebody who followed a link to a section that is not
+     theirs should be told so, and left where they are — bouncing them to the
+     overview reads as a broken link rather than as an answer. The API has
+     already refused the data either way. */
+  const refused = superAdmin && !isSuperAdmin(platformUser);
+
   return (
     <div className="min-h-dvh bg-ground">
       <ConsoleBar />
-      <main className="mx-auto w-full max-w-[1440px] px-4 py-7 sm:px-6">{children}</main>
+      <main className="mx-auto w-full max-w-[1440px] px-4 py-7 sm:px-6">
+        {refused ? <NotYourSection /> : children}
+      </main>
+    </div>
+  );
+}
+
+function NotYourSection() {
+  return (
+    <div className="mx-auto max-w-lg py-16">
+      <EmptyState
+        icon={<IconLock size={20} />}
+        title="This section is for super admins"
+        body="Background jobs read the platform's own machinery — the workers, the broker, and the arguments every job was called with. Your console account is on the support desk, which covers everything else here."
+        action={
+          <Button variant="secondary" size="sm" onClick={() => history.back()}>Go back</Button>
+        }
+      />
     </div>
   );
 }
@@ -84,10 +130,10 @@ function ConsoleBar() {
             <IconShield size={17} />
           </span>
           <div className="min-w-0">
-            <p className="truncate font-display text-[0.9375rem] font-semibold leading-tight tracking-[-0.01em]">
+            <p className="truncate font-display text-body font-semibold leading-tight">
               Astrale Platform
             </p>
-            <p className="tnum truncate font-mono text-[0.6875rem] text-stage-dim">
+            <p className="tnum truncate font-mono text-micro text-stage-dim">
               admin.{host.root}{host.port ? `:${host.port}` : ""}
             </p>
           </div>
@@ -95,7 +141,13 @@ function ConsoleBar() {
 
         <div className="flex-1" />
 
-        <Badge tone="accent" size="sm" className="hidden sm:inline-flex">Super admin</Badge>
+        <Badge
+          tone={isSuperAdmin(platformUser) ? "accent" : "neutral"}
+          size="sm"
+          className="hidden sm:inline-flex"
+        >
+          {isSuperAdmin(platformUser) ? "Super admin" : "Support desk"}
+        </Badge>
 
         {platformUser && (
           <Menu
@@ -106,16 +158,16 @@ function ConsoleBar() {
                 className="flex items-center gap-2 rounded-[var(--r)] px-1.5 py-1 transition-colors hover:bg-white/10"
               >
                 <Avatar name={platformUser.name} initials={platformUser.initials} size="xs" tintKey={platformUser.id} />
-                <span className="hidden text-[0.8125rem] font-medium sm:block">{platformUser.name}</span>
+                <span className="hidden text-label font-medium sm:block">{platformUser.name}</span>
               </button>
             )}
           >
             {() => (
               <>
                 <div className="px-2.5 py-2">
-                  <p className="text-[0.8438rem] font-semibold text-ink">{platformUser.name}</p>
-                  <p className="mt-0.5 text-[0.75rem] text-ink-3">{platformUser.email}</p>
-                  <p className="mt-1.5 text-[0.6875rem] text-ink-3">{platformUser.title}</p>
+                  <p className="text-label font-semibold text-ink">{platformUser.name}</p>
+                  <p className="mt-0.5 text-caption text-ink-3">{platformUser.email}</p>
+                  <p className="mt-1.5 text-micro text-ink-3">{platformUser.title}</p>
                 </div>
                 <MenuSep />
                 <MenuItem icon={<IconLogout size={15} />} onClick={platformSignOut}>Sign out</MenuItem>
@@ -128,7 +180,7 @@ function ConsoleBar() {
       {/* The sections, as a rail under the bar rather than inside it — three
           destinations with room for their names beats three crowded words. */}
       <nav className="mx-auto flex w-full max-w-[1440px] items-center gap-0.5 overflow-x-auto px-4 sm:px-6" aria-label="Console sections">
-        {SECTIONS.map((section) => {
+        {SECTIONS.filter((s) => !s.superAdmin || isSuperAdmin(platformUser)).map((section) => {
           /* `/platform` is a prefix of everything, so only its own path lights it */
           const on = section.href === "/platform"
             ? pathname === "/platform"
@@ -139,11 +191,15 @@ function ConsoleBar() {
               href={section.href}
               aria-current={on ? "page" : undefined}
               title={section.blurb}
+              /* The same three-way active state as `Tabs` — rule, colour and
+                 weight — restated for a dark ground, where the app's accent
+                 text token would be too dark to read. */
               className={cn(
-                "-mb-px flex shrink-0 items-center gap-2 border-b-2 px-3 py-2.5 text-[0.8438rem] font-medium transition-colors",
+                "-mb-px flex shrink-0 items-center gap-2 rounded-t-[var(--r-sm)] border-b-2 px-3 py-2",
+                "text-label transition-colors duration-150 ease-[var(--ease-brand)]",
                 on
-                  ? "border-accent text-stage-ink"
-                  : "border-transparent text-stage-dim hover:border-white/25 hover:text-stage-ink",
+                  ? "border-accent font-semibold text-stage-ink"
+                  : "border-transparent font-medium text-stage-dim hover:bg-white/[0.06] hover:text-stage-ink",
               )}
             >
               {section.icon}
@@ -225,13 +281,13 @@ export function TenantAddress({ tenant, className }: { tenant: Tenant; className
       }}
       title={`Open ${tenant.name} as platform support`}
       className={cn(
-        "tnum inline-flex items-center gap-1.5 font-mono text-[0.8125rem] text-accent-text underline-offset-4 hover:underline",
+        "tnum inline-flex items-center gap-1.5 font-mono text-label text-accent-text underline-offset-4 hover:underline",
         className,
       )}
     >
       {tenant.slug}.{host.root}
       {entering === tenant.id
-        ? <span className="text-[0.6875rem] text-ink-3">opening…</span>
+        ? <span className="text-micro text-ink-3">opening…</span>
         : <IconExternal size={12} />}
     </a>
   );

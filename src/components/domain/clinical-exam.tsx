@@ -38,32 +38,32 @@ export function RefractionGrid({
 
   const cell = (v: string | undefined, on: (s: string) => void, placeholder: string) =>
     readOnly ? (
-      <span className="tnum block px-1 py-1.5 font-mono text-[0.8125rem] text-ink">{v || "—"}</span>
+      <span className="tnum block px-1 py-1.5 font-mono text-label text-ink">{v || "—"}</span>
     ) : (
       <Input value={v ?? ""} placeholder={placeholder} onChange={(e) => on(e.target.value)}
-             className="h-9 px-2 text-center font-mono text-[0.8125rem]" />
+             className="h-9 px-2 text-center font-mono text-label" />
     );
 
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[420px] border-collapse text-left">
-        <thead>
-          <tr className="border-b border-line">
+        <thead className="border-b border-table-head-line bg-table-head">
+          <tr>
             {["Eye", "Sphere", "Cylinder", "Axis", "Acuity"].map((h) => (
-              <th key={h} className="px-2 py-2 text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-3">{h}</th>
+              <th key={h} className="px-2 py-2 text-caption font-semibold text-ink-2">{h}</th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-line-soft">
+        <tbody className="divide-y divide-row-line">
           <tr>
-            <td className="px-2 py-2 text-[0.8125rem] font-medium text-ink">Right <span className="text-ink-3">(OD)</span></td>
+            <td className="px-2 py-2 text-label font-medium text-ink">Right <span className="text-ink-3">(OD)</span></td>
             <td className="px-1 py-1.5">{cell(refraction.od_sph, (s) => set({ od_sph: s }), "-1.75")}</td>
             <td className="px-1 py-1.5">{cell(refraction.od_cyl, (s) => set({ od_cyl: s }), "-0.50")}</td>
             <td className="px-1 py-1.5">{cell(refraction.od_axis, (s) => set({ od_axis: s }), "90")}</td>
             <td className="px-1 py-1.5">{cell(va.od, (s) => setVa({ od: s }), "6/6")}</td>
           </tr>
           <tr>
-            <td className="px-2 py-2 text-[0.8125rem] font-medium text-ink">Left <span className="text-ink-3">(OS)</span></td>
+            <td className="px-2 py-2 text-label font-medium text-ink">Left <span className="text-ink-3">(OS)</span></td>
             <td className="px-1 py-1.5">{cell(refraction.os_sph, (s) => set({ os_sph: s }), "-1.25")}</td>
             <td className="px-1 py-1.5">{cell(refraction.os_cyl, (s) => set({ os_cyl: s }), "-0.25")}</td>
             <td className="px-1 py-1.5">{cell(refraction.os_axis, (s) => set({ os_axis: s }), "85")}</td>
@@ -140,7 +140,7 @@ export function LesionMap({
                 disabled={readOnly}
                 onClick={() => toggle(s)}
                 className={cn(
-                  "rounded-[var(--r-pill)] border px-2.5 py-1 text-[0.75rem] transition-colors",
+                  "rounded-[var(--r-pill)] border px-2.5 py-1 text-caption transition-colors",
                   on ? "border-accent-border bg-accent-soft font-medium text-accent-text" : "border-line-strong bg-surface text-ink-2",
                   !readOnly && "hover:border-ink-3/50",
                 )}
@@ -151,7 +151,7 @@ export function LesionMap({
           })}
         </div>
         {!readOnly && (
-          <p className="mt-3 text-[0.75rem] text-ink-3">Tap the map or a chip — both write the same field.</p>
+          <p className="mt-3 text-caption text-ink-3">Tap the map or a chip — both write the same field.</p>
         )}
       </div>
     </div>
@@ -174,8 +174,8 @@ export function ScoreSlider({
   return (
     <div>
       <div className="mb-1.5 flex items-baseline justify-between">
-        <span className="text-[0.8125rem] font-medium text-ink">{label}</span>
-        <span className="tnum font-mono text-[0.8125rem] font-medium text-ink">
+        <span className="text-label font-medium text-ink">{label}</span>
+        <span className="tnum font-mono text-label font-medium text-ink">
           {value}{suffix ?? ` / ${max}`}
         </span>
       </div>
@@ -242,10 +242,10 @@ export function VitalsRow({
   if (readOnly) {
     return (
       <div className="flex flex-wrap gap-x-8 gap-y-2">
-        <span className="text-[0.8125rem] text-ink-2">
+        <span className="text-label text-ink-2">
           BP <span className="tnum ml-1 font-mono text-ink">{String(ext.bp ?? "—")}</span>
         </span>
-        <span className="text-[0.8125rem] text-ink-2">
+        <span className="text-label text-ink-2">
           Pulse <span className="tnum ml-1 font-mono text-ink">{ext.pulse ? `${ext.pulse} bpm` : "—"}</span>
         </span>
       </div>

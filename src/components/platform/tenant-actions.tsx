@@ -203,7 +203,7 @@ export function TenantStatusButton({ tenant }: { tenant: Tenant }) {
 /** What a clinic pays a month, printed where a row has room for one figure. */
 export function MonthlyCharge({ amount, className }: { amount: number; className?: string }) {
   return (
-    <span className={cn("tnum font-mono text-[0.8125rem]", amount > 0 ? "text-ink" : "text-ink-3", className)}>
+    <span className={cn("tnum font-mono text-label", amount > 0 ? "text-ink" : "text-ink-3", className)}>
       {amount > 0 ? `${currency(amount)}/mo` : "—"}
     </span>
   );

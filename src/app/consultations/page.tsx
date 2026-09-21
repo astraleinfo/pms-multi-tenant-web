@@ -37,8 +37,8 @@ const encounterColumns = col.columns([
     header: "Date",
     cell: ({ row }) => (
       <>
-        <span className="tnum block font-mono text-[0.8125rem] text-ink">{formatDate(row.original.date)}</span>
-        <span className="block text-[0.75rem] text-ink-3">{relativeDay(row.original.date)}</span>
+        <span className="tnum block font-mono text-label text-ink">{formatDate(row.original.date)}</span>
+        <span className="block text-caption text-ink-3">{relativeDay(row.original.date)}</span>
       </>
     ),
   }),
@@ -55,7 +55,7 @@ const encounterColumns = col.columns([
     cell: ({ row }) => (
       <>
         <span className="block truncate text-ink">{row.original.diagnosis || "—"}</span>
-        <span className="block truncate text-[0.75rem] text-ink-3">{row.original.chief_complaint}</span>
+        <span className="block truncate text-caption text-ink-3">{row.original.chief_complaint}</span>
       </>
     ),
   }),
@@ -142,9 +142,9 @@ function Consultations() {
       {inRoom.length > 0 && (
         <Card className="mb-5 border-accent-border">
           <CardHeader
-            icon={<IconStethoscope size={16} />}
+            tone="info" icon={<IconStethoscope size={16} />}
             title="With you now"
-            subtitle="Tokens currently called or in consultation."
+            hint="Tokens currently called or in consultation."
           />
           <CardBody className="pt-0">
             <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -173,7 +173,7 @@ function Consultations() {
           placeholder="Patient, diagnosis or complaint"
           wrapperClassName="min-w-[220px] flex-1 max-w-md"
         />
-        <span className="text-[0.8125rem] text-ink-3">{pluralise(total, "encounter")}</span>
+        <span className="text-label text-ink-3">{pluralise(total, "encounter")}</span>
       </div>
 
       <Card className="overflow-hidden">
@@ -183,8 +183,7 @@ function Consultations() {
             title={isFetching ? "Searching…" : q ? "No encounter matches" : "No encounters recorded"}
             body={q
               ? `Nothing in this clinic matches “${q}”.`
-              : "Start one from the queue, or open a blank encounter for a patient."}
-            action={<ButtonLink href="/consultations/new" size="sm" variant="primary">New encounter</ButtonLink>}
+              : "Start one from the queue, or open a blank encounter with the button above."}
           />
         ) : (
           <DataTable

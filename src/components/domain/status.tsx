@@ -1,4 +1,6 @@
-import { Badge, APPOINTMENT_TONE, INVOICE_TONE, LAB_TONE, QUEUE_TONE, RX_TONE, TX_TONE, type Tone } from "@/components/ui/badge";
+import * as React from "react";
+import { Badge, APPOINTMENT_TONE, FLAG_TONE, INVOICE_TONE, LAB_TONE, QUEUE_TONE, RX_TONE, TX_TONE, type Tone } from "@/components/ui/badge";
+import { IconArrowDown, IconArrowUp, IconCheck } from "@/components/ui/icons";
 import { sentenceCase } from "@/lib/format";
 import type { BillingDepartment } from "@/lib/types";
 
@@ -39,6 +41,28 @@ export function StatusPill({
 }
 
 export const statusLabel = (status: string) => LABELS[status] ?? sentenceCase(status);
+
+/**
+ * An out-of-range lab value.
+ *
+ * Tone alone cannot carry this one. Red-green is the commonest colour vision
+ * deficiency and "high" and "normal" are exactly the pair it collapses, so
+ * the direction is stated three ways at once: an arrow, a word, and a colour.
+ */
+const FLAG_ICON: Record<string, React.ReactNode> = {
+  high: <IconArrowUp size={11} strokeWidth={2.4} />,
+  low: <IconArrowDown size={11} strokeWidth={2.4} />,
+  normal: <IconCheck size={11} strokeWidth={2.4} />,
+};
+
+export function LabFlag({ flag, size = "sm" }: { flag: string; size?: "sm" | "md" }) {
+  return (
+    <Badge tone={FLAG_TONE[flag] ?? "neutral"} size={size}>
+      {FLAG_ICON[flag]}
+      {sentenceCase(flag)}
+    </Badge>
+  );
+}
 
 /**
  * Which counter an invoice belongs to, in words.

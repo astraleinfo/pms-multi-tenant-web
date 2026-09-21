@@ -1,20 +1,21 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, IBM_Plex_Mono, Inter_Tight } from "next/font/google";
+import { IBM_Plex_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "@/lib/query/provider";
 import { AppProvider } from "@/lib/store/app-store";
 import { AppShell } from "@/components/layout/app-shell";
 import { Toaster } from "@/components/layout/toaster";
 
-const display = Fraunces({
-  variable: "--font-fraunces",
-  subsets: ["latin"],
-  weight: ["600", "700"],
-  display: "swap",
-});
-
-const sans = Inter_Tight({
-  variable: "--font-inter-tight",
+/**
+ * One typeface for the whole application.
+ *
+ * Inter rather than Inter Tight: the condensed cut buys a little width back
+ * in a table and charges for it in every other hour of the shift. No `weight`
+ * is named, so the whole variable axis loads and weight stays a token
+ * decision rather than a download.
+ */
+const sans = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
   display: "swap",
 });
@@ -39,8 +40,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#EFF3F2" },
-    { media: "(prefers-color-scheme: dark)", color: "#071616" },
+    { media: "(prefers-color-scheme: light)", color: "#EAEEF4" },
+    { media: "(prefers-color-scheme: dark)", color: "#141A24" },
   ],
 };
 
@@ -50,7 +51,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       data-theme="light"
       suppressHydrationWarning
-      className={`${display.variable} ${sans.variable} ${mono.variable} h-full`}
+      className={`${sans.variable} ${mono.variable} h-full`}
     >
       <body className="min-h-dvh">
         <QueryProvider>

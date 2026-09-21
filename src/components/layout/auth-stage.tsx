@@ -42,42 +42,42 @@ export function AuthStage({
               </svg>
             </span>
             <div>
-              <p className="font-display text-[1.0625rem] font-semibold leading-none tracking-[-0.01em]">Astrale</p>
-              <p className="mt-1 text-[0.6875rem] uppercase tracking-[0.16em] text-stage-dim">Practice OS</p>
+              <p className="font-display text-title-sm font-semibold leading-none">Astrale</p>
+              <p className="mt-1 text-micro uppercase tracking-[0.16em] text-stage-dim">Practice OS</p>
             </div>
           </div>
 
           {eyebrow && (
-            <p className="mt-8 text-[0.6875rem] font-semibold uppercase tracking-[0.16em] text-accent-text">{eyebrow}</p>
+            <p className="mt-8 text-micro font-semibold uppercase tracking-[0.16em] text-accent-text">{eyebrow}</p>
           )}
-          <h1 className="mt-3 max-w-xl font-display text-[clamp(1.9rem,4.2vw,2.9rem)] font-semibold leading-[1.06] tracking-[-0.035em]">
+          <h1 className="mt-3 max-w-xl font-display text-[clamp(1.9rem,4.2vw,2.9rem)] font-semibold leading-[1.06] tracking-[-0.035em] text-stage-ink">
             {title}
           </h1>
 
           {address && (
             <p className="mt-4 inline-flex items-center gap-2 rounded-[var(--r-pill)] border border-white/12 bg-white/[0.05] px-3 py-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
-              <span className="tnum break-all font-mono text-[0.8125rem] text-stage-ink">{address}</span>
+              <span className="tnum break-all font-mono text-label text-stage-ink">{address}</span>
             </p>
           )}
 
-          <div className="mt-5 max-w-lg text-[0.9375rem] leading-relaxed text-stage-dim sm:text-[1rem]">{blurb}</div>
+          <div className="mt-5 max-w-lg text-body leading-relaxed text-stage-dim sm:text-lead">{blurb}</div>
 
           {points && (
             <dl className="mt-8 grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
               {points.map((a, i) => (
                 <div key={a.title} className="flex gap-3">
-                  <span className="tnum mt-0.5 font-mono text-[0.75rem] text-accent-text">0{i + 1}</span>
+                  <span className="tnum mt-0.5 font-mono text-caption text-accent-text">0{i + 1}</span>
                   <div>
-                    <dt className="text-[0.875rem] font-semibold text-stage-ink">{a.title}</dt>
-                    <dd className="mt-1 text-[0.8125rem] leading-relaxed text-stage-dim">{a.body}</dd>
+                    <dt className="text-body font-semibold text-stage-ink">{a.title}</dt>
+                    <dd className="mt-1 text-label leading-relaxed text-stage-dim">{a.body}</dd>
                   </div>
                 </div>
               ))}
             </dl>
           )}
 
-          <p className="mt-8 flex items-center gap-2 text-[0.75rem] text-stage-dim">
+          <p className="mt-8 flex items-center gap-2 text-caption text-stage-dim">
             <IconShield size={14} />
             Demonstration data. Credentials are hashed, and every request is scoped to one clinic.
           </p>
@@ -108,8 +108,8 @@ export function DemoCredentials({
         className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left"
         aria-expanded={open}
       >
-        <span className="text-[0.75rem] font-medium text-ink">Demo accounts</span>
-        <span className="text-[0.75rem] text-ink-3">{open ? "Hide" : "Show"}</span>
+        <span className="text-caption font-medium text-ink">Demo accounts</span>
+        <span className="text-caption text-ink-3">{open ? "Hide" : "Show"}</span>
       </button>
       {open && (
         <ul className="max-h-56 space-y-1 overflow-y-auto border-t border-line-soft p-1.5">
@@ -121,17 +121,17 @@ export function DemoCredentials({
                 onClick={() => onPick(a.email, a.password)}
                 className={cn(
                   "flex w-full items-center gap-2 rounded-[var(--r-sm)] px-2 py-1.5 text-left transition-colors",
-                  a.disabled ? "cursor-not-allowed opacity-55" : "hover:bg-surface-3",
+                  a.disabled ? "cursor-not-allowed opacity-65" : "hover:bg-hover",
                 )}
                 title={a.disabled ?? "Fill these credentials"}
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[0.75rem] font-medium text-ink">{a.label}</span>
-                  <span className="tnum block truncate font-mono text-[0.6875rem] text-ink-3">{a.email}</span>
+                  <span className="block truncate text-caption font-medium text-ink">{a.label}</span>
+                  <span className="tnum block truncate font-mono text-micro text-ink-3">{a.email}</span>
                 </span>
                 {a.disabled
-                  ? <span className="shrink-0 text-[0.625rem] uppercase tracking-wide text-critical-text">{a.disabled}</span>
-                  : <span className="shrink-0 text-[0.625rem] uppercase tracking-wide text-ink-3">{a.sub}</span>}
+                  ? <span className="shrink-0 text-micro uppercase tracking-wide text-critical-text">{a.disabled}</span>
+                  : <span className="shrink-0 text-micro uppercase tracking-wide text-ink-3">{a.sub}</span>}
               </button>
             </li>
           ))}

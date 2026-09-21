@@ -23,7 +23,9 @@ import { Badge } from "@/components/ui/badge";
 import { DEPARTMENT_LABEL, StatusPill } from "@/components/domain/status";
 import { PatientChip, PatientRef } from "@/components/domain/patient";
 import { InvoiceComposer } from "@/components/domain/invoice-composer";
-import { IconAlert, IconCard, IconCheck, IconPlus, IconReceipt } from "@/components/ui/icons";
+import {
+  IconAlert, IconCard, IconCheck, IconPlus, IconReceipt, IconUser
+} from "@/components/ui/icons";
 import { PatientAccount } from "@/components/domain/patient-account";
 
 type Tab = "all" | "unpaid" | "draft" | "paid" | "void";
@@ -47,8 +49,8 @@ const invoiceColumns = col.columns([
     header: "Invoice",
     cell: ({ row }) => (
       <>
-        <span className="tnum block font-mono text-[0.8125rem] font-medium text-ink">{row.original.number}</span>
-        <span className="block text-[0.75rem] text-ink-3">{pluralise(row.original.line_items.length, "line")}</span>
+        <span className="tnum block font-mono text-label font-medium text-ink">{row.original.number}</span>
+        <span className="block text-caption text-ink-3">{pluralise(row.original.line_items.length, "line")}</span>
       </>
     ),
   }),
@@ -61,7 +63,7 @@ const invoiceColumns = col.columns([
   col.accessor("issued_at", {
     header: "Issued",
     cell: ({ row }) => (
-      <span className="tnum font-mono text-[0.8125rem] text-ink-2">{formatDate(row.original.issued_at)}</span>
+      <span className="tnum font-mono text-label text-ink-2">{formatDate(row.original.issued_at)}</span>
     ),
   }),
   col.accessor("department", {
@@ -216,8 +218,8 @@ function Billing() {
         value={view}
         onChange={setView}
         tabs={[
-          { value: "ledger", label: "Invoices", count: counts.all },
-          { value: "account", label: "A patient's account" },
+          { value: "ledger", label: "Invoices", icon: <IconReceipt size={15} />, count: counts.all },
+          { value: "account", label: "A patient's account", icon: <IconUser size={15} /> },
         ]}
       />
 
@@ -286,7 +288,7 @@ function Billing() {
 
         <div className="space-y-5">
           <Card>
-            <CardHeader title="Where the money came from" subtitle="Billed value by line-item source." />
+            <CardHeader icon={<IconReceipt size={15} />} tone="ok" title="Where the money came from" hint="Billed value by line-item source." />
             <CardBody className="pt-1">
               {mix.length ? (
                 <DonutChart
@@ -297,13 +299,13 @@ function Billing() {
                   size={150}
                 />
               ) : (
-                <EmptyState compact title="Nothing billed yet" />
+                <EmptyState compact icon={<IconReceipt size={20} />} title="Nothing billed yet" />
               )}
             </CardBody>
           </Card>
 
           <Card>
-            <CardHeader title="Invoice states" subtitle="Payments move an invoice along; they never edit it." />
+            <CardHeader icon={<IconReceipt size={15} />} tone="ok" title="Invoice states" hint="Payments move an invoice along; they never edit it." />
             <CardBody className="pt-1">
               <ol className="space-y-2.5">
                 {[
@@ -315,7 +317,7 @@ function Billing() {
                 ].map((row) => (
                   <li key={row.s} className="flex items-start gap-3">
                     <StatusPill kind="invoice" status={row.s} size="sm" />
-                    <p className="min-w-0 flex-1 text-[0.75rem] leading-snug text-ink-2">{row.d}</p>
+                    <p className="min-w-0 flex-1 text-caption leading-snug text-ink-2">{row.d}</p>
                   </li>
                 ))}
               </ol>

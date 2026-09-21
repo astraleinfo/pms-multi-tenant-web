@@ -122,7 +122,7 @@ function MedicineField({
           <ul className="max-h-64 overflow-y-auto p-1.5">
             {groups.map((group) => (
               <li key={group.source}>
-                <p className="px-2.5 pb-1 pt-2 text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-3">
+                <p className="px-2.5 pb-1 pt-2 text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">
                   {GROUP_LABEL[group.source]}
                 </p>
                 <ul>
@@ -132,17 +132,17 @@ function MedicineField({
                         type="button"
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => { onPick(c); setOpen(false); }}
-                        className="flex w-full items-center justify-between gap-2.5 rounded-[var(--r-sm)] px-2.5 py-2 text-left transition-colors hover:bg-surface-2"
+                        className="flex w-full items-center justify-between gap-2.5 rounded-[var(--r-sm)] px-2.5 py-2 text-left transition-colors hover:bg-hover"
                       >
-                        <span className="min-w-0 flex-1 truncate text-[0.8438rem] text-ink">
+                        <span className="min-w-0 flex-1 truncate text-label text-ink">
                           {c.medicine}
                           {c.strength && <span className="text-ink-3"> · {c.strength}</span>}
                         </span>
                         {c.on_hand === undefined ? (
-                          <span className="shrink-0 text-[0.75rem] text-ink-3">{c.dosage || "—"}</span>
+                          <span className="shrink-0 text-caption text-ink-3">{c.dosage || "—"}</span>
                         ) : (
                           <span
-                            className={`shrink-0 text-[0.75rem] ${c.on_hand > 0 ? "text-ink-3" : "text-warn-text"}`}
+                            className={`shrink-0 text-caption ${c.on_hand > 0 ? "text-ink-3" : "text-warn-text"}`}
                           >
                             {c.on_hand > 0 ? `${c.on_hand} ${c.unit ?? ""} on hand` : "none left"}
                           </span>
@@ -168,10 +168,10 @@ function MedicineField({
                     });
                     setOpen(false);
                   }}
-                  className="flex w-full items-center gap-2 rounded-[var(--r-sm)] px-2.5 py-2 text-left transition-colors hover:bg-surface-2"
+                  className="flex w-full items-center gap-2 rounded-[var(--r-sm)] px-2.5 py-2 text-left transition-colors hover:bg-hover"
                 >
                   <IconPlus size={13} className="shrink-0 text-ink-3" />
-                  <span className="min-w-0 flex-1 truncate text-[0.8438rem] text-ink">
+                  <span className="min-w-0 flex-1 truncate text-label text-ink">
                     Write “{typed}” as a custom entry
                   </span>
                 </button>
@@ -344,7 +344,7 @@ export function PrescriptionEditor({
           <div key={it.key} className="rounded-[var(--r)] border border-line bg-surface-2 p-3">
             <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="tnum font-mono text-[0.75rem] font-medium text-ink-3">Line {idx + 1}</span>
+                <span className="tnum font-mono text-caption font-medium text-ink-3">Line {idx + 1}</span>
                 {stock && (
                   <Badge tone={short ? "warn" : "ok"} size="sm" dot={false}>
                     <IconBox size={11} /> {level} {stock.unit} on hand
@@ -414,7 +414,7 @@ export function PrescriptionEditor({
             key={c.item_id ?? `cat-${c.medicine}`}
             type="button"
             onClick={() => addChoice(c)}
-            className="rounded-[var(--r-pill)] border border-line-strong bg-surface px-2.5 py-1 text-[0.75rem] text-ink-2 transition-colors hover:border-accent hover:text-accent-text"
+            className="rounded-[var(--r-pill)] border border-line-strong bg-surface px-2.5 py-1 text-caption text-ink-2 transition-colors hover:border-accent hover:text-accent-text"
           >
             + {c.medicine}
           </button>
@@ -422,7 +422,7 @@ export function PrescriptionEditor({
       </div>
 
       {stocked && stockItems.length === 0 && (
-        <p className="flex items-start gap-2 rounded-[var(--r)] border border-warn-border bg-warn-soft px-3 py-2.5 text-[0.75rem] leading-relaxed text-warn-text">
+        <p className="flex items-start gap-2 rounded-[var(--r)] border border-warn-border bg-warn-soft px-3 py-2.5 text-caption leading-relaxed text-warn-text">
           <IconAlert size={14} className="mt-px shrink-0" />
           There are no medicine lines in inventory yet, so nothing on this prescription can be dispensed
           by the pharmacy. Add them under Inventory and they will lead the list here.

@@ -530,6 +530,42 @@ export function usePlatformSnapshot() {
   });
 }
 
+/**
+ * The background-job monitor.
+ *
+ * Polled rather than subscribed: the numbers are a live picture of work in
+ * flight, and a page that only moved when somebody reloaded it would be worse
+ * than no page. The interval is deliberately unhurried — this is a monitor
+ * somebody leaves open, and Flower is reading Celery's event stream either way.
+ *
+ * `enabled` follows the role as well as the session. A member of the support
+ * desk has no business firing this every few seconds to collect 403s, and the
+ * API would refuse it anyway.
+ */
+export function usePlatformJobs(query: api.JobQuery, options: { poll?: boolean } = {}) {
+  const { platformSession, platformUser } = useSession();
+  return useQuery({
+    queryKey: qk.platformJobs(query as Record<string, unknown>),
+    queryFn: () => api.listJobs(query),
+    enabled: platformSession.signedIn && api.isSuperAdmin(platformUser),
+    refetchInterval: options.poll === false ? false : 5_000,
+    /* A page already on screen stays while the next one lands, so the tiles
+       do not blink back to nothing every five seconds. */
+    placeholderData: (previous) => previous,
+  });
+}
+
+/** One job in full — the traceback and the return value the list leaves out. */
+export function usePlatformJob(taskId: Id | null) {
+  const { platformSession, platformUser } = useSession();
+  return useQuery({
+    queryKey: ["platform", "jobs", "task", taskId ?? ""],
+    queryFn: () => api.getJob(taskId!),
+    enabled: platformSession.signedIn && api.isSuperAdmin(platformUser) && !!taskId,
+    retry: false,
+  });
+}
+
 /** One clinic's entitlement rows, read from the console rather than inside it. */
 export function usePlatformTenantFeatures(tenantId: Id | null) {
   const { platformSession } = useSession();

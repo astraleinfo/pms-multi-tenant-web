@@ -18,7 +18,7 @@ import { CardsSkeleton } from "@/components/ui/loader";
 import { FeatureGate } from "@/components/domain/gates";
 import { PatientChip, AllergyFlag } from "@/components/domain/patient";
 import {
-  IconArrowRight, IconChevronLeft, IconChevronRight, IconGrid, IconList, IconPlus, IconUsers,
+  IconArrowRight, IconChevronLeft, IconChevronRight, IconGrid, IconList, IconPlus, IconUser, IconUsers,
 } from "@/components/ui/icons";
 
 const col = columnHelperFor<Patient>();
@@ -44,15 +44,15 @@ const patientColumns = col.columns([
   }),
   col.accessor("mrn", {
     header: "Record",
-    cell: ({ getValue }) => <span className="tnum font-mono text-[0.8125rem] text-ink-2">{getValue()}</span>,
+    cell: ({ getValue }) => <span className="tnum font-mono text-label text-ink-2">{getValue()}</span>,
   }),
   col.accessor("phone", {
     header: "Contact",
     enableSorting: false,
     cell: ({ row }) => (
       <>
-        <span className="tnum block font-mono text-[0.8125rem] text-ink">{row.original.phone}</span>
-        {row.original.email && <span className="block truncate text-[0.75rem] text-ink-3">{row.original.email}</span>}
+        <span className="tnum block font-mono text-label text-ink">{row.original.phone}</span>
+        {row.original.email && <span className="block truncate text-caption text-ink-3">{row.original.email}</span>}
       </>
     ),
   }),
@@ -140,11 +140,11 @@ function PatientList() {
         }
         meta={
           <>
-            <span className="text-[0.8125rem] text-ink-2">
+            <span className="text-label text-ink-2">
               {pluralise(register?.patients ?? 0, "patient")} on file
             </span>
-            <span className="text-[0.8125rem] text-ink-2">{register?.seen_today ?? 0} seen today</span>
-            <span className="text-[0.8125rem] text-ink-2">{register?.never_visited ?? 0} never visited</span>
+            <span className="text-label text-ink-2">{register?.seen_today ?? 0} seen today</span>
+            <span className="text-label text-ink-2">{register?.never_visited ?? 0} never visited</span>
           </>
         }
       />
@@ -177,15 +177,16 @@ function PatientList() {
           <EmptyState
             icon={<IconUsers size={20} />}
             title={isFetching ? "Searching…" : "No patient matches"}
-            body={term ? `Nothing in this clinic matches “${term}”.` : "Adjust the filter, or register the first patient."}
-            action={<ButtonLink href="/patients/new" size="sm" variant="primary"><IconPlus size={14} /> Register patient</ButtonLink>}
+            body={term
+              ? `Nothing in this clinic matches “${term}”.`
+              : "Adjust the filter, or register the first patient from the button above."}
           />
         </Card>
       ) : view === "table" ? (
         <Card className="overflow-hidden">
           <CardHeader
-            title={pluralise(total, "record")}
-            subtitle="Sorting and paging are queries, not filters over something already loaded."
+            icon={<IconUser size={15} />} tone="accent" title={pluralise(total, "record")}
+            hint="Sorting and paging are queries, not filters over something already loaded."
           />
           <DataTable
             columns={patientColumns}
@@ -219,11 +220,11 @@ function PatientList() {
                 </div>
                 <div className="mt-3.5 space-y-2 border-t border-line-soft pt-3">
                   <AllergyFlag patient={p} />
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-[0.75rem] text-ink-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-caption text-ink-3">
                     <span className="tnum font-mono">{p.phone}</span>
                     <span>{p.last_visit ? relativeDay(p.last_visit) : "No visits yet"}</span>
                   </div>
-                  <p className="text-[0.75rem] text-ink-3">
+                  <p className="text-caption text-ink-3">
                     Registered {formatDate(p.registered_at, "long")}
                   </p>
                 </div>
@@ -233,7 +234,7 @@ function PatientList() {
 
           {pages > 1 && (
             <div className="mt-4 flex items-center justify-between gap-3">
-              <p className="tnum text-[0.75rem] text-ink-3">
+              <p className="tnum text-caption text-ink-3">
                 {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
               </p>
               <div className="flex items-center gap-1.5">
@@ -243,7 +244,7 @@ function PatientList() {
                 >
                   <IconChevronLeft size={15} />
                 </Button>
-                <span className="tnum px-1 text-[0.75rem] text-ink-2">{page + 1} / {pages}</span>
+                <span className="tnum px-1 text-caption text-ink-2">{page + 1} / {pages}</span>
                 <Button
                   variant="secondary" size="icon-sm" aria-label="Next page"
                   disabled={page + 1 >= pages} onClick={() => setPage((n) => n + 1)}

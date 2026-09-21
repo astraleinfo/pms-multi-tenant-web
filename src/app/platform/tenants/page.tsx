@@ -65,7 +65,7 @@ const tenantColumns = col.columns([
         <Monogram name={row.original.tenant.name} size={30} />
         <div className="min-w-0">
           <p className="truncate font-medium text-ink">{row.original.tenant.name}</p>
-          <p className="truncate text-[0.75rem] text-ink-3">
+          <p className="truncate text-caption text-ink-3">
             {row.original.tenant.city} · {row.original.tenant.plan}
           </p>
         </div>
@@ -103,9 +103,9 @@ const tenantColumns = col.columns([
     id: "usage",
     header: "Usage",
     cell: ({ row }) => (
-      <div className="tnum font-mono text-[0.8125rem] leading-snug text-ink-2">
+      <div className="tnum font-mono text-label leading-snug text-ink-2">
         <p>{row.original.patients} patients · {row.original.encounters} visits</p>
-        <p className="text-[0.75rem] text-ink-3">
+        <p className="text-caption text-ink-3">
           {row.original.last_activity ? `last seen ${formatDate(row.original.last_activity)}` : "no activity yet"}
         </p>
       </div>
@@ -130,10 +130,10 @@ const tenantColumns = col.columns([
 
 function ModuleCell({ row }: { row: ConsoleRow }) {
   const on = [...row.billed, ...row.trialing, ...row.held];
-  if (!on.length) return <span className="text-[0.8125rem] text-ink-3">Core only</span>;
+  if (!on.length) return <span className="text-label text-ink-3">Core only</span>;
   return (
     <div className="flex flex-col items-start gap-1">
-      <span className="tnum text-[0.75rem] text-ink-3">
+      <span className="tnum text-caption text-ink-3">
         {on.length} of {PAID_FEATURES.length}
       </span>
       <span className="flex flex-wrap gap-1">
@@ -308,9 +308,9 @@ function TenantDirectory() {
 
       <Card className="mt-5 overflow-hidden">
         <CardHeader
-          icon={<IconFilter size={16} />}
+          tone="neutral" icon={<IconFilter size={16} />}
           title="Filters"
-          subtitle="Narrow by what a clinic is, what it holds and what it pays."
+          hint="Narrow by what a clinic is, what it holds and what it pays."
           actions={
             active > 0 && (
               <Button variant="ghost" size="sm" onClick={() => setFilters(NO_FILTERS)}>
@@ -407,7 +407,7 @@ function TenantDirectory() {
         />
 
         {shown.length > 0 && shown.length !== rows.length && (
-          <p className="border-t border-line-soft px-5 py-2.5 text-[0.75rem] text-ink-3">
+          <p className="border-t border-line-soft px-5 py-2.5 text-caption text-ink-3">
             Showing {shown.length} of {rows.length} clinics · {currency(
               shown.reduce((sum, r) => sum + r.mrr, 0),
             )}/mo between them

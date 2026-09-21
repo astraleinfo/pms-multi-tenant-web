@@ -26,8 +26,8 @@ import { StatusPill } from "@/components/domain/status";
 import { PatientChip, PatientRef } from "@/components/domain/patient";
 import { AppointmentModal, WalkInModal } from "@/components/domain/quick-actions";
 import {
-  IconAlert, IconArrowRight, IconBox, IconCalendar, IconClock, IconFlask,
-  IconMortar, IconPlus, IconQueue, IconReceipt, IconSpark, IconUsers,
+  IconAlert, IconArrowRight, IconBox, IconCalendar, IconChart, IconClock, IconFlask, IconMortar,
+  IconPlus, IconQueue, IconReceipt, IconSpark, IconStethoscope, IconUsers
 } from "@/components/ui/icons";
 
 export default function DashboardPage() {
@@ -171,7 +171,7 @@ export default function DashboardPage() {
             <CardHeader
               icon={<IconQueue size={16} />}
               title="On the board now"
-              subtitle="Tokens issued today, urgent first, then in sequence."
+              hint="Tokens issued today, urgent first, then in sequence."
               actions={<ButtonLink href="/queue" variant="ghost" size="sm">Open queue <IconArrowRight size={14} /></ButtonLink>}
             />
             <CardBody className="pt-0">
@@ -201,7 +201,7 @@ export default function DashboardPage() {
                           </div>
                           <div className="flex shrink-0 items-center gap-2.5">
                             {q.priority === "urgent" && <Badge tone="critical" size="sm">Urgent</Badge>}
-                            <span className="tnum hidden font-mono text-[0.75rem] text-ink-3 sm:inline">
+                            <span className="tnum hidden font-mono text-caption text-ink-3 sm:inline">
                               in {q.checked_in_at}
                             </span>
                             <StatusPill kind="queue" status={q.status} size="sm" pulse={q.status === "in_consultation"} />
@@ -218,8 +218,8 @@ export default function DashboardPage() {
           {/* volume */}
           <Card>
             <CardHeader
-              title="Visits, last fourteen days"
-              subtitle="Completed appointments and walk-in encounters, per day."
+              icon={<IconChart size={15} />} tone="accent" title="Visits, last fourteen days"
+              hint="Completed appointments and walk-in encounters, per day."
               actions={<Badge tone="neutral" size="sm">{visits.reduce((s, v) => s + v.value, 0)} total</Badge>}
             />
             <CardBody className="pt-1">
@@ -235,7 +235,7 @@ export default function DashboardPage() {
           {/* attendance */}
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             <Card>
-              <CardHeader title="Attendance" subtitle="How the week's bookings resolved." />
+              <CardHeader icon={<IconChart size={15} />} tone="accent" title="Attendance" hint="How the week's bookings resolved." />
               <CardBody className="pt-1">
                 <BarChart
                   labels={attendance.map((a) => weekdayShort(a.date))}
@@ -252,12 +252,12 @@ export default function DashboardPage() {
             </Card>
 
             <Card>
-              <CardHeader title="Most recorded diagnoses" subtitle="Straight off the encounter rows." />
+              <CardHeader icon={<IconChart size={15} />} tone="accent" title="Most recorded diagnoses" hint="Straight off the encounter rows." />
               <CardBody className="pt-1">
                 {diagnoses.length ? (
                   <RankBar rows={diagnoses} format={(n) => `${n}`} />
                 ) : (
-                  <EmptyState compact title="No encounters yet" body="Diagnoses appear here once consultations are signed." />
+                  <EmptyState compact icon={<IconStethoscope size={20} />} title="No encounters yet" body="Diagnoses appear here once consultations are signed." />
                 )}
               </CardBody>
             </Card>
@@ -268,9 +268,9 @@ export default function DashboardPage() {
         <div className="space-y-5">
           <Card>
             <CardHeader
-              icon={<IconAlert size={16} />}
+              tone="warn" icon={<IconAlert size={16} />}
               title="Needs attention"
-              subtitle="Composed from every module this clinic has switched on."
+              hint="Composed from every module this clinic has switched on."
             />
             <CardBody className="pt-0">
               {attention.length === 0 ? (
@@ -282,7 +282,7 @@ export default function DashboardPage() {
                     <li key={a.id}>
                       <Link
                         href={a.href}
-                        className="group flex items-start gap-2.5 rounded-[var(--r)] px-2.5 py-2 transition-colors hover:bg-surface-2"
+                        className="group flex items-start gap-2.5 rounded-[var(--r)] px-2.5 py-2 transition-colors hover:bg-hover"
                       >
                         <span
                           className={[
@@ -292,8 +292,8 @@ export default function DashboardPage() {
                           aria-hidden
                         />
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[0.8438rem] font-medium text-ink">{a.title}</span>
-                          <span className="block truncate text-[0.75rem] text-ink-3">{a.detail}</span>
+                          <span className="block truncate text-label font-medium text-ink">{a.title}</span>
+                          <span className="block truncate text-caption text-ink-3">{a.detail}</span>
                         </span>
                         <IconArrowRight size={14} className="mt-1 shrink-0 text-ink-3 opacity-0 transition-opacity group-hover:opacity-100" />
                       </Link>
@@ -305,7 +305,7 @@ export default function DashboardPage() {
           </Card>
 
           <Card>
-            <CardHeader title="Next in the diary" subtitle="Still to arrive today."
+            <CardHeader icon={<IconCalendar size={15} />} tone="violet" title="Next in the diary" hint="Still to arrive today."
                         actions={<ButtonLink href="/appointments" variant="ghost" size="sm">All <IconArrowRight size={14} /></ButtonLink>} />
             <CardBody className="pt-0">
               {upcoming.length === 0 ? (
@@ -316,7 +316,7 @@ export default function DashboardPage() {
                   {upcoming.map((a) => {
                     return (
                       <li key={a.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-                        <span className="tnum w-14 shrink-0 font-mono text-[0.8125rem] font-medium text-ink">
+                        <span className="tnum w-14 shrink-0 font-mono text-label font-medium text-ink">
                           {formatTime12(a.time)}
                         </span>
                         <span className="min-w-0 flex-1">
@@ -334,15 +334,15 @@ export default function DashboardPage() {
           {/* queue funnel */}
           <Card>
             <CardHeader
-              title="Today's tokens"
+              icon={<IconQueue size={15} />} tone="accent" title="Today's tokens"
               subtitle={`${m?.wait_samples ?? 0} measured · average consult ${duration(m?.avg_consultation_minutes ?? 0)}`}
             />
             <CardBody className="pt-1 space-y-3">
               {funnel.map((f, i) => (
                 <div key={f.label}>
                   <div className="mb-1 flex items-baseline justify-between">
-                    <span className="text-[0.8125rem] text-ink">{f.label}</span>
-                    <span className="tnum font-mono text-[0.8125rem] font-medium text-ink-2">{f.value}</span>
+                    <span className="text-label text-ink">{f.label}</span>
+                    <span className="tnum font-mono text-label font-medium text-ink-2">{f.value}</span>
                   </div>
                   <Meter
                     value={f.value}
@@ -357,7 +357,7 @@ export default function DashboardPage() {
           {/* feature-conditional panels — §3.14 */}
           {money && money.revenue_mix.length > 0 && (
             <Card>
-              <CardHeader icon={<IconReceipt size={16} />} title="Revenue mix" subtitle="Billed value by line-item source." />
+              <CardHeader tone="ok" icon={<IconReceipt size={16} />} title="Revenue mix" hint="Billed value by line-item source." />
               <CardBody className="pt-1">
                 <DonutChart
                   slices={money.revenue_mix}
@@ -374,9 +374,9 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-1">
             {pharm && (
               <Card>
-                <CardHeader icon={<IconMortar size={16} />} title="Pharmacy" subtitle="From the dispense ledger." />
+                <CardHeader tone="ok" icon={<IconMortar size={16} />} title="Pharmacy" hint="From the dispense ledger." />
                 <CardBody className="pt-1">
-                  <dl className="grid grid-cols-2 gap-4">
+                  <dl className="grid grid-cols-2 gap-x-4">
                     <KV label="Units out" value={<span className="tnum font-mono">{pharm.dispensed_units}</span>} />
                     <KV label="Value" value={<span className="tnum font-mono">{currency(pharm.dispensed_value)}</span>} />
                     <KV label="At the counter" value={pharm.prescriptions_waiting} />
@@ -388,7 +388,7 @@ export default function DashboardPage() {
 
             {lab && (
               <Card>
-                <CardHeader icon={<IconFlask size={16} />} title="Lab" subtitle="Orders by state." />
+                <CardHeader tone="info" icon={<IconFlask size={16} />} title="Lab" hint="Orders by state." />
                 <CardBody className="pt-1">
                   <Legend>Pipeline</Legend>
                   <div className="grid grid-cols-4 gap-2 text-center">
@@ -397,13 +397,13 @@ export default function DashboardPage() {
                       { l: "Resulted", v: lab.resulted }, { l: "Verified", v: lab.verified },
                     ].map((s) => (
                       <div key={s.l} className="rounded-[var(--r)] border border-line bg-surface-2 py-2.5">
-                        <p className="tnum font-mono text-[1.125rem] font-semibold text-ink">{s.v}</p>
-                        <p className="mt-0.5 text-[0.6875rem] text-ink-3">{s.l}</p>
+                        <p className="tnum font-mono text-title font-semibold text-ink">{s.v}</p>
+                        <p className="mt-0.5 text-micro text-ink-3">{s.l}</p>
                       </div>
                     ))}
                   </div>
                   {lab.abnormal > 0 && (
-                    <p className="mt-3 flex items-center gap-1.5 text-[0.75rem] text-critical-text">
+                    <p className="mt-3 flex items-center gap-1.5 text-caption text-critical-text">
                       <IconAlert size={13} /> {pluralise(lab.abnormal, "order")} with a flagged analyte.
                     </p>
                   )}

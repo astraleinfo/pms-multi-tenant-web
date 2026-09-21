@@ -21,12 +21,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const shellReady = useShellReady();
   const pathname = usePathname();
   const router = useRouter();
-  const [collapsed, setCollapsed] = React.useState(false);
+  /* Collapsed is the resting state. A clinic screen earns its keep in the
+     content, not in a permanently open list of twelve destinations, and the
+     rail is one click — or one hover away from a tooltip — either way. */
+  const [collapsed, setCollapsed] = React.useState(true);
   const [mobileNav, setMobileNav] = React.useState(false);
   const [search, setSearch] = React.useState(false);
 
   React.useEffect(() => {
-    try { setCollapsed(localStorage.getItem(RAIL_KEY) === "1"); } catch { /* ignore */ }
+    /* Only an explicit "0" reopens it: an unset key is somebody's first visit,
+       and that starts collapsed like everybody else's. */
+    try { setCollapsed(localStorage.getItem(RAIL_KEY) !== "0"); } catch { /* ignore */ }
   }, []);
 
   const toggleRail = () => setCollapsed((c) => {
@@ -108,7 +113,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
         style={{ width: collapsed ? "var(--rail-w-collapsed)" : "var(--rail-w)" }}
       >
-        <Rail collapsed={collapsed} />
+        <Rail collapsed={collapsed} onToggle={toggleRail} />
       </aside>
 
       {/* mobile drawer rail */}

@@ -18,7 +18,9 @@ import {
 import { Tabs } from "@/components/ui/tabs";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { RoleGate } from "@/components/domain/gates";
-import { IconCard, IconEdit, IconFlask, IconPlus, IconReceipt, IconTrash } from "@/components/ui/icons";
+import {
+  IconCard, IconEdit, IconFlask, IconPlus, IconReceipt, IconStethoscope, IconTrash
+} from "@/components/ui/icons";
 
 type Tab = ServiceKind | "all";
 
@@ -75,7 +77,7 @@ function Pricing() {
         eyebrow="Practice"
         title="Pricing"
         description="What this clinic charges for everything that is not stock: the consultation, each procedure, and every scan by its own code. Billing quotes these — nothing here is a number in the code, and no two clinics have to agree."
-        meta={<span className="text-[0.8125rem] text-ink-2">Prices are in {config.currency}</span>}
+        meta={<span className="text-label text-ink-2">Prices are in {config.currency}</span>}
         actions={
           <>
             <Button variant="secondary" onClick={() => setImporting(true)}>
@@ -112,11 +114,11 @@ function Pricing() {
 
       <Card className="overflow-hidden">
         <CardHeader
-          title="The tariff"
-          subtitle="A price is quoted the moment an invoice is composed. Retiring one keeps it on the invoices that already carry it."
+          icon={<IconCard size={15} />} tone="ok" title="The tariff"
+          hint="A price is quoted the moment an invoice is composed. Retiring one keeps it on the invoices that already carry it."
           actions={
             <SearchInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name or code"
-                         wrapperClassName="w-52" className="h-8 text-[0.8125rem]" />
+                         wrapperClassName="w-52" className="h-8 text-label" />
           }
         />
 
@@ -145,9 +147,9 @@ function Pricing() {
                   <TR key={p.id}>
                     <TD>
                       <span className="block text-ink">{p.name}</span>
-                      {p.note && <span className="block text-[0.75rem] text-ink-3">{p.note}</span>}
+                      {p.note && <span className="block text-caption text-ink-3">{p.note}</span>}
                     </TD>
-                    <TD className="tnum font-mono text-[0.8125rem] text-ink-2">{p.code}</TD>
+                    <TD className="tnum font-mono text-label text-ink-2">{p.code}</TD>
                     <TD className="text-ink-2">{KIND_LABEL[p.kind]}</TD>
                     <TD align="right">
                       <span className={`tnum font-mono ${p.price <= 0 ? "text-warn-text" : "text-ink"}`}>
@@ -177,12 +179,12 @@ function Pricing() {
       <DoctorFeesCard />
 
       <Card className="mt-5">
-        <CardHeader title="Where these are quoted" />
+        <CardHeader icon={<IconCard size={15} />} tone="ok" title="Where these are quoted" />
         <CardBody className="pt-1">
-          <ul className="space-y-2.5 text-[0.8125rem] leading-relaxed text-ink-2">
+          <ul className="space-y-2.5 text-label leading-relaxed text-ink-2">
             <li>
               <span className="font-medium text-ink">Consultation</span> — one row, code{" "}
-              <code className="font-mono text-[0.75rem]">CONSULTATION</code>. Every invoice composed from a
+              <code className="font-mono text-caption">CONSULTATION</code>. Every invoice composed from a
               visit starts with it, unless the visiting doctor has their own fee set below, which takes
               precedence.
             </li>
@@ -247,13 +249,13 @@ function DoctorFeesCard() {
   return (
     <Card className="mt-5 overflow-hidden">
       <CardHeader
-        title="Consultations by doctor"
-        subtitle={`Leave blank to use the clinic default${clinicDefault ? ` (${currency(clinicDefault.price)})` : ""}. A doctor's own fee overrides it wherever their visits are billed.`}
+        icon={<IconCard size={15} />} tone="ok" title="Consultations by doctor"
+        hint={`Leave blank to use the clinic default${clinicDefault ? ` (${currency(clinicDefault.price)})` : ""}. A doctor's own fee overrides it wherever their visits are billed.`}
       />
       {isPending ? (
-        <CardBody><p className="text-[0.8125rem] text-ink-2">Loading…</p></CardBody>
+        <CardBody><p className="text-label text-ink-2">Loading…</p></CardBody>
       ) : doctors.length === 0 ? (
-        <EmptyState compact title="No doctors yet" body="Add a clinician to set their consultation fee." />
+        <EmptyState compact icon={<IconStethoscope size={20} />} title="No doctors yet" body="Add a clinician to set their consultation fee." />
       ) : (
         <TableWrap>
           <Table>
@@ -267,7 +269,7 @@ function DoctorFeesCard() {
                   <TR key={d.id}>
                     <TD>
                       <span className="block text-ink">{d.name}</span>
-                      {d.speciality && <span className="block text-[0.75rem] text-ink-3">{d.speciality}</span>}
+                      {d.speciality && <span className="block text-caption text-ink-3">{d.speciality}</span>}
                     </TD>
                     <TD align="right">
                       <div className="flex items-center justify-end gap-2">
@@ -387,7 +389,7 @@ function PriceModal({
     >
       <div className="space-y-4">
         {error && (
-          <p className="rounded-[var(--r)] border border-critical-border bg-critical-soft px-3 py-2.5 text-[0.8125rem] text-critical-text">
+          <p className="rounded-[var(--r)] border border-critical-border bg-critical-soft px-3 py-2.5 text-label text-critical-text">
             {error}
           </p>
         )}
@@ -501,7 +503,7 @@ function ImportModal({ open, onClose }: { open: boolean; onClose: () => void }) 
             <NumberInput min={0} max={100} step="0.01" value={tax} onChange={setTax} />
           </Field>
         </div>
-        <p className="rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-[0.75rem] leading-relaxed text-ink-2">
+        <p className="rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-caption leading-relaxed text-ink-2">
           Only the tests your discipline can order are created, and any test that already has a price keeps
           it. Nothing here changes an invoice that has already been raised.
         </p>

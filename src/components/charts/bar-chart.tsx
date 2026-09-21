@@ -122,8 +122,8 @@ export function RankBar({
       {rows.map((r, i) => (
         <li key={r.label} className="group">
           <div className="mb-1 flex items-baseline justify-between gap-3">
-            <span className="truncate text-[0.8125rem] text-ink">{r.label}</span>
-            <span className="tnum shrink-0 font-mono text-[0.75rem] font-medium text-ink-2">
+            <span className="truncate text-label text-ink">{r.label}</span>
+            <span className="tnum shrink-0 font-mono text-caption font-medium text-ink-2">
               {format(r.value)}
               {r.hint && <span className="ml-1.5 font-sans text-ink-3">{r.hint}</span>}
             </span>

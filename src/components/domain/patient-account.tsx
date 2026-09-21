@@ -111,9 +111,9 @@ function CounterSummary({
   if (isPending) {
     return (
       <Card>
-        <CardHeader title="What is owed" />
+        <CardHeader icon={<IconCard size={15} />} tone="ok" title="What is owed" />
         <CardBody className="pt-1">
-          <p className="text-[0.8125rem] text-ink-3">Working out what is owed…</p>
+          <p className="text-label text-ink-3">Working out what is owed…</p>
         </CardBody>
       </Card>
     );
@@ -127,10 +127,10 @@ function CounterSummary({
   return (
     <Card>
       <CardHeader
-        title={settled ? "What is owed" : "Left to pay"}
+        icon={<IconCard size={15} />} tone="ok" title={settled ? "What is owed" : "Left to pay"}
         subtitle={account.patient_name ? `${account.patient_name} · ${account.patient_mrn}` : undefined}
         actions={
-          <span className={`tnum font-mono text-[1.0625rem] font-semibold ${settled ? "text-ok-text" : "text-ink"}`}>
+          <span className={`tnum font-mono text-title-sm font-semibold ${settled ? "text-ok-text" : "text-ink"}`}>
             {currency(account.total_due)}
           </span>
         }
@@ -165,7 +165,7 @@ function CounterSummary({
           only ever asks for the counters that still owe something. */}
       {collects && owing.length > 1 && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line-soft bg-surface-2 px-5 py-3.5">
-          <p className="text-[0.8125rem] text-ink-2">
+          <p className="text-label text-ink-2">
             {owing.map((d) => DEPARTMENT_LABEL[d].toLowerCase()).join(" + ")} ={" "}
             <span className="tnum font-mono font-medium text-ink">{currency(account.total_due)}</span>
           </p>
@@ -207,14 +207,14 @@ function CounterRow({
       }`}
     >
       <div className="min-w-0">
-        <p className={`flex items-center gap-1.5 text-[0.875rem] font-medium ${clear ? "text-ink-3" : "text-ink"}`}>
+        <p className={`flex items-center gap-1.5 text-body font-medium ${clear ? "text-ink-3" : "text-ink"}`}>
           {alreadyPaid && <IconCheck size={13} className="shrink-0 text-ok-text" />}
           {DEPARTMENT_LABEL[entry.department]}
         </p>
-        <p className="text-[0.75rem] text-ink-3">{detail}</p>
+        <p className="text-caption text-ink-3">{detail}</p>
       </div>
       <div className="flex items-center gap-3">
-        <span className={`tnum font-mono text-[0.9375rem] ${clear ? "text-ink-3" : "text-ink"}`}>
+        <span className={`tnum font-mono text-body ${clear ? "text-ink-3" : "text-ink"}`}>
           {currency(entry.due)}
         </span>
         {collects && (
@@ -236,12 +236,12 @@ function PatientInvoices({ patientId }: { patientId: Id }) {
   return (
     <Card className="overflow-hidden">
       <CardHeader
-        icon={<IconReceipt size={16} />}
+        tone="ok" icon={<IconReceipt size={16} />}
         title="Their bills"
         subtitle={`${pluralise(invoices.length, "invoice")} across every counter`}
       />
       {invoices.length === 0 ? (
-        <EmptyState compact title="Nothing billed yet" body="Charges appear above until they are put on an invoice." />
+        <EmptyState compact icon={<IconReceipt size={20} />} title="Nothing billed yet" body="Charges appear above until they are put on an invoice." />
       ) : (
         <TableWrap maxHeight="min(50vh, 32rem)">
           <Table>
@@ -274,7 +274,7 @@ function InvoiceRow({ invoice, onOpen }: { invoice: Invoice; onOpen: (href: stri
           href={`/billing/${invoice.id}`}
           variant="ghost"
           size="sm"
-          className="h-7 px-2 font-mono text-[0.8125rem]"
+          className="h-7 px-2 font-mono text-label"
         >
           {invoice.number}
         </ButtonLink>
@@ -284,7 +284,7 @@ function InvoiceRow({ invoice, onOpen }: { invoice: Invoice; onOpen: (href: stri
           {DEPARTMENT_LABEL[invoice.department]}
         </Badge>
       </TD>
-      <TD className="tnum font-mono text-[0.8125rem] text-ink-2">{formatDate(invoice.issued_at)}</TD>
+      <TD className="tnum font-mono text-label text-ink-2">{formatDate(invoice.issued_at)}</TD>
       <TD align="right" className="tnum font-mono">{currency(totals.total)}</TD>
       <TD align="right">
         <span className={`tnum font-mono ${totals.balance > 0.005 ? "text-warn-text" : "text-ok-text"}`}>
@@ -321,7 +321,7 @@ export function PatientAccountSummary({
 
   if (shown.length === 0) {
     return (
-      <p className="flex items-center gap-2 rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-[0.8125rem] text-ink-2">
+      <p className="flex items-center gap-2 rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-label text-ink-2">
         <IconCheck size={14} className="shrink-0 text-ok-text" />
         {only
           ? `Nothing owing at the ${DEPARTMENT_LABEL[only].toLowerCase()} counter.`
@@ -339,10 +339,10 @@ export function PatientAccountSummary({
             className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--r)] border border-warn-border bg-warn-soft px-3 py-2.5"
           >
             <div className="min-w-0">
-              <p className="text-[0.8438rem] font-medium text-warn-text">
+              <p className="text-label font-medium text-warn-text">
                 {currency(entry.due)} owing at the {DEPARTMENT_LABEL[entry.department].toLowerCase()} counter
               </p>
-              <p className="text-[0.75rem] text-warn-text/80">
+              <p className="text-caption text-warn-text/80">
                 {entry.unbilled_total > 0.005 && `${currency(entry.unbilled_total)} not billed yet`}
                 {entry.unbilled_total > 0.005 && entry.outstanding > 0.005 && " · "}
                 {entry.outstanding > 0.005 && `${currency(entry.outstanding)} invoiced`}

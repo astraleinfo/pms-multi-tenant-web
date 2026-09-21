@@ -27,7 +27,8 @@ import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/tabl
 import { RankBar } from "@/components/charts/bar-chart";
 import { FeatureGate, RoleGate } from "@/components/domain/gates";
 import {
-  IconAlert, IconArrowDown, IconArrowUp, IconBox, IconClock, IconEdit, IconPlus,
+  IconAlert, IconArrowDown, IconArrowUp, IconBox, IconCheck, IconClock, IconEdit, IconList,
+  IconPlus
 } from "@/components/ui/icons";
 
 const itemCol = columnHelperFor<InventoryItem>();
@@ -39,13 +40,13 @@ const stockColumns = itemCol.columns([
     cell: ({ row }) => (
       <>
         <span className="block font-medium text-ink">{row.original.name}</span>
-        <span className="block text-[0.75rem] text-ink-3">{row.original.form} · {row.original.strength}</span>
+        <span className="block text-caption text-ink-3">{row.original.form} · {row.original.strength}</span>
       </>
     ),
   }),
   itemCol.accessor("sku", {
     header: "SKU",
-    cell: ({ getValue }) => <span className="tnum font-mono text-[0.75rem] text-ink-2">{getValue()}</span>,
+    cell: ({ getValue }) => <span className="tnum font-mono text-caption text-ink-2">{getValue()}</span>,
   }),
   itemCol.accessor((i) => i.id, {
     id: "level", header: "Level", enableSorting: false, meta: { width: 190 },
@@ -56,7 +57,7 @@ const stockColumns = itemCol.columns([
     cell: ({ row }) => (
       <>
         <span className="tnum block font-mono">{currency(row.original.unit_price)}</span>
-        <span className="block text-[0.6875rem] text-ink-3">{priceBasis(row.original)}</span>
+        <span className="block text-micro text-ink-3">{priceBasis(row.original)}</span>
       </>
     ),
   }),
@@ -91,7 +92,7 @@ const ledgerColumns = txCol.columns([
   txCol.accessor("at", {
     header: "When",
     cell: ({ getValue }) => (
-      <span className="tnum whitespace-nowrap font-mono text-[0.8125rem] text-ink-2">{getValue()}</span>
+      <span className="tnum whitespace-nowrap font-mono text-label text-ink-2">{getValue()}</span>
     ),
   }),
   txCol.accessor((x) => x.item_id, {
@@ -104,11 +105,11 @@ const ledgerColumns = txCol.columns([
   }),
   txCol.accessor("batch_no", {
     header: "Batch",
-    cell: ({ getValue }) => <span className="tnum font-mono text-[0.8125rem] text-ink-2">{getValue()}</span>,
+    cell: ({ getValue }) => <span className="tnum font-mono text-label text-ink-2">{getValue()}</span>,
   }),
   txCol.accessor((x) => (x.ref_type ? `${x.ref_type}:${x.ref_id ?? "—"}` : "—"), {
     id: "reference", header: "Reference",
-    cell: ({ getValue }) => <span className="tnum font-mono text-[0.75rem] text-ink-3">{getValue()}</span>,
+    cell: ({ getValue }) => <span className="tnum font-mono text-caption text-ink-3">{getValue()}</span>,
   }),
   txCol.accessor("qty", {
     header: "Quantity", meta: { align: "right" },
@@ -130,11 +131,13 @@ function StockLevelCell({ item }: { item: InventoryItem }) {
     <>
       <div className="flex items-center gap-2">
         <Meter value={level} max={Math.max(item.reorder_level * 2, level)} tone={below ? "warn" : "ok"} className="w-24" />
-        <span className={`tnum font-mono text-[0.8125rem] ${below ? "text-warn-text" : "text-ink"}`}>
+        {/* the figure and its unit are one token — wrapping "345" onto one
+            line and "cap" onto the next reads as two facts, not one */}
+        <span className={`tnum whitespace-nowrap font-mono text-label ${below ? "text-warn-text" : "text-ink"}`}>
           {level} {item.unit}
         </span>
       </div>
-      <span className="mt-0.5 block text-[0.6875rem] text-ink-3">reorder at {item.reorder_level}</span>
+      <span className="mt-0.5 block text-micro text-ink-3">reorder at {item.reorder_level}</span>
     </>
   );
 }
@@ -145,7 +148,7 @@ function LedgerItemCell({ tx }: { tx: InventoryTransaction }) {
   return (
     <>
       <span className="block text-ink">{item?.name ?? tx.item_id}</span>
-      {tx.note && <span className="block text-[0.75rem] text-ink-3">{tx.note}</span>}
+      {tx.note && <span className="block text-caption text-ink-3">{tx.note}</span>}
     </>
   );
 }
@@ -239,9 +242,9 @@ function Inventory() {
         value={tab}
         onChange={setTab}
         tabs={[
-          { value: "stock", label: "Stock", count: items.length },
-          { value: "ledger", label: "Ledger", count: tx.length },
-          { value: "expiry", label: "Expiry watch", count: expiring.length },
+          { value: "stock", label: "Stock", icon: <IconBox size={15} />, count: items.length },
+          { value: "ledger", label: "Ledger", icon: <IconList size={15} />, count: tx.length },
+          { value: "expiry", label: "Expiry watch", icon: <IconClock size={15} />, count: expiring.length },
         ]}
       />
 
@@ -249,11 +252,11 @@ function Inventory() {
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
           <Card className="overflow-hidden">
             <CardHeader
-              title="On hand"
-              subtitle="Computed from the ledger every time it is read."
+              icon={<IconBox size={15} />} tone="warn" title="On hand"
+              hint="Computed from the ledger every time it is read."
               actions={
                 <SearchInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Item or SKU"
-                             wrapperClassName="w-48" className="h-8 text-[0.8125rem]" />
+                             wrapperClassName="w-48" className="h-8 text-label" />
               }
             />
             <DataTable
@@ -271,28 +274,28 @@ function Inventory() {
 
           <div className="space-y-5">
             <Card>
-              <CardHeader title="Most consumed" subtitle="Every negative movement, by item." />
+              <CardHeader icon={<IconBox size={15} />} tone="warn" title="Most consumed" hint="Every negative movement, by item." />
               <CardBody className="pt-1">
                 {consumption.length ? (
                   <RankBar rows={consumption} format={(n) => `${n}`} />
                 ) : (
-                  <EmptyState compact title="Nothing has moved out yet" />
+                  <EmptyState compact icon={<IconBox size={20} />} title="Nothing has moved out yet" />
                 )}
               </CardBody>
             </Card>
 
             <Card>
-              <CardHeader icon={<IconAlert size={16} />} title="Below reorder level" />
+              <CardHeader tone="warn" icon={<IconAlert size={16} />} title="Below reorder level" />
               <CardBody className="pt-0">
                 {low.length === 0 ? (
-                  <EmptyState compact title="Everything is above its reorder level" />
+                  <EmptyState compact icon={<IconCheck size={20} />} title="Everything is above its reorder level" />
                 ) : (
                   <ul className="divide-y divide-line-soft">
                     {low.map((r) => (
                       <li key={r.item.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
                         <div className="min-w-0">
-                          <p className="truncate text-[0.8438rem] font-medium text-ink">{r.item.name}</p>
-                          <p className="text-[0.75rem] text-ink-3">reorder at {r.item.reorder_level} {r.item.unit}</p>
+                          <p className="truncate text-label font-medium text-ink">{r.item.name}</p>
+                          <p className="text-caption text-ink-3">reorder at {r.item.reorder_level} {r.item.unit}</p>
                         </div>
                         <Badge tone="warn" size="sm">{r.level} left</Badge>
                       </li>
@@ -307,7 +310,7 @@ function Inventory() {
 
       {tab === "ledger" && (
         <Card className="overflow-hidden">
-          <CardHeader title="Every movement" subtitle="Append-only. Nothing here is edited; corrections are new adjustments." />
+          <CardHeader icon={<IconBox size={15} />} tone="warn" title="Every movement" hint="Append-only. Nothing here is edited; corrections are new adjustments." />
           <DataTable
             columns={ledgerColumns}
             data={tx}
@@ -316,14 +319,14 @@ function Inventory() {
             pageSize={15}
             initialSorting={[{ id: "at", desc: true }]}
             minWidth="56rem"
-            empty={<EmptyState title="Nothing has moved yet" />}
+            empty={<EmptyState icon={<IconBox size={26} />} title="Nothing has moved yet" />}
           />
         </Card>
       )}
 
       {tab === "expiry" && (
         <Card className="overflow-hidden">
-          <CardHeader title="Expiry watch" subtitle={`Batches inside ${config.expiry_alert_days} days, soonest first.`} />
+          <CardHeader icon={<IconClock size={15} />} tone="warn" title="Expiry watch" hint={`Batches inside ${config.expiry_alert_days} days, soonest first.`} />
           {expiring.length === 0 ? (
             <EmptyState icon={<IconClock size={20} />} title="Nothing expiring soon" />
           ) : (
@@ -336,8 +339,8 @@ function Inventory() {
                   {expiring.map((b) => (
                     <TR key={`${b.item_id}-${b.batch_no}`}>
                       <TD>{b.item.name}</TD>
-                      <TD className="tnum font-mono text-[0.8125rem] text-ink-2">{b.batch_no}</TD>
-                      <TD className="tnum font-mono text-[0.8125rem]">{formatDate(b.expiry, "long")}</TD>
+                      <TD className="tnum font-mono text-label text-ink-2">{b.batch_no}</TD>
+                      <TD className="tnum font-mono text-label">{formatDate(b.expiry, "long")}</TD>
                       <TD align="right" className="tnum font-mono">{b.qty} {b.item.unit}</TD>
                       <TD align="right">
                         <Badge tone={b.daysLeft <= 0 ? "critical" : b.daysLeft <= 45 ? "warn" : "neutral"} size="sm" dot={false}>
@@ -381,7 +384,7 @@ function Inventory() {
               <IconEdit size={14} /> Edit item
             </Button>
 
-            <dl className="grid grid-cols-2 gap-4">
+            <dl className="grid grid-cols-2 gap-x-4">
               <KV label="On hand" value={<span className="tnum font-mono">{stockLevel(db, t, detail.id)} {detail.unit}</span>} />
               <KV label="Reorder level" value={<span className="tnum font-mono">{detail.reorder_level}</span>} />
               <KV label="Unit price" value={currency(detail.unit_price)} />
@@ -395,13 +398,13 @@ function Inventory() {
             </dl>
 
             {detail.description && (
-              <p className="mt-2 text-[0.8125rem] leading-snug text-ink-2">{detail.description}</p>
+              <p className="mt-2 text-label leading-snug text-ink-2">{detail.description}</p>
             )}
 
             <div>
               <Legend>Batches</Legend>
               {batchesFor(db, detail.id).length === 0 && (
-                <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-4 text-center text-[0.8125rem] text-ink-3">
+                <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-4 text-center text-label text-ink-3">
                   No batch yet — record a purchase to put stock on the shelf.
                 </p>
               )}
@@ -409,10 +412,10 @@ function Inventory() {
                 {batchesFor(db, detail.id).map((b) => (
                   <li key={b.batch_no} className="flex items-center justify-between gap-3 rounded-[var(--r)] border border-line px-3 py-2.5">
                     <div>
-                      <p className="tnum font-mono text-[0.8125rem] font-medium text-ink">{b.batch_no}</p>
-                      <p className="text-[0.75rem] text-ink-3">expires {formatDate(b.expiry, "long")}</p>
+                      <p className="tnum font-mono text-label font-medium text-ink">{b.batch_no}</p>
+                      <p className="text-caption text-ink-3">expires {formatDate(b.expiry, "long")}</p>
                     </div>
-                    <span className="tnum font-mono text-[0.8125rem] text-ink">{b.qty} {detail.unit}</span>
+                    <span className="tnum font-mono text-label text-ink">{b.qty} {detail.unit}</span>
                   </li>
                 ))}
               </ul>
@@ -421,14 +424,14 @@ function Inventory() {
             <div>
               <Legend>Movements</Legend>
               {tx.filter((x) => x.item_id === detail.id).length === 0 && (
-                <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-4 text-center text-[0.8125rem] text-ink-3">
+                <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-4 text-center text-label text-ink-3">
                   Nothing has moved in or out of this line yet.
                 </p>
               )}
               <ul className="space-y-1.5">
                 {tx.filter((x) => x.item_id === detail.id).map((x) => (
-                  <li key={x.id} className="flex items-center justify-between gap-3 text-[0.8125rem]">
-                    <span className="tnum font-mono text-[0.75rem] text-ink-3">{x.at}</span>
+                  <li key={x.id} className="flex items-center justify-between gap-3 text-label">
+                    <span className="tnum font-mono text-caption text-ink-3">{x.at}</span>
                     <span className="min-w-0 flex-1 truncate text-ink-2">{TX_LABEL[x.type]}</span>
                     <span className={`tnum font-mono ${x.qty >= 0 ? "text-ok-text" : "text-critical-text"}`}>
                       {x.qty > 0 ? `+${x.qty}` : x.qty}
@@ -512,9 +515,9 @@ function PricingFields({
         )}
       </div>
 
-      <p className="flex items-center justify-between gap-3 rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-[0.8125rem]">
+      <p className="flex items-center justify-between gap-3 rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-label">
         <span className="text-ink-2">Sells at</span>
-        <span className="tnum font-mono text-[0.9375rem] font-semibold text-ink">{currency(preview)}</span>
+        <span className="tnum font-mono text-body font-semibold text-ink">{currency(preview)}</span>
       </p>
     </div>
   );
@@ -688,7 +691,7 @@ function ItemModal({
     >
       <div className="space-y-4">
         {error && (
-          <p className="rounded-[var(--r)] border border-critical-border bg-critical-soft px-3 py-2.5 text-[0.8125rem] text-critical-text">
+          <p className="rounded-[var(--r)] border border-critical-border bg-critical-soft px-3 py-2.5 text-label text-critical-text">
             {error}
           </p>
         )}
@@ -760,8 +763,8 @@ function ItemModal({
         {!item && (
           <div className="space-y-4 rounded-[var(--r)] border border-line bg-surface-2 p-3">
             <div>
-              <p className="text-[0.8438rem] font-medium text-ink">Opening stock</p>
-              <p className="mt-0.5 text-[0.75rem] leading-relaxed text-ink-3">
+              <p className="text-label font-medium text-ink">Opening stock</p>
+              <p className="mt-0.5 text-caption leading-relaxed text-ink-3">
                 How many you have right now. This is written as the line's first purchase, so it shows in
                 the ledger like every other movement. Leave it at zero and add stock later with
                 Record movement.
@@ -957,7 +960,7 @@ function MovementModal({ open, onClose }: { open: boolean; onClose: () => void }
           )}
         </div>
 
-        <p className="rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-[0.75rem] leading-relaxed text-ink-2">
+        <p className="rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-caption leading-relaxed text-ink-2">
           Dispense is not in this list on purpose — those rows are written by the pharmacy when medicine is
           handed over, so the ledger and the prescription can never disagree.
         </p>

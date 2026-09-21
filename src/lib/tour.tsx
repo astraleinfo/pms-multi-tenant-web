@@ -106,7 +106,7 @@ export function buildTour(ctx: TourContext): TourStep[] {
       title: "Find anyone, from anywhere",
       body: (
         <>
-          <kbd className="rounded border border-line-strong bg-surface-2 px-1 font-mono text-[0.6875rem]">⌘K</kbd>{" "}
+          <kbd className="rounded border border-line-strong bg-surface-2 px-1 font-mono text-micro">⌘K</kbd>{" "}
           searches patients and jumps between modules. Patient search runs in the database, so it is the same speed
           on a register of fifty as on one of fifty thousand.
         </>

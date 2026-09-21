@@ -36,8 +36,8 @@ const prescriptionColumns = col.columns([
     header: "Written",
     cell: ({ getValue }) => (
       <>
-        <span className="tnum block font-mono text-[0.8125rem] text-ink">{formatDate(getValue().slice(0, 10))}</span>
-        <span className="tnum block font-mono text-[0.75rem] text-ink-3">{getValue().slice(11)}</span>
+        <span className="tnum block font-mono text-label text-ink">{formatDate(getValue().slice(0, 10))}</span>
+        <span className="tnum block font-mono text-caption text-ink-3">{getValue().slice(11)}</span>
       </>
     ),
   }),
@@ -55,7 +55,7 @@ const prescriptionColumns = col.columns([
     cell: ({ row, getValue }) => (
       <>
         <span className="block max-w-[280px] truncate text-ink">{getValue()}</span>
-        <span className="block text-[0.75rem] text-ink-3">{pluralise(row.original.items.length, "line")}</span>
+        <span className="block text-caption text-ink-3">{pluralise(row.original.items.length, "line")}</span>
       </>
     ),
   }),
@@ -76,7 +76,7 @@ const prescriptionColumns = col.columns([
       return (
         <div className="flex items-center gap-2">
           <Meter value={done} max={total} tone={done >= total ? "ok" : done > 0 ? "info" : "warn"} className="w-20" />
-          <span className="tnum font-mono text-[0.75rem] text-ink-3">{done}/{total}</span>
+          <span className="tnum font-mono text-caption text-ink-3">{done}/{total}</span>
         </div>
       );
     },
@@ -167,8 +167,8 @@ function Prescriptions() {
         description="Written from the consultation and stored once. The pharmacy reads these rows directly rather than keeping a copy — which is why a clinic without a pharmacy still prescribes normally."
         meta={
           <>
-            <span className="text-[0.8125rem] text-ink-2">{pluralise(counts.all, "prescription")}</span>
-            <span className="text-[0.8125rem] text-ink-2">
+            <span className="text-label text-ink-2">{pluralise(counts.all, "prescription")}</span>
+            <span className="text-label text-ink-2">
               {pluralise(total, "match")} on this filter
             </span>
           </>
@@ -241,8 +241,8 @@ function Prescriptions() {
               <AllergyFlag patient={patient} />
             </div>
 
-            <dl className="grid grid-cols-2 gap-4">
-              <KV label="Record" value={<span className="tnum font-mono text-[0.8125rem]">{patient.mrn}</span>} />
+            <dl className="grid grid-cols-2 gap-x-4">
+              <KV label="Record" value={<span className="tnum font-mono text-label">{patient.mrn}</span>} />
               <KV label="Encounter" value={
                 <ButtonLink href={`/consultations/${open.encounter_id}`} variant="ghost" size="sm" className="h-6 px-1.5">
                   Open encounter
@@ -251,26 +251,26 @@ function Prescriptions() {
             </dl>
 
             <div>
-              <p className="mb-2 text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-3">Medicines</p>
+              <p className="mb-2 text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">Medicines</p>
               <ul className="space-y-2.5">
                 {open.items.map((it) => (
                   <li key={it.id} className="rounded-[var(--r)] border border-line p-3">
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <p className="text-[0.9375rem] font-medium text-ink">
-                        {it.medicine} <span className="text-[0.8125rem] font-normal text-ink-3">{it.strength}</span>
+                      <p className="text-body font-medium text-ink">
+                        {it.medicine} <span className="text-label font-normal text-ink-3">{it.strength}</span>
                       </p>
                       <StatusPill kind="prescription" status={it.status} size="sm" dot={false} />
                     </div>
-                    <p className="mt-1 text-[0.8438rem] text-ink-2">
+                    <p className="mt-1 text-label text-ink-2">
                       {it.dosage} · {it.frequency} · {it.duration}
                     </p>
                     {it.instructions && (
-                      <p className="mt-1 text-[0.75rem] italic text-ink-3">{it.instructions}</p>
+                      <p className="mt-1 text-caption italic text-ink-3">{it.instructions}</p>
                     )}
                     <div className="mt-2.5 flex items-center gap-3">
                       <Meter value={it.dispensed_qty} max={it.qty}
                              tone={it.dispensed_qty >= it.qty ? "ok" : it.dispensed_qty > 0 ? "info" : "warn"} className="flex-1" />
-                      <span className="tnum shrink-0 font-mono text-[0.75rem] text-ink-2">
+                      <span className="tnum shrink-0 font-mono text-caption text-ink-2">
                         {it.dispensed_qty} of {it.qty}
                       </span>
                     </div>

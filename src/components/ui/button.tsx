@@ -7,29 +7,40 @@ import { cn } from "@/lib/cn";
 type Variant = "primary" | "secondary" | "ghost" | "quiet" | "danger";
 type Size = "sm" | "md" | "lg" | "icon" | "icon-sm";
 
+/**
+ * A disabled button is repainted, not faded.
+ *
+ * `opacity-45` on a filled button drags the label and its ground toward the
+ * page together: white on blue at 45% lands near 2.5:1, which is a shape
+ * where a word used to be. Real disabled colours keep it legible at ~3.3:1
+ * while still reading, unmistakably, as "not now".
+ */
 const base =
   "relative inline-flex items-center justify-center gap-2 font-medium whitespace-nowrap " +
   "transition-[background-color,color,box-shadow,border-color,transform] duration-150 " +
-  "ease-[var(--ease-brand)] select-none disabled:opacity-45 disabled:pointer-events-none " +
-  "active:translate-y-[0.5px]";
+  "ease-[var(--ease-brand)] select-none active:translate-y-[0.5px] " +
+  "disabled:pointer-events-none disabled:bg-disabled-surface disabled:text-disabled-ink " +
+  "disabled:border-disabled-border disabled:shadow-none";
 
 const variants: Record<Variant, string> = {
   primary:
     "bg-accent text-accent-ink shadow-e1 hover:bg-accent-hover hover:shadow-e2",
   secondary:
-    "bg-surface text-ink border border-line-strong shadow-e1 hover:bg-surface-2 hover:border-ink-3/40",
+    "bg-surface text-ink border border-line-strong shadow-e1 hover:bg-hover hover:border-ink-3/40",
   ghost:
-    "bg-transparent text-ink-2 hover:bg-surface-3 hover:text-ink",
+    "bg-transparent text-ink-2 hover:bg-hover hover:text-ink",
   quiet:
-    "bg-surface-3 text-ink hover:bg-surface-inset",
+    "bg-surface-3 text-ink hover:bg-hover-strong",
+  /* `text-ink-on`, not `text-white`: --critical inverts between themes, and a
+     white label on the lighter night-shift red is 2.9:1. */
   danger:
-    "bg-critical text-white shadow-e1 hover:brightness-95",
+    "bg-critical text-ink-on shadow-e1 hover:brightness-95",
 };
 
 const sizes: Record<Size, string> = {
-  sm: "h-8 px-3 text-[0.8125rem] rounded-[var(--r-sm)]",
-  md: "h-9.5 px-3.5 text-[0.8438rem] rounded-[var(--r)]",
-  lg: "h-11 px-5 text-[0.9063rem] rounded-[var(--r)]",
+  sm: "h-8 px-3 text-label rounded-[var(--r-sm)]",
+  md: "h-9.5 px-3.5 text-label rounded-[var(--r)]",
+  lg: "h-11 px-5 text-body rounded-[var(--r)]",
   icon: "h-9.5 w-9.5 rounded-[var(--r)]",
   "icon-sm": "h-8 w-8 rounded-[var(--r-sm)]",
 };
@@ -92,7 +103,7 @@ export function Segmented<T extends string | number>({
             onClick={() => onChange(o.value)}
             className={cn(
               "rounded-[calc(var(--r)-3px)] font-medium transition-all duration-150 ease-[var(--ease-brand)]",
-              size === "sm" ? "h-7 px-2.5 text-[0.75rem]" : "h-8 px-3 text-[0.8125rem]",
+              size === "sm" ? "h-7 px-2.5 text-caption" : "h-8 px-3 text-label",
               on ? "bg-surface text-ink shadow-e1" : "text-ink-2 hover:text-ink",
             )}
           >

@@ -145,7 +145,7 @@ export function AppointmentModal({
         </div>
 
         <div>
-          <p className="mb-2 text-[0.8125rem] font-medium text-ink">Slot</p>
+          <p className="mb-2 text-label font-medium text-ink">Slot</p>
           <div className="flex flex-wrap gap-1.5">
             {SLOT_TIMES.map((t) => {
               const busy = taken.has(t);
@@ -156,7 +156,7 @@ export function AppointmentModal({
                   type="button"
                   onClick={() => setTime(t)}
                   className={[
-                    "tnum rounded-[var(--r-sm)] border px-2.5 py-1.5 font-mono text-[0.75rem] transition-all duration-150",
+                    "tnum rounded-[var(--r-sm)] border px-2.5 py-1.5 font-mono text-caption transition-all duration-150",
                     /* busy survives selection: picking a taken slot must still look taken */
                     busy
                       ? on
@@ -197,12 +197,12 @@ export function AppointmentModal({
 
         {conflicts.length > 0 && (
           <div className="rounded-[var(--r)] border border-critical-border bg-critical-soft p-3">
-            <p className="flex items-center gap-2 text-[0.8125rem] font-semibold text-critical-text">
+            <p className="flex items-center gap-2 text-label font-semibold text-critical-text">
               <IconAlert size={15} /> That slot is already taken
             </p>
             <ul className="mt-2 space-y-1">
               {conflicts.map((c) => (
-                <li key={c.id} className="tnum font-mono text-[0.75rem] text-critical-text">
+                <li key={c.id} className="tnum font-mono text-caption text-critical-text">
                   {formatTime12(c.time)}–{formatTime12(addMinutes(c.time, c.duration_min))} · {c.reason}
                 </li>
               ))}
@@ -282,8 +282,8 @@ export function WalkInModal({ open, onClose }: { open: boolean; onClose: () => v
             ]}
           />
         </Field>
-        <p className="rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-[0.75rem] leading-relaxed text-ink-2">
-          Walk-ins have no <code className="font-mono text-[0.6875rem]">appointment_id</code>. Everything downstream —
+        <p className="rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-caption leading-relaxed text-ink-2">
+          Walk-ins have no <code className="font-mono text-micro">appointment_id</code>. Everything downstream —
           consultation, prescription, billing — behaves identically either way.
         </p>
       </div>

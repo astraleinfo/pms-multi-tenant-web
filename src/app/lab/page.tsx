@@ -22,7 +22,7 @@ import { Input, Select } from "@/components/ui/field";
 import { Tabs } from "@/components/ui/tabs";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { FeatureGate, RoleGate } from "@/components/domain/gates";
-import { StatusPill } from "@/components/domain/status";
+import { LabFlag, StatusPill } from "@/components/domain/status";
 import { PatientChip, PatientRef } from "@/components/domain/patient";
 import {
   IconAlert, IconCard, IconCheck, IconDownload, IconFlask, IconPlay, IconPlus, IconShield,
@@ -62,8 +62,8 @@ const labColumns = col.columns([
     header: "Ordered",
     cell: ({ getValue }) => (
       <>
-        <span className="tnum block font-mono text-[0.8125rem] text-ink">{formatDate(getValue().slice(0, 10))}</span>
-        <span className="tnum block font-mono text-[0.75rem] text-ink-3">{getValue().slice(11)}</span>
+        <span className="tnum block font-mono text-label text-ink">{formatDate(getValue().slice(0, 10))}</span>
+        <span className="tnum block font-mono text-caption text-ink-3">{getValue().slice(11)}</span>
       </>
     ),
   }),
@@ -76,7 +76,7 @@ const labColumns = col.columns([
     cell: ({ row }) => (
       <>
         <span className="block text-ink">{row.original.test_name}</span>
-        <span className="tnum block font-mono text-[0.75rem] text-ink-3">{row.original.test_code}</span>
+        <span className="tnum block font-mono text-caption text-ink-3">{row.original.test_code}</span>
       </>
     ),
   }),
@@ -162,7 +162,7 @@ function Lab() {
         description="Orders are raised from an encounter and travel through one state machine. Results stay invisible to the patient record until a technician verifies them."
         meta={
           <>
-            <span className="text-[0.8125rem] text-ink-2">{pluralise(stats.total, "order")}</span>
+            <span className="text-label text-ink-2">{pluralise(stats.total, "order")}</span>
             {stats.abnormal > 0 && (
               <Badge tone="critical" size="sm"><IconAlert size={11} /> {stats.abnormal} with flagged analytes</Badge>
             )}
@@ -293,10 +293,10 @@ function OrderDrawer({ order: opened, onClose }: { order: LabOrder; onClose: () 
       <div className="space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <StatusPill kind="lab" status={order.status} />
-          <span className="tnum font-mono text-[0.75rem] text-ink-3">{order.test_code} · {order.panel}</span>
+          <span className="tnum font-mono text-caption text-ink-3">{order.test_code} · {order.panel}</span>
         </div>
 
-        <dl className="grid grid-cols-2 gap-4">
+        <dl className="grid grid-cols-2 gap-x-4">
           <KV label="Ordered" value={order.ordered_at} mono />
           <KV label="Requested by" value={nameOf(order.ordered_by)} />
           {order.resulted_at && <KV label="Resulted" value={order.resulted_at} mono />}
@@ -305,8 +305,8 @@ function OrderDrawer({ order: opened, onClose }: { order: LabOrder; onClose: () 
 
         {order.note && (
           <div className="rounded-[var(--r)] border border-line bg-surface-2 p-3">
-            <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-3">Clinical question</p>
-            <p className="mt-1 text-[0.875rem] leading-relaxed text-ink">{order.note}</p>
+            <p className="text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">Clinical question</p>
+            <p className="mt-1 text-body leading-relaxed text-ink">{order.note}</p>
           </div>
         )}
 
@@ -314,7 +314,7 @@ function OrderDrawer({ order: opened, onClose }: { order: LabOrder; onClose: () 
           <Legend>Results</Legend>
 
           {order.status === "ordered" && (
-            <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-6 text-center text-[0.8125rem] text-ink-3">
+            <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-6 text-center text-label text-ink-3">
               Accept the sample before entering results.
             </p>
           )}
@@ -332,9 +332,7 @@ function OrderDrawer({ order: opened, onClose }: { order: LabOrder; onClose: () 
                       <TD className="tnum font-mono">{r.value} {r.unit}</TD>
                       <TD className="text-ink-3">{r.reference}</TD>
                       <TD align="right">
-                        <Badge tone={r.flag === "normal" ? "ok" : r.flag === "high" ? "critical" : "warn"} size="sm">
-                          {r.flag}
-                        </Badge>
+                        <LabFlag flag={r.flag} />
                       </TD>
                     </TR>
                   ))}
@@ -378,9 +376,9 @@ function OrderDrawer({ order: opened, onClose }: { order: LabOrder; onClose: () 
           department="lab"
         />
 
-        <p className="flex items-start gap-2 rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-[0.75rem] leading-relaxed text-ink-2">
+        <p className="flex items-start gap-2 rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-caption leading-relaxed text-ink-2">
           <IconShield size={14} className="mt-px shrink-0 text-ink-3" />
-          Verification is the gate: <code className="font-mono text-[0.6875rem]">GET /encounters/&#123;id&#125;/lab-results</code> returns
+          Verification is the gate: <code className="font-mono text-micro">GET /encounters/&#123;id&#125;/lab-results</code> returns
           verified rows only, so a saved-but-unsigned result never reaches the clinician's record view.
         </p>
       </div>
@@ -451,7 +449,7 @@ function Attachments({ order }: { order: LabOrder }) {
       <Legend>Reports and scans</Legend>
 
       {files.length === 0 && !isPending && (
-        <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-5 text-center text-[0.8125rem] text-ink-3">
+        <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-5 text-center text-label text-ink-3">
           {locked
             ? "Nothing was filed against this order."
             : "No file yet — attach the scan, the printout or the signed report."}
@@ -466,8 +464,8 @@ function Attachments({ order }: { order: LabOrder }) {
               className="flex items-center justify-between gap-3 rounded-[var(--r)] border border-line px-3 py-2.5"
             >
               <div className="min-w-0">
-                <p className="truncate text-[0.8438rem] font-medium text-ink">{file.filename}</p>
-                <p className="text-[0.75rem] text-ink-3">
+                <p className="truncate text-label font-medium text-ink">{file.filename}</p>
+                <p className="text-caption text-ink-3">
                   {fileSize(file.size_bytes)} · {file.uploaded_at}
                   {file.note ? ` · ${file.note}` : ""}
                 </p>
@@ -509,7 +507,7 @@ function Attachments({ order }: { order: LabOrder }) {
           >
             <IconPlus size={14} /> {busy ? "Uploading…" : "Upload a report"}
           </Button>
-          <p className="mt-1.5 text-[0.75rem] text-ink-3">
+          <p className="mt-1.5 text-caption text-ink-3">
             PDF, image, CSV or plain text, up to 15 MB. Files are released with the order when it is
             verified, and cannot be changed afterwards.
           </p>

@@ -109,7 +109,7 @@ function ModuleDetail({ feature }: { feature: Feature }) {
             ) : (
               <Badge tone="neutral" size="sm"><IconLock size={11} /> Not enabled for {tenant.name}</Badge>
             )}
-            <span className="tnum font-mono text-[0.75rem] text-ink-3">
+            <span className="tnum font-mono text-caption text-ink-3">
               {feature.is_core ? "included" : `${currency(feature.price_monthly)}/mo`}
             </span>
           </>
@@ -146,29 +146,29 @@ function ModuleDetail({ feature }: { feature: Feature }) {
         <div className="space-y-5">
           <Card>
             <CardHeader
-              icon={<IconCheck size={16} />}
+              tone="ok" icon={<IconCheck size={16} />}
               title={`What ${feature.name} does`}
               /* the nav items it lights up, minus the one that shares its name */
               subtitle={feature.unlocks.filter((u) => u !== feature.name).join(" · ") || undefined}
             />
             <CardBody className="pt-0">
-              <p className="max-w-2xl text-[0.9375rem] leading-relaxed text-ink">{feature.overview}</p>
+              <p className="max-w-2xl text-body leading-relaxed text-ink">{feature.overview}</p>
 
-              <p className="mt-6 text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-3">
+              <p className="mt-6 text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">
                 How it works
               </p>
               <ol className="mt-3 space-y-4">
                 {feature.how_it_works.map((step, i) => (
                   <li key={step.title} className="flex gap-3.5">
                     <span
-                      className="tnum mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[var(--r-sm)] border border-line-strong bg-surface-2 font-mono text-[0.75rem] font-medium text-ink-2"
+                      className="tnum mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[var(--r-sm)] border border-line-strong bg-surface-2 font-mono text-caption font-medium text-ink-2"
                       aria-hidden
                     >
                       {i + 1}
                     </span>
                     <div className="min-w-0">
-                      <p className="text-[0.875rem] font-semibold text-ink">{step.title}</p>
-                      <p className="mt-0.5 text-[0.875rem] leading-relaxed text-ink-2">{step.body}</p>
+                      <p className="text-body font-semibold text-ink">{step.title}</p>
+                      <p className="mt-0.5 text-body leading-relaxed text-ink-2">{step.body}</p>
                     </div>
                   </li>
                 ))}
@@ -229,9 +229,9 @@ function DemoVideo({ feature, walkthrough }: { feature: Feature; walkthrough: Re
   return (
     <Card>
       <CardHeader
-        icon={<IconPlay size={16} />}
+        tone="violet" icon={<IconPlay size={16} />}
         title="Demo video"
-        subtitle={`Three minutes of ${feature.name.toLowerCase()}, as it runs in a clinic.`}
+        hint={`Three minutes of ${feature.name.toLowerCase()}, as it runs in a clinic.`}
       />
       <CardBody className="pt-0">
         <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-[var(--r)] border border-dashed border-line-strong bg-surface-inset px-6 text-center">
@@ -239,21 +239,21 @@ function DemoVideo({ feature, walkthrough }: { feature: Feature; walkthrough: Re
             <IconPlay size={20} />
           </span>
           <div>
-            <p className="text-[0.875rem] font-semibold text-ink">The recording is being cut</p>
-            <p className="mx-auto mt-1 max-w-sm text-[0.8125rem] leading-relaxed text-ink-2">
+            <p className="text-body font-semibold text-ink">The recording is being cut</p>
+            <p className="mx-auto mt-1 max-w-sm text-label leading-relaxed text-ink-2">
               Until it is here, support will walk you through the module on a call, in your own clinic&rsquo;s data.
             </p>
           </div>
           {walkthrough}
         </div>
 
-        <p className="mt-4 text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-3">
+        <p className="mt-4 text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">
           What it covers
         </p>
         <ul className="mt-2 space-y-1.5">
           {feature.demo_chapters.map((chapter, i) => (
-            <li key={chapter} className="flex items-baseline gap-2.5 text-[0.875rem] text-ink">
-              <span className="tnum shrink-0 font-mono text-[0.75rem] text-ink-3">{String(i + 1).padStart(2, "0")}</span>
+            <li key={chapter} className="flex items-baseline gap-2.5 text-body text-ink">
+              <span className="tnum shrink-0 font-mono text-caption text-ink-3">{String(i + 1).padStart(2, "0")}</span>
               {chapter}
             </li>
           ))}
@@ -266,25 +266,25 @@ function DemoVideo({ feature, walkthrough }: { feature: Feature; walkthrough: Re
 function Pricing({ feature }: { feature: Feature }) {
   return (
     <Card>
-      <CardHeader icon={<IconShield size={16} />} title="Pricing" />
+      <CardHeader tone="info" icon={<IconShield size={16} />} title="Pricing" />
       <CardBody className="pt-0">
         {feature.is_core ? (
-          <p className="font-display text-[1.5rem] font-semibold tracking-[-0.02em] text-ink">Included</p>
+          <p className="font-display text-h2 font-semibold text-ink">Included</p>
         ) : (
           <p className="flex items-baseline gap-1.5">
-            <span className="tnum font-display text-[1.75rem] font-semibold tracking-[-0.02em] text-ink">
+            <span className="tnum font-display text-display font-semibold text-ink">
               {currency(feature.price_monthly)}
             </span>
-            <span className="text-[0.8125rem] text-ink-2">per month</span>
+            <span className="text-label text-ink-2">per month</span>
           </p>
         )}
-        <p className="mt-2 text-[0.8125rem] leading-relaxed text-ink-2">{feature.pricing_note}</p>
+        <p className="mt-2 text-label leading-relaxed text-ink-2">{feature.pricing_note}</p>
 
-        <dl className="mt-4 space-y-3 border-t border-line-soft pt-4">
+        <dl className="mt-4 border-t border-line-soft pt-4">
           <KV label="Unlocks" value={feature.unlocks.join(", ")} />
           <KV label="Billed to" value="The clinic, alongside your plan" />
         </dl>
-        <p className="mt-4 text-[0.75rem] leading-relaxed text-ink-3">
+        <p className="mt-4 text-caption leading-relaxed text-ink-3">
           The figure above is the list price. Support confirms what your clinic will actually be charged before
           anything is switched on.
         </p>
@@ -379,7 +379,7 @@ function ContactSupport({
       />
       <CardBody className="space-y-3 pt-0">
         {!active && (
-          <p className="text-[0.8125rem] leading-relaxed text-ink-2">
+          <p className="text-label leading-relaxed text-ink-2">
             {activation
               ? `Requested${askedOn(activation) ? ` on ${askedOn(activation)}` : ""} by ${askedBy(activation)}. A super admin switches it on once it is agreed — there is nothing more to send.`
               : "Modules are switched on by the Astrale team, not from inside the clinic. Send the request and it reaches a super admin with your clinic and this module already filled in."}
@@ -400,13 +400,13 @@ function ContactSupport({
         </div>
 
         <div className="flex items-center justify-between gap-2 border-t border-line-soft pt-3">
-          <span className="min-w-0 truncate font-mono text-[0.75rem] text-ink-2">{SUPPORT.email}</span>
+          <span className="min-w-0 truncate font-mono text-caption text-ink-2">{SUPPORT.email}</span>
           <Button size="sm" variant="ghost" onClick={copyEmail}>Copy</Button>
         </div>
 
         {!active && (
           <div className="border-t border-line-soft pt-3">
-            <p className="text-[0.75rem] leading-relaxed text-ink-3">
+            <p className="text-caption leading-relaxed text-ink-3">
               {feature.name} stays locked until a super admin enables it. Spoken to us already?
             </p>
             <Button

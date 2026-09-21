@@ -14,7 +14,7 @@ import {
   type ConsoleRow, type PlatformTotals,
 } from "@/lib/platform/subscriptions";
 import { cn } from "@/lib/cn";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, CardLink } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge, type Tone } from "@/components/ui/badge";
 import { EmptyState, Meter } from "@/components/ui/misc";
@@ -29,7 +29,7 @@ import { ConsolePage } from "@/components/platform/chrome";
 import { CreateClinicFlow } from "@/components/platform/create-clinic";
 import { AccountBadge, BillingBadge } from "@/components/platform/module-controls";
 import {
-  IconAlert, IconArrowRight, IconLayers, IconPlus, IconReceipt, IconSpark,
+  IconAlert, IconArrowRight, IconChart, IconLayers, IconPlus, IconReceipt, IconSpark,
 } from "@/components/ui/icons";
 
 /* ==========================================================================
@@ -69,7 +69,7 @@ function Overview() {
     return (
       <>
         <PageHeader eyebrow="Control centre" title="Astrale Platform" />
-        <p className="py-16 text-center text-[0.8125rem] text-ink-3">Reading the platform…</p>
+        <p className="py-16 text-center text-label text-ink-3">Reading the platform…</p>
       </>
     );
   }
@@ -134,7 +134,7 @@ function Overview() {
         <DisciplineCard rows={rows} />
       </div>
 
-      <div className="mt-5 max-w-3xl space-y-2 text-[0.75rem] leading-relaxed text-ink-3">
+      <div className="mt-5 max-w-3xl space-y-2 text-caption leading-relaxed text-ink-3">
         <p>
           Money figures are the catalogue price of what is switched on, not invoices — the platform
           has no billing service behind it yet, so every subscription figure here is worked out from
@@ -208,11 +208,11 @@ function SecondaryStats({ totals }: { totals: PlatformTotals }) {
     <section className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-[var(--r-lg)] border border-line bg-line sm:grid-cols-3 xl:grid-cols-6">
       {cells.map((c) => (
         <div key={c.label} className="bg-surface px-4 py-3.5">
-          <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-3">{c.label}</p>
-          <p className="tnum mt-1.5 font-display text-[1.125rem] font-semibold leading-none tracking-[-0.02em] text-ink">
+          <p className="text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">{c.label}</p>
+          <p className="tnum mt-1.5 font-display text-title font-semibold leading-none text-ink">
             {c.value}
           </p>
-          {c.hint && <p className="mt-1.5 truncate text-[0.6875rem] text-ink-3">{c.hint}</p>}
+          {c.hint && <p className="mt-1.5 truncate text-micro text-ink-3">{c.hint}</p>}
         </div>
       ))}
     </section>
@@ -230,16 +230,8 @@ function RunRateCard({
   return (
     <Card>
       <CardHeader
-        title="Monthly run rate"
-        subtitle="Rebuilt from the day each live subscription was switched on."
-        actions={
-          <Link
-            href="/platform/modules"
-            className="inline-flex items-center gap-1 text-[0.8125rem] text-accent-text underline-offset-4 hover:underline"
-          >
-            Billing activity <IconArrowRight size={13} />
-          </Link>
-        }
+        icon={<IconChart size={15} />} tone="ok" title="Monthly run rate"
+        hint="Rebuilt from the day each live subscription was switched on."
       />
       <CardBody>
         {series.some((p) => p.mrr > 0) ? (
@@ -288,8 +280,8 @@ function Figure({
   }[tone];
   return (
     <div className="min-w-0">
-      <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-3">{label}</p>
-      <p className={cn("tnum mt-1 truncate font-mono text-[0.875rem] font-medium", colour)}>{value}</p>
+      <p className="text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">{label}</p>
+      <p className={cn("tnum mt-1 truncate font-mono text-body font-medium", colour)}>{value}</p>
     </div>
   );
 }
@@ -303,15 +295,12 @@ function ModuleAdoptionCard({
   return (
     <Card>
       <CardHeader
-        title="Module adoption"
-        subtitle="Paid modules, by the clinics holding them."
+        icon={<IconChart size={15} />} tone="accent" title="Module adoption"
+        hint="Paid modules, by the clinics holding them."
         actions={
-          <Link
-            href="/platform/modules"
-            className="inline-flex items-center gap-1 text-[0.8125rem] text-accent-text underline-offset-4 hover:underline"
-          >
-            Manage <IconArrowRight size={13} />
-          </Link>
+          <CardLink href="/platform/modules?tab=catalogue" trailing={<IconArrowRight size={13} />}>
+            Catalogue &amp; pricing
+          </CardLink>
         }
       />
       <CardBody>
@@ -321,11 +310,11 @@ function ModuleAdoptionCard({
               <div className="mb-1.5 flex items-baseline justify-between gap-3">
                 <Link
                   href={`/platform/tenants?module=${s.feature.key}&moduleState=enabled`}
-                  className="truncate text-[0.8125rem] text-ink underline-offset-4 hover:underline"
+                  className="truncate text-label text-ink underline-offset-4 hover:underline"
                 >
                   {s.feature.name}
                 </Link>
-                <span className="tnum shrink-0 font-mono text-[0.75rem] text-ink-2">
+                <span className="tnum shrink-0 font-mono text-caption text-ink-2">
                   {s.subscribers}/{tenants}
                   <span className="ml-1.5 text-ink-3">{currency(s.feature.price_monthly)}</span>
                 </span>
@@ -348,7 +337,7 @@ function DisciplineCard({ rows }: { rows: ConsoleRow[] }) {
 
   return (
     <Card>
-      <CardHeader title="By discipline" subtitle="What kind of practice runs on the platform." />
+      <CardHeader icon={<IconChart size={15} />} tone="accent" title="By discipline" hint="What kind of practice runs on the platform." />
       <CardBody>
         <DonutChart
           slices={slices}
@@ -416,20 +405,20 @@ function AttentionCard({ rows, totals }: { rows: ConsoleRow[]; totals: PlatformT
   return (
     <Card className="overflow-hidden">
       <CardHeader
-        icon={<IconAlert size={16} />}
+        tone="warn" icon={<IconAlert size={16} />}
         title="Needs attention"
-        subtitle="Each one opens the tenant list with the filters already set."
+        hint="Each one opens the tenant list with the filters already set."
       />
       <ul className="divide-y divide-line-soft border-t border-line-soft">
         {items.map((item) => (
           <li key={item.label}>
             <Link
               href={item.href}
-              className="flex items-center justify-between gap-4 px-5 py-3.5 transition-colors hover:bg-surface-2"
+              className="flex items-center justify-between gap-4 px-5 py-3.5 transition-colors hover:bg-hover"
             >
               <div className="min-w-0">
-                <p className="text-[0.875rem] font-medium text-ink">{item.label}</p>
-                <p className="mt-0.5 truncate text-[0.75rem] text-ink-3">{item.detail}</p>
+                <p className="text-body font-medium text-ink">{item.label}</p>
+                <p className="mt-0.5 truncate text-caption text-ink-3">{item.detail}</p>
               </div>
               <div className="flex shrink-0 items-center gap-2.5">
                 <Badge tone={item.count ? item.tone : "neutral"} size="md" dot={item.count > 0}>
@@ -449,15 +438,12 @@ function RecentActivityCard({ recent }: { recent: ReturnType<typeof activationLe
   return (
     <Card className="overflow-hidden">
       <CardHeader
-        title="Recent subscription activity"
-        subtitle="The latest paid modules switched on, newest first."
+        icon={<IconReceipt size={15} />} tone="ok" title="Recent subscription activity"
+        hint="The latest paid modules switched on, newest first."
         actions={
-          <Link
-            href="/platform/modules"
-            className="inline-flex items-center gap-1 text-[0.8125rem] text-accent-text underline-offset-4 hover:underline"
-          >
-            All activity <IconArrowRight size={13} />
-          </Link>
+          <CardLink href="/platform/modules?tab=activity" trailing={<IconArrowRight size={13} />}>
+            All activity
+          </CardLink>
         }
       />
       {recent.length === 0 ? (
@@ -474,7 +460,7 @@ function RecentActivityCard({ recent }: { recent: ReturnType<typeof activationLe
               <div className="flex min-w-0 items-center gap-2.5">
                 <Monogram name={entry.tenant.name} size={28} />
                 <div className="min-w-0">
-                  <p className="truncate text-[0.8438rem] text-ink">
+                  <p className="truncate text-label text-ink">
                     <Link
                       href={`/platform/tenants/${entry.tenant.id}`}
                       className="font-medium underline-offset-4 hover:underline"
@@ -484,7 +470,7 @@ function RecentActivityCard({ recent }: { recent: ReturnType<typeof activationLe
                     <span className="text-ink-3"> took </span>
                     {entry.feature.name}
                   </p>
-                  <p className="tnum mt-0.5 font-mono text-[0.75rem] text-ink-3">
+                  <p className="tnum mt-0.5 font-mono text-caption text-ink-3">
                     {formatDate(entry.date)} · {currency(entry.amount)}/mo
                   </p>
                 </div>
@@ -506,12 +492,12 @@ function TopClinicsCard({ rows }: { rows: ConsoleRow[] }) {
   return (
     <Card className="overflow-hidden">
       <CardHeader
-        title="Largest accounts"
-        subtitle="By what they pay the platform, then by how much they use it."
+        icon={<IconReceipt size={15} />} tone="ok" title="Largest accounts"
+        hint="By what they pay the platform, then by how much they use it."
         actions={
           <Link
             href="/platform/tenants"
-            className="inline-flex items-center gap-1 text-[0.8125rem] text-accent-text underline-offset-4 hover:underline"
+            className="inline-flex items-center gap-1 text-label text-accent-text underline-offset-4 hover:underline"
           >
             All tenants <IconArrowRight size={13} />
           </Link>
@@ -538,18 +524,18 @@ function TopClinicsCard({ rows }: { rows: ConsoleRow[] }) {
                     <Monogram name={row.tenant.name} size={28} />
                     <div className="min-w-0">
                       <p className="truncate font-medium text-ink hover:underline">{row.tenant.name}</p>
-                      <p className="tnum truncate font-mono text-[0.75rem] text-ink-3">{row.tenant.slug}</p>
+                      <p className="tnum truncate font-mono text-caption text-ink-3">{row.tenant.slug}</p>
                     </div>
                   </Link>
                 </TD>
                 <TD><AccountBadge state={row.state} /></TD>
                 <TD>
-                  <span className="tnum font-mono text-[0.8125rem] text-ink-2">
+                  <span className="tnum font-mono text-label text-ink-2">
                     {row.billed.length + row.trialing.length + row.held.length} of {PAID_FEATURES.length}
                   </span>
                 </TD>
                 <TD align="right">
-                  <span className={cn("tnum font-mono text-[0.8125rem]", row.mrr ? "text-ink" : "text-ink-3")}>
+                  <span className={cn("tnum font-mono text-label", row.mrr ? "text-ink" : "text-ink-3")}>
                     {row.mrr ? `${currency(row.mrr)}` : "—"}
                   </span>
                 </TD>

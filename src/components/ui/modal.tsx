@@ -64,8 +64,8 @@ export function Modal({ open, onClose, title, subtitle, children, footer, width 
       >
         <div className="flex items-start justify-between gap-4 border-b border-line-soft px-6 py-4">
           <div className="min-w-0">
-            <h2 className="font-display text-[1.125rem] font-semibold leading-tight tracking-[-0.01em] text-ink">{title}</h2>
-            {subtitle && <p className="mt-1 text-[0.8125rem] leading-snug text-ink-2">{subtitle}</p>}
+            <h2 className="font-display text-title font-semibold leading-tight text-ink">{title}</h2>
+            {subtitle && <p className="mt-0.5 text-caption leading-snug text-ink-3">{subtitle}</p>}
           </div>
           <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close">
             <IconX size={16} />
@@ -114,8 +114,8 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
         <style>{"@keyframes drawerin{from{transform:translateX(24px);opacity:.4}to{transform:none;opacity:1}}"}</style>
         <div className="flex items-start justify-between gap-4 border-b border-line-soft px-6 py-4">
           <div className="min-w-0">
-            <h2 className="font-display text-[1.125rem] font-semibold leading-tight tracking-[-0.01em] text-ink">{title}</h2>
-            {subtitle && <p className="mt-1 text-[0.8125rem] leading-snug text-ink-2">{subtitle}</p>}
+            <h2 className="font-display text-title font-semibold leading-tight text-ink">{title}</h2>
+            {subtitle && <p className="mt-0.5 text-caption leading-snug text-ink-3">{subtitle}</p>}
           </div>
           <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close">
             <IconX size={16} />
@@ -135,11 +135,17 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
 
 /** Anchored popover menu. */
 export function Menu({
-  trigger, children, align = "end", className, width = 220,
+  trigger, children, align = "end", side = "bottom", className, width = 220,
 }: {
   trigger: (props: { open: boolean; toggle: () => void }) => React.ReactNode;
   children: (close: () => void) => React.ReactNode;
   align?: "start" | "end";
+  /**
+   * Which way the panel opens. A trigger pinned to the foot of the rail has
+   * nothing below it to open into, so it opens upward instead of unrolling
+   * off the bottom of the window.
+   */
+  side?: "bottom" | "top";
   className?: string;
   width?: number;
 }) {
@@ -166,8 +172,9 @@ export function Menu({
       {open && (
         <div
           className={cn(
-            "pop absolute z-40 mt-1.5 overflow-hidden rounded-[var(--r)] border border-line bg-surface p-1 shadow-e3",
+            "pop absolute z-40 overflow-hidden rounded-[var(--r)] border border-line bg-surface p-1 shadow-e3",
             align === "end" ? "right-0" : "left-0",
+            side === "top" ? "bottom-full mb-1.5" : "mt-1.5",
           )}
           style={{ width }}
           role="menu"
@@ -194,9 +201,9 @@ export function MenuItem({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2.5 rounded-[var(--r-sm)] px-2.5 py-2 text-left text-[0.8438rem] transition-colors duration-100",
-        tone === "critical" ? "text-critical-text hover:bg-critical-soft" : "text-ink hover:bg-surface-3",
-        disabled && "pointer-events-none opacity-40",
+        "flex w-full items-center gap-2.5 rounded-[var(--r-sm)] px-2.5 py-2 text-left text-label transition-colors duration-100",
+        tone === "critical" ? "text-critical-text hover:bg-critical-soft" : "text-ink hover:bg-hover",
+        disabled && "pointer-events-none opacity-65",
       )}
     >
       {icon && <span className="text-ink-3">{icon}</span>}
@@ -207,7 +214,7 @@ export function MenuItem({
 
 export function MenuLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="px-2.5 pb-1 pt-2 text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-3">
+    <div className="px-2.5 pb-1 pt-2 text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">
       {children}
     </div>
   );

@@ -37,12 +37,12 @@ export function Toaster() {
               {s.icon}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[0.8438rem] font-medium leading-snug text-ink">{t.title}</p>
-              {t.body && <p className="mt-0.5 text-[0.75rem] leading-snug text-ink-2">{t.body}</p>}
+              <p className="text-label font-medium leading-snug text-ink">{t.title}</p>
+              {t.body && <p className="mt-0.5 text-caption leading-snug text-ink-2">{t.body}</p>}
             </div>
             <button
               onClick={() => dismissToast(t.id)}
-              className="shrink-0 rounded-[var(--r-sm)] p-1 text-ink-3 transition-colors hover:bg-surface-3 hover:text-ink"
+              className="shrink-0 rounded-[var(--r-sm)] p-1 text-ink-3 transition-colors hover:bg-hover hover:text-ink"
               aria-label="Dismiss"
             >
               <IconX size={13} />

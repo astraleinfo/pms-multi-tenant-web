@@ -25,7 +25,7 @@ import { CounterPayment } from "@/components/domain/counter-payment";
 import { PatientAccountSummary } from "@/components/domain/patient-account";
 import { cn } from "@/lib/cn";
 import {
-  IconAlert, IconBox, IconCheck, IconMortar, IconRx,
+  IconAlert, IconBox, IconCheck, IconList, IconMortar, IconQueue, IconRx
 } from "@/components/ui/icons";
 
 export default function PharmacyPage() {
@@ -79,15 +79,15 @@ function Pharmacy() {
         value={tab}
         onChange={setTab}
         tabs={[
-          { value: "counter", label: "Dispensing counter", count: counter.length },
-          { value: "history", label: "Ledger", count: selectInventoryTx(db, t).filter((x) => x.type === "dispense").length },
+          { value: "counter", label: "Dispensing counter", icon: <IconMortar size={15} />, count: counter.length },
+          { value: "history", label: "Ledger", icon: <IconList size={15} />, count: selectInventoryTx(db, t).filter((x) => x.type === "dispense").length },
         ]}
       />
 
       {tab === "counter" && (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-[20rem_minmax(0,1fr)]">
           <Card className="overflow-hidden">
-            <CardHeader title="Waiting" subtitle={pluralise(counter.length, "prescription")} />
+            <CardHeader icon={<IconQueue size={15} />} tone="accent" title="Waiting" subtitle={pluralise(counter.length, "prescription")} />
             <CardBody className="pt-0">
               {counter.length === 0 ? (
                 <EmptyState compact icon={<IconCheck size={20} />} title="Counter is clear"
@@ -102,12 +102,12 @@ function Pharmacy() {
                           onClick={() => setSelectedId(rx.id)}
                           className={cn(
                             "w-full rounded-[var(--r)] border p-2.5 text-left transition-all duration-150",
-                            on ? "border-accent bg-accent-soft" : "border-line bg-surface hover:border-ink-3/40 hover:bg-surface-2",
+                            on ? "border-accent bg-accent-soft" : "border-line bg-surface hover:border-ink-3/40 hover:bg-hover",
                           )}
                         >
                           <PatientRef id={rx.patient_id} name={rx.patient_name} size="sm" sub={rx.items.map((i) => i.medicine).join(", ")} />
                           <div className="mt-2 flex items-center justify-between gap-2">
-                            <span className="tnum font-mono text-[0.6875rem] text-ink-3">
+                            <span className="tnum font-mono text-micro text-ink-3">
                               {formatDate(rx.created_at.slice(0, 10))}
                             </span>
                             <StatusPill kind="prescription" status={rx.status} size="sm" dot={false} />
@@ -135,7 +135,7 @@ function Pharmacy() {
 
       {tab === "history" && (
         <Card className="overflow-hidden">
-          <CardHeader title="Dispense transactions" subtitle="Every hand-over as it hit the inventory ledger." />
+          <CardHeader icon={<IconMortar size={15} />} tone="ok" title="Dispense transactions" hint="Every hand-over as it hit the inventory ledger." />
           <TableWrap>
             <Table>
               <THead>
@@ -148,10 +148,10 @@ function Pharmacy() {
                     const item = selectInventoryItems(db, t).find((i) => i.id === tx.item_id);
                     return (
                       <TR key={tx.id}>
-                        <TD className="tnum whitespace-nowrap font-mono text-[0.8125rem] text-ink-2">{tx.at}</TD>
+                        <TD className="tnum whitespace-nowrap font-mono text-label text-ink-2">{tx.at}</TD>
                         <TD>{item?.name ?? tx.item_id}</TD>
-                        <TD className="tnum font-mono text-[0.8125rem] text-ink-2">{tx.batch_no}</TD>
-                        <TD className="tnum font-mono text-[0.75rem] text-ink-3">{tx.ref_type}:{tx.ref_id}</TD>
+                        <TD className="tnum font-mono text-label text-ink-2">{tx.batch_no}</TD>
+                        <TD className="tnum font-mono text-caption text-ink-3">{tx.ref_type}:{tx.ref_id}</TD>
                         <TD className="text-ink-2">{userName(db, tx.actor_id)}</TD>
                         <TD align="right" className="tnum font-mono font-medium text-critical-text">{tx.qty}</TD>
                       </TR>
@@ -197,7 +197,7 @@ function DispensePanel({ rx, onDone }: { rx: Prescription; onDone: () => void })
   return (
     <Card>
       <CardHeader
-        title={patient?.full_name ?? "Prescription"}
+        icon={<IconRx size={15} />} tone="violet" title={patient?.full_name ?? "Prescription"}
         subtitle={`${formatDate(rx.created_at.slice(0, 10), "long")} · ${userName(db, rx.doctor_id)}`}
         actions={<StatusPill kind="prescription" status={rx.status} size="sm" />}
       />
@@ -228,16 +228,16 @@ function DispensePanel({ rx, onDone }: { rx: Prescription; onDone: () => void })
               return (
                 <li key={it.id} className="rounded-[var(--r)] border border-line p-3">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <p className="text-[0.9375rem] font-medium text-ink">
-                      {it.medicine} <span className="text-[0.8125rem] font-normal text-ink-3">{it.strength}</span>
+                    <p className="text-body font-medium text-ink">
+                      {it.medicine} <span className="text-label font-normal text-ink-3">{it.strength}</span>
                     </p>
                     <StatusPill kind="prescription" status={it.status} size="sm" dot={false} />
                   </div>
-                  <p className="mt-0.5 text-[0.8125rem] text-ink-2">{it.dosage} · {it.frequency} · {it.duration}</p>
+                  <p className="mt-0.5 text-label text-ink-2">{it.dosage} · {it.frequency} · {it.duration}</p>
 
                   <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[6rem_minmax(0,1fr)_auto] sm:items-end">
                     <div>
-                      <label className="mb-1.5 block text-[0.75rem] font-medium text-ink">Quantity</label>
+                      <label className="mb-1.5 block text-caption font-medium text-ink">Quantity</label>
                       <NumberInput
                         min={0}
                         max={remaining}
@@ -248,7 +248,7 @@ function DispensePanel({ rx, onDone }: { rx: Prescription; onDone: () => void })
                       />
                     </div>
                     <div>
-                      <label className="mb-1.5 block text-[0.75rem] font-medium text-ink">Batch</label>
+                      <label className="mb-1.5 block text-caption font-medium text-ink">Batch</label>
                       {batches.length ? (
                         <Select
                           value={line.batch}
@@ -265,7 +265,7 @@ function DispensePanel({ rx, onDone }: { rx: Prescription; onDone: () => void })
                       )}
                     </div>
                     <div className="pb-2">
-                      <p className="tnum font-mono text-[0.75rem] text-ink-3">
+                      <p className="tnum font-mono text-caption text-ink-3">
                         {it.dispensed_qty}/{it.qty} done
                         {level != null && <span className={short ? "ml-2 text-critical-text" : "ml-2"}>· {level} in stock</span>}
                       </p>
@@ -281,14 +281,14 @@ function DispensePanel({ rx, onDone }: { rx: Prescription; onDone: () => void })
         </div>
 
         {shortfalls.length > 0 && (
-          <p className="flex items-start gap-2 rounded-[var(--r)] border border-critical-border bg-critical-soft px-3 py-2.5 text-[0.8125rem] text-critical-text">
+          <p className="flex items-start gap-2 rounded-[var(--r)] border border-critical-border bg-critical-soft px-3 py-2.5 text-label text-critical-text">
             <IconAlert size={15} className="mt-px shrink-0" />
             Stock would go negative on {shortfalls.map((s) => s.medicine).join(", ")}. Reduce the quantity or record a purchase first.
           </p>
         )}
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line-soft pt-4">
-          <p className="text-[0.75rem] leading-snug text-ink-3">
+          <p className="text-caption leading-snug text-ink-3">
             Dispensing updates the prescription item and writes one ledger transaction per stocked line.
             {hasFeature("billing") && " What was handed over then becomes a charge at the pharmacy counter."}
           </p>

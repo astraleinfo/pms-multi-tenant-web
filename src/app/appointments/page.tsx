@@ -46,8 +46,8 @@ const appointmentColumns = col.columns([
     header: "When",
     cell: ({ row }) => (
       <>
-        <span className="tnum block font-mono text-[0.8125rem] text-ink">{formatDate(row.original.date)}</span>
-        <span className="tnum block font-mono text-[0.75rem] text-ink-3">{formatTime12(row.original.time)}</span>
+        <span className="tnum block font-mono text-label text-ink">{formatDate(row.original.date)}</span>
+        <span className="tnum block font-mono text-caption text-ink-3">{formatTime12(row.original.time)}</span>
       </>
     ),
   }),
@@ -192,10 +192,10 @@ function Appointments() {
             <IconChevronRight size={16} />
           </Button>
           <div className="ml-1.5">
-            <p className="text-[0.9375rem] font-semibold leading-tight text-ink">
+            <p className="text-body font-semibold leading-tight text-ink">
               {view === "week" ? `Week of ${formatDate(weekStart, "long")}` : formatDate(date, "day")}
             </p>
-            <p className="text-[0.75rem] text-ink-3">
+            <p className="text-caption text-ink-3">
               {view === "week"
                 ? `${pluralise(all.filter((a) => weekDays.includes(a.date)).length, "booking")}`
                 : `${relativeDay(date)} · ${pluralise(forDay.length, "booking")}`}
@@ -204,7 +204,7 @@ function Appointments() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={doctorFilter} onChange={(e) => setDoctorFilter(e.target.value)} className="h-8 w-auto text-[0.8125rem]">
+          <Select value={doctorFilter} onChange={(e) => setDoctorFilter(e.target.value)} className="h-8 w-auto text-label">
             <option value="all">All clinicians</option>
             {doctors.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
           </Select>
@@ -223,14 +223,14 @@ function Appointments() {
             <div className="min-w-[640px]">
               {/* column heads */}
               <div
-                className="sticky top-0 z-10 grid border-b border-line bg-surface-2"
+                className="sticky top-0 z-10 grid border-b border-table-head-line bg-table-head"
                 style={{ gridTemplateColumns: `64px repeat(${visibleDoctors.length}, minmax(0,1fr))` }}
               >
                 <div />
                 {visibleDoctors.map((d) => (
-                  <div key={d.id} className="border-l border-line px-3 py-2.5">
-                    <p className="truncate text-[0.8438rem] font-semibold text-ink">{d.name}</p>
-                    <p className="truncate text-[0.75rem] text-ink-3">{d.speciality ?? "Clinician"}</p>
+                  <div key={d.id} className="border-l border-line px-3 py-2">
+                    <p className="truncate text-label font-semibold text-ink">{d.name}</p>
+                    <p className="truncate text-caption text-ink-3">{d.speciality ?? "Clinician"}</p>
                   </div>
                 ))}
               </div>
@@ -249,7 +249,7 @@ function Appointments() {
                     return (
                       <span
                         key={mins}
-                        className="tnum absolute right-2 -translate-y-1/2 font-mono text-[0.6875rem] text-ink-3"
+                        className="tnum absolute right-2 -translate-y-1/2 font-mono text-micro text-ink-3"
                         style={{ top: (mins - DAY_START) * PX_PER_MIN + TOP_PAD }}
                       >
                         {formatTime12(`${String(Math.floor(mins / 60)).padStart(2, "0")}:00`)}
@@ -291,21 +291,21 @@ function Appointments() {
                             style={{ top, height: h }}
                           >
                             {tight ? (
-                              <p className="flex items-baseline gap-1.5 truncate text-[0.75rem] font-medium leading-[1.35] text-ink">
-                                <span className="tnum shrink-0 font-mono text-[0.6875rem] font-normal text-ink-2">
+                              <p className="flex items-baseline gap-1.5 truncate text-caption font-medium leading-[1.35] text-ink">
+                                <span className="tnum shrink-0 font-mono text-micro font-normal text-ink-2">
                                   {formatTime12(a.time)}
                                 </span>
                                 <span className="truncate">{a.patient_name}</span>
                               </p>
                             ) : (
                               <>
-                                <p className="tnum font-mono text-[0.6875rem] leading-tight text-ink-2">
+                                <p className="tnum font-mono text-micro leading-tight text-ink-2">
                                   {formatTime12(a.time)} · {a.duration_min}m
                                 </p>
-                                <p className="truncate text-[0.8125rem] font-medium leading-tight text-ink">
+                                <p className="truncate text-label font-medium leading-tight text-ink">
                                   {a.patient_name}
                                 </p>
-                                {h > 58 && <p className="truncate text-[0.75rem] leading-tight text-ink-2">{a.reason}</p>}
+                                {h > 58 && <p className="truncate text-caption leading-tight text-ink-2">{a.reason}</p>}
                               </>
                             )}
                           </button>
@@ -331,22 +331,22 @@ function Appointments() {
               <Card key={d} className={isToday ? "border-accent-border" : undefined}>
                 <div className={`flex items-baseline justify-between border-b px-3 py-2.5 ${isToday ? "border-accent-border bg-accent-soft" : "border-line-soft"}`}>
                   <div>
-                    <p className={`text-[0.8125rem] font-semibold ${isToday ? "text-accent-text" : "text-ink"}`}>{weekdayShort(d)}</p>
-                    <p className="tnum font-mono text-[0.75rem] text-ink-3">{formatDate(d)}</p>
+                    <p className={`text-label font-semibold ${isToday ? "text-accent-text" : "text-ink"}`}>{weekdayShort(d)}</p>
+                    <p className="tnum font-mono text-caption text-ink-3">{formatDate(d)}</p>
                   </div>
-                  <span className="tnum font-mono text-[0.75rem] text-ink-3">{items.length}</span>
+                  <span className="tnum font-mono text-caption text-ink-3">{items.length}</span>
                 </div>
                 <div className="space-y-1.5 p-2">
-                  {items.length === 0 && <p className="px-1 py-3 text-center text-[0.75rem] text-ink-3">Free</p>}
+                  {items.length === 0 && <p className="px-1 py-3 text-center text-caption text-ink-3">Free</p>}
                   {items.map((a) => {
                     return (
                       <button
                         key={a.id}
                         onClick={() => setDetail(a)}
-                        className="w-full rounded-[var(--r-sm)] border border-line bg-surface-2 px-2 py-1.5 text-left transition-colors hover:bg-surface-3"
+                        className="w-full rounded-[var(--r-sm)] border border-line bg-surface-2 px-2 py-1.5 text-left transition-colors hover:bg-hover"
                       >
-                        <p className="tnum font-mono text-[0.6875rem] text-ink-3">{formatTime12(a.time)}</p>
-                        <p className="truncate text-[0.75rem] font-medium text-ink">{a.patient_name}</p>
+                        <p className="tnum font-mono text-micro text-ink-3">{formatTime12(a.time)}</p>
+                        <p className="truncate text-caption font-medium text-ink">{a.patient_name}</p>
                       </button>
                     );
                   })}
@@ -360,8 +360,8 @@ function Appointments() {
       {view === "list" && (
         <Card className="overflow-hidden">
           <CardHeader
-            title="Every booking"
-            subtitle={`${pluralise(listTotal, "booking")}, across all dates — searched and paged in the database.`}
+            icon={<IconCalendar size={15} />} tone="violet" title="Every booking"
+            hint={`${pluralise(listTotal, "booking")}, across all dates — searched and paged in the database.`}
           />
           <DataTable
             columns={appointmentColumns}
@@ -437,7 +437,7 @@ function Appointments() {
               <Badge tone="neutral" size="sm">{detail.duration_min} minutes</Badge>
             </div>
 
-            <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <dl className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
               <KV label="Clinician" value={userName(db, detail.doctor_id)} />
               <KV label="Booked via" value={detail.created_via.replace("_", " ")} />
               <KV label="Date" value={formatDate(detail.date, "long")} />
@@ -445,19 +445,19 @@ function Appointments() {
             </dl>
 
             <div>
-              <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-3">Reason</p>
-              <p className="mt-1 text-[0.875rem] leading-relaxed text-ink">{detail.reason}</p>
+              <p className="text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">Reason</p>
+              <p className="mt-1 text-body leading-relaxed text-ink">{detail.reason}</p>
             </div>
 
             {detail.date === today && detail.status === "scheduled" && (
-              <p className="flex items-start gap-2 rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-[0.75rem] leading-relaxed text-ink-2">
+              <p className="flex items-start gap-2 rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-caption leading-relaxed text-ink-2">
                 <IconClock size={14} className="mt-px shrink-0 text-ink-3" />
                 Checking in issues the next token in today's sequence and pushes the board update — the appointment row stays
                 where it is and only changes status.
               </p>
             )}
             {daysBetween(today, detail.date) > 0 && (
-              <p className="text-[0.75rem] text-ink-3">
+              <p className="text-caption text-ink-3">
                 This booking is {relativeDay(detail.date).toLowerCase()} — check-in opens on the day.
               </p>
             )}

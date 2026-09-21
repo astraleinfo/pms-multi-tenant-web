@@ -52,7 +52,20 @@ export interface PlatformStaff {
   email: string;
   initials: string;
   title: string;
+  /**
+   * `super_admin` or `support`.
+   *
+   * The console hides what a role cannot reach; the API refuses it either way,
+   * so reading this is a courtesy to the person, not a gate. Anything that
+   * only checked here would be bypassed by typing the URL.
+   */
+  role: PlatformRole;
 }
+
+export type PlatformRole = "super_admin" | "support";
+
+export const isSuperAdmin = (staff: PlatformStaff | null | undefined) =>
+  staff?.role === "super_admin";
 
 export type AuthResult =
   | { ok: true; user: User; mustChangePassword: boolean }
@@ -1015,3 +1028,127 @@ export interface SupportSession {
 
 export const openSupportSession = (tenantId: Id) =>
   post<SupportSession>(`/v1/platform/tenants/${tenantId}/impersonate`);
+
+/* ---- background jobs (super admin only) ------------------------------------
+ *
+ * Celery's work, read through Flower. Flower's own port is not published
+ * anywhere: these all go to the API, which checks that the caller is a
+ * platform super admin before it relays a byte. A clinic session of any role
+ * — practice admin included — is answered 403 here, so hiding the menu item
+ * is presentation, not protection.
+ */
+
+export type JobStatus = "pending" | "active" | "completed" | "failed" | "retried" | "revoked";
+
+export interface Job {
+  id: Id;
+  /** the registered task name, e.g. `pms.support.deliver` */
+  name: string;
+  status: JobStatus;
+  /** Celery's own state — the buckets above fold some of them together */
+  state: string;
+  worker: string | null;
+  queue: string | null;
+  /** the call as the worker was handed it, already rendered by Celery */
+  args: string;
+  kwargs: string;
+  /** ISO-8601, UTC — a job belongs to no clinic, so it has no local clock */
+  received_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  /** how long it ran, or how long it has been running so far */
+  runtime_seconds: number | null;
+  running: boolean;
+  retries: number;
+  exception: string | null;
+  /** only on the single-job read */
+  traceback: string | null;
+  result: string | null;
+  eta: string | null;
+}
+
+export interface JobWorker {
+  name: string;
+  online: boolean;
+  active: number;
+  processed: number;
+  succeeded: number;
+  failed: number;
+  retried: number;
+  concurrency: number | null;
+  queues: string[];
+  load_average: number[];
+}
+
+export interface JobSummary {
+  active: number;
+  pending: number;
+  completed: number;
+  failed: number;
+  retried: number;
+  revoked: number;
+  workers_online: number;
+  workers_total: number;
+  /** how many task records the counts above were taken over */
+  window: number;
+}
+
+export interface JobsPage {
+  /** false while the monitor is unreachable — the page says so rather than
+      drawing zeroes, which would read like a quiet platform */
+  available: boolean;
+  problem: string | null;
+  summary: JobSummary;
+  workers: JobWorker[];
+  task_names: string[];
+  worker_names: string[];
+  items: Job[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface JobQuery {
+  status?: JobStatus;
+  task?: string;
+  worker?: string;
+  /** ISO-8601; a value without a zone is read as UTC */
+  since?: string;
+  until?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export const listJobs = (query: JobQuery = {}) =>
+  get<JobsPage>("/v1/platform/jobs", {
+    status: query.status,
+    task: query.task,
+    worker: query.worker,
+    since: query.since,
+    until: query.until,
+    search: query.search,
+    limit: query.limit,
+    offset: query.offset,
+  });
+
+export const getJob = (taskId: Id) => get<Job>(`/v1/platform/jobs/tasks/${taskId}`);
+
+/**
+ * Ask for a short-lived cookie, then open Flower's own interface.
+ *
+ * A browser loading an interface cannot put an `Authorization` header on the
+ * stylesheet, the script and the dozen requests that page fires, so the API
+ * mints an HttpOnly cookie that opens that one route and nothing else. What
+ * comes back is the path to point a tab or a frame at.
+ */
+export interface FlowerSession {
+  url: string;
+  expires_in: number;
+}
+
+export const openFlowerSession = () =>
+  post<FlowerSession>("/v1/platform/jobs/flower-session");
+
+export const closeFlowerSession = () =>
+  del<void>("/v1/platform/jobs/flower-session").catch(() => undefined);

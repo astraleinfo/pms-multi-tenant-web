@@ -51,24 +51,31 @@ export function PatientRef({
   sub?: React.ReactNode;
   className?: string;
 }) {
+  /* The name is the thing being scanned for down a column of forty rows, so
+     it carries the weight (550 — above the surrounding medium, below a
+     heading) and the full ink, while the record number and age sit a step
+     down in size and two steps down in colour. `lg` used to render at the
+     same size as `md`, which quietly cost the detail header its hierarchy. */
   const body = (
     <span className={cn("flex min-w-0 items-center gap-2.5", className)}>
       <Avatar name={name} size={size === "lg" ? "md" : size === "sm" ? "xs" : "sm"} tintKey={id} />
       <span className="min-w-0">
         <span className={cn(
-          "block truncate font-medium text-ink",
-          size === "lg" ? "text-[0.9375rem]" : size === "sm" ? "text-[0.8125rem]" : "text-[0.875rem]",
+          "block truncate font-strong text-ink transition-colors group-hover/patient:text-accent-text",
+          size === "lg" ? "text-lead" : size === "sm" ? "text-label" : "text-body",
         )}>
           {name}
         </span>
         {(sub ?? mrn) && (
-          <span className="block truncate text-[0.75rem] text-ink-3">{sub ?? mrn}</span>
+          <span className="block truncate text-caption text-ink-3">{sub ?? mrn}</span>
         )}
       </span>
     </span>
   );
+  /* Hover moves the name toward the accent rather than fading the whole chip:
+     dimming a patient's name to 80% is the one thing this row must not do. */
   return href ? (
-    <Link href={href} className="min-w-0 rounded-[var(--r-sm)] transition-opacity hover:opacity-80">{body}</Link>
+    <Link href={href} className="group/patient min-w-0 rounded-[var(--r-sm)]">{body}</Link>
   ) : body;
 }
 
@@ -76,7 +83,7 @@ export function PatientRef({
 export function AllergyFlag({ patient, className }: { patient: Patient; className?: string }) {
   const none = !patient.allergies || patient.allergies.toLowerCase().startsWith("none");
   return (
-    <span className={cn("inline-flex items-center gap-1.5 text-[0.75rem]", className)}>
+    <span className={cn("inline-flex items-center gap-1.5 text-caption", className)}>
       {none ? (
         <Badge tone="neutral" size="sm"><IconCheck size={11} /> No known allergies</Badge>
       ) : (
@@ -133,7 +140,7 @@ export function PatientPicker({
         {selected ? (
           <PatientChip patient={selected} className="flex-1" />
         ) : (
-          <span className="flex-1 text-[0.875rem] text-ink-3">{placeholder}</span>
+          <span className="flex-1 text-body text-ink-placeholder">{placeholder}</span>
         )}
         <IconChevronDown size={16} className="shrink-0 text-ink-3" />
       </button>
@@ -145,7 +152,7 @@ export function PatientPicker({
           </div>
           <ul className="max-h-64 overflow-y-auto p-1.5">
             {results.length === 0 && (
-              <li className="px-3 py-6 text-center text-[0.8125rem] text-ink-3">
+              <li className="px-3 py-6 text-center text-label text-ink-3">
                 {q.trim().length < 2
                   ? "Type at least two characters."
                   : isFetching ? "Searching…" : `No patient matches “${q}”.`}
@@ -158,11 +165,11 @@ export function PatientPicker({
                   onClick={() => { onChange(p.id); setOpen(false); setQ(""); }}
                   className={cn(
                     "flex w-full items-center gap-2.5 rounded-[var(--r-sm)] px-2.5 py-2 text-left transition-colors",
-                    p.id === value ? "bg-accent-soft" : "hover:bg-surface-2",
+                    p.id === value ? "bg-accent-soft" : "hover:bg-hover",
                   )}
                 >
                   <PatientChip patient={p} className="flex-1" />
-                  <span className="shrink-0 text-[0.75rem] text-ink-3">
+                  <span className="shrink-0 text-caption text-ink-3">
                     {p.last_visit ? formatDate(p.last_visit) : "New"}
                   </span>
                 </button>

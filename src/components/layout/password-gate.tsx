@@ -82,14 +82,14 @@ export function PasswordGate({ children }: { children: React.ReactNode }) {
       <div className="flex items-center gap-3">
         <Monogram name={user?.name ?? "?"} size={40} />
         <div className="min-w-0">
-          <h2 className="truncate font-display text-[1.125rem] font-semibold tracking-[-0.015em] text-ink">
+          <h2 className="truncate font-display text-title font-semibold text-ink">
             {user?.name}
           </h2>
-          <p className="tnum truncate font-mono text-[0.75rem] text-ink-3">{user?.email}</p>
+          <p className="tnum truncate font-mono text-caption text-ink-3">{user?.email}</p>
         </div>
       </div>
 
-      <div className="mt-4 flex items-start gap-2 rounded-[var(--r)] border border-warn-border bg-warn-soft px-3 py-2.5 text-[0.75rem] leading-snug text-warn-text">
+      <div className="mt-4 flex items-start gap-2 rounded-[var(--r)] border border-warn-border bg-warn-soft px-3 py-2.5 text-caption leading-snug text-warn-text">
         <IconShield size={14} className="mt-px shrink-0" />
         Until this is done, nothing else in the app will open.
       </div>
@@ -148,7 +148,7 @@ export function PasswordGate({ children }: { children: React.ReactNode }) {
         {error && (
           <p
             role="alert"
-            className="flex items-start gap-2 rounded-[var(--r)] border border-critical-border bg-critical-soft px-3 py-2.5 text-[0.8125rem] leading-snug text-critical-text"
+            className="flex items-start gap-2 rounded-[var(--r)] border border-critical-border bg-critical-soft px-3 py-2.5 text-label leading-snug text-critical-text"
           >
             <IconAlert size={15} className="mt-px shrink-0" />
             {error}
@@ -160,7 +160,7 @@ export function PasswordGate({ children }: { children: React.ReactNode }) {
         </Button>
       </form>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-line-soft pt-3 text-[0.75rem] text-ink-3">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-line-soft pt-3 text-caption text-ink-3">
         <span className="inline-flex items-center gap-1.5">
           <IconLock size={13} />
           Held until you choose one
