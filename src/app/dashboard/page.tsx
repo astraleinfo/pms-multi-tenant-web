@@ -9,6 +9,7 @@ import {
   selectLabOrders, selectQueue, 
 } from "@/lib/data/repository";
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
+import { modulePath } from "@/lib/nav";
 import {
   compactCurrency, currency, duration, formatDate, formatTime12, pluralise, weekdayShort,
 } from "@/lib/format";
@@ -418,7 +419,7 @@ export default function DashboardPage() {
                     icon={<IconBox size={20} />}
                     title="Core modules only"
                     body="Pharmacy, lab, inventory and billing are not enabled for this clinic. The core loop works without them."
-                    action={<ButtonLink href="/settings?tab=features" size="sm" variant="secondary">See modules</ButtonLink>}
+                    action={<ButtonLink href={modulePath("pharmacy")} size="sm" variant="secondary">See what they do</ButtonLink>}
                   />
                 </CardBody>
               </Card>

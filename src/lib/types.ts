@@ -76,6 +76,19 @@ export interface Feature {
   price_monthly: number;
   /** modules this one lights up in the nav */
   unlocks: string[];
+  /**
+   * What somebody who does not have this module is told about it — the module
+   * page a padlock leads to. It is sales copy in the same sense a menu is:
+   * what the thing does, in the clinic's own terms, so the decision to ask for
+   * it is an informed one.
+   */
+  overview: string;
+  /** the working loop, in the order a clinic would live it */
+  how_it_works: { title: string; body: string }[];
+  /** what a walkthrough covers, chapter by chapter */
+  demo_chapters: string[];
+  /** the one thing about the price that is not the number itself */
+  pricing_note: string;
 }
 
 export type TenantFeatureStatus = "active" | "inactive" | "trial";

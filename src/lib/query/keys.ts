@@ -4,11 +4,21 @@ import type { FieldDefinition, Id } from "@/lib/types";
  * Query keys. Everything a clinic owns hangs off `["tenant", tenantId]`, so a
  * mutation that touches several collections can invalidate the whole subtree
  * with one call and nothing else is disturbed.
+ *
+ * The console gets the same treatment one level up: everything it reads across
+ * clinics hangs off `["platform"]`, so granting a module refreshes the snapshot
+ * and that clinic's entitlement rows together rather than leaving the console
+ * showing two different answers.
  */
 export const qk = {
   tenants: () => ["tenants"] as const,
   hostTenant: (slug: string) => ["host-tenant", slug] as const,
+  /** the whole console subtree — what a platform write invalidates */
+  platformRoot: () => ["platform"] as const,
   platform: () => ["platform", "snapshot"] as const,
+  /** one clinic as the console sees it, not as the clinic sees itself */
+  platformFeatures: (t: Id) => ["platform", "tenants", t, "features"] as const,
+  platformUsers: (t: Id) => ["platform", "tenants", t, "users"] as const,
   tenant: (t: Id) => ["tenant", t] as const,
 
   users: (t: Id) => ["tenant", t, "users"] as const,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import * as api from "@/lib/api";
 import { qk } from "./keys";
 import { useSession } from "@/lib/store/session";
@@ -520,6 +520,76 @@ export function usePlatformSnapshot() {
     queryFn: api.platformSnapshot,
     enabled: platformSession.signedIn,
   });
+}
+
+/** One clinic's entitlement rows, read from the console rather than inside it. */
+export function usePlatformTenantFeatures(tenantId: Id | null) {
+  const { platformSession } = useSession();
+  const query = useQuery({
+    queryKey: qk.platformFeatures(tenantId ?? ""),
+    queryFn: () => api.tenantFeatures(tenantId!),
+    enabled: platformSession.signedIn && !!tenantId,
+  });
+  return { ...query, data: useResolved<TenantFeature[]>(query, EMPTY) };
+}
+
+/** That clinic's staff, as the console sees them — support accounts excluded. */
+export function usePlatformTenantUsers(tenantId: Id | null) {
+  const { platformSession } = useSession();
+  const query = useQuery({
+    queryKey: qk.platformUsers(tenantId ?? ""),
+    queryFn: () => api.tenantUsers(tenantId!),
+    enabled: platformSession.signedIn && !!tenantId,
+  });
+  return { ...query, data: useResolved<User[]>(query, EMPTY) };
+}
+
+/**
+ * Every clinic's entitlement rows, for the views that read across all of them.
+ *
+ * The snapshot already says which modules are *on*; this is what says which are
+ * on trial and when each was switched on, which is the whole of what the
+ * console knows about subscriptions. It is one request per clinic because that
+ * is the route the API offers — each one scoped to its own tenant, which is the
+ * property worth keeping — and they are cached under the same `["platform"]`
+ * subtree as the snapshot, so one grant refreshes the lot.
+ *
+ * The screens above render from the snapshot until these land, so this is
+ * detail arriving rather than a page waiting.
+ */
+export function usePlatformEntitlements() {
+  const { platformSession } = useSession();
+  const { data: snapshot } = usePlatformSnapshot();
+  const ids = useMemo(
+    () => (snapshot?.tenants ?? []).map((r) => r.tenant.id),
+    [snapshot],
+  );
+
+  const queries = useQueries({
+    queries: ids.map((id) => ({
+      queryKey: qk.platformFeatures(id),
+      queryFn: () => api.tenantFeatures(id),
+      enabled: platformSession.signedIn,
+    })),
+  });
+
+  const settled = queries.every((q) => !q.isPending);
+  /* Keyed by clinic, so a row can ask for its own without scanning. Rebuilt
+     only when an answer actually changes — `useQueries` hands back a new array
+     every render, so the array itself is no use as a dependency. */
+  const signature = queries.map((q) => q.dataUpdatedAt).join(",");
+
+  const byTenant = useMemo(() => {
+    const map = new Map<Id, TenantFeature[]>();
+    ids.forEach((id, i) => {
+      const data = queries[i]?.data;
+      if (data) map.set(id, data);
+    });
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ids, signature]);
+
+  return { byTenant, isPending: !settled && ids.length > 0 };
 }
 
 /* ---- composition ----------------------------------------------------------- */

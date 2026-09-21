@@ -73,16 +73,17 @@ export function buildTour(ctx: TourContext): TourStep[] {
       id: "modules",
       anchor: "rail-nav",
       placement: "right",
-      title: ctx.anyLocked ? "Modules, and the ones you have not bought" : "The modules you run",
+      title: ctx.anyLocked ? "Modules, and the ones you do not have" : "The modules you run",
       body: ctx.anyLocked ? (
         <>
-          Patients, appointments, queue, consultation and prescriptions are always on. The rest are purchasable —
-          a padlock means this clinic has not bought it, and the server refuses those routes whatever the nav shows.
+          Patients, appointments, queue, consultation and prescriptions are always on. The rest are entitlements —
+          a padlock means this clinic has not been given that one. Clicking it opens the module&rsquo;s own page:
+          what it does, what it costs, and how to ask for it.
         </>
       ) : (
         <>
-          Patients, appointments, queue, consultation and prescriptions are always on; this clinic has bought the
-          rest as well. Entitlements are enforced by the server, not by what appears here.
+          Patients, appointments, queue, consultation and prescriptions are always on; this clinic has the rest as
+          well. Entitlements are enforced by the server, not by what appears here.
         </>
       ),
     },
@@ -147,11 +148,12 @@ export function buildTour(ctx: TourContext): TourStep[] {
       anchor: "settings-features",
       placement: "top",
       roles: ["tenant_admin"],
-      title: "Turn a module on, and it is on",
+      title: "What this clinic has, and what it has not",
       body: (
         <>
-          Buying a module unlocks its routes immediately — and switching one off closes them again, for everyone,
-          on the next request. The clinic&rsquo;s own custom fields live on the next tab.
+          Every module is listed here with its price and whether it is on. The switch itself is the platform&rsquo;s:
+          a super admin grants a module, and it unlocks for everyone on the next request. The clinic&rsquo;s own
+          custom fields live on the next tab.
         </>
       ),
     },

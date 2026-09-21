@@ -475,7 +475,13 @@ function stripReadOnly(config: Partial<TenantConfig>) {
   return rest;
 }
 
-/* ---- entitlements (§3.2) ---------------------------------------------------- */
+/* ---- entitlements (§3.2) ----------------------------------------------------
+ *
+ * Nothing in the app calls these two any more: a clinic asks the support desk
+ * for a module and a super admin grants it with `setTenantFeature`. They stay
+ * because the endpoints do — if the API withdraws the clinic-side purchase,
+ * withdraw them with it.
+ */
 
 export const purchaseFeature = (key: FeatureKey) =>
   post<TenantFeature>(`/v1/tenant/features/${key}/purchase`, {});

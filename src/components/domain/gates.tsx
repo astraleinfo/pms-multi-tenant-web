@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useApp, useTenant } from "@/lib/store/app-store";
 import { FEATURE_BY_KEY } from "@/lib/data/catalog";
-import { ROLE_LABEL } from "@/lib/nav";
+import { ROLE_LABEL, modulePath } from "@/lib/nav";
 import type { FeatureKey, Role } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { ButtonLink } from "@/components/ui/button";
@@ -14,6 +14,10 @@ import { currency } from "@/lib/format";
  * Feature guard, frontend half (§3.2). This hides UI; the server guard is what
  * actually enforces the entitlement. Anything gated renders through here so the
  * locked state is identical across modules.
+ *
+ * Where it sends somebody is the module's own page, not Settings: the switch
+ * belongs to the platform, so the useful thing to offer a clinic standing in
+ * front of a padlock is what the module does and how to ask for it.
  */
 export function FeatureGate({
   feature, children,
@@ -52,8 +56,8 @@ export function FeatureGate({
           <p className="text-[0.8125rem] text-ink-2">
             <span className="tnum font-mono font-medium text-ink">{currency(f.price_monthly)}</span> per month
           </p>
-          <ButtonLink href="/settings?tab=features" variant="primary">
-            Manage modules <IconArrowRight size={15} />
+          <ButtonLink href={modulePath(feature)} variant="primary">
+            See what it does <IconArrowRight size={15} />
           </ButtonLink>
         </div>
       </div>

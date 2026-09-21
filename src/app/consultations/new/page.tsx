@@ -6,6 +6,7 @@ import { useApp, useTenant } from "@/lib/store/app-store";
 import { useClinicDb, useSchema, usePatient } from "@/lib/query/hooks";
 import { selectDoctors, selectEncounters, selectQueue } from "@/lib/data/repository";
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
+import { modulePath } from "@/lib/nav";
 import { age, formatDate, relativeDay } from "@/lib/format";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader, Legend } from "@/components/ui/card";
@@ -274,7 +275,7 @@ function Workspace({ queueId, patientId }: { queueId?: string; patientId?: strin
                   icon={<IconFlask size={20} />}
                   title="Lab is not enabled"
                   body="Tests cannot be ordered from this encounter until the module is switched on. Nothing else about the consultation changes."
-                  action={<ButtonLink href="/settings?tab=features" size="sm" variant="secondary">See modules</ButtonLink>}
+                  action={<ButtonLink href={modulePath("lab")} size="sm" variant="secondary">See what Lab does</ButtonLink>}
                 />
               </CardBody>
             </Card>

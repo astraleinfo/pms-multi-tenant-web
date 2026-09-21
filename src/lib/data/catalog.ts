@@ -39,17 +39,227 @@ export const CLINICAL_TYPES: ClinicalType[] = [
   },
 ];
 
+/**
+ * The module catalogue — what every module is, what it costs, and how it is
+ * explained to a clinic that does not have it yet.
+ *
+ * The last four fields on each row are what the module page renders behind a
+ * padlock (§3.2). A locked module is not a dead end and not a redirect into
+ * Settings: it is a page that says what the module does, shows a walkthrough,
+ * prints the price, and offers the support desk — because the switch itself is
+ * the platform's, and nobody inside a clinic can throw it.
+ */
 export const FEATURES: Feature[] = [
-  { key: "patient", name: "Patients", is_core: true, summary: "Registration, search and the patient record.", price_monthly: 0, unlocks: ["Patients"] },
-  { key: "appointment", name: "Appointments", is_core: true, summary: "Doctor calendars, booking and conflict checks.", price_monthly: 0, unlocks: ["Appointments"] },
-  { key: "queue", name: "Queue", is_core: true, summary: "Token issue, check-in and the waiting-room board.", price_monthly: 0, unlocks: ["Queue", "Waiting room display"] },
-  { key: "consultation", name: "Consultation", is_core: true, summary: "Encounters with fields that follow your clinical type.", price_monthly: 0, unlocks: ["Consultation"] },
-  { key: "prescription", name: "Prescriptions", is_core: true, summary: "Write and print prescriptions. Works with or without a pharmacy.", price_monthly: 0, unlocks: ["Prescriptions"] },
-  { key: "pharmacy", name: "Pharmacy", is_core: false, summary: "Dispense against prescriptions and draw stock from the ledger.", price_monthly: 2499, unlocks: ["Pharmacy"] },
-  { key: "lab", name: "Lab", is_core: false, summary: "Order tests, enter results, and hold them behind verification.", price_monthly: 1999, unlocks: ["Lab"] },
-  { key: "inventory", name: "Inventory", is_core: false, summary: "One ledger for every stock movement, with expiry watch.", price_monthly: 1499, unlocks: ["Inventory"] },
-  { key: "billing", name: "Billing", is_core: false, summary: "Invoices composed from the visit, with part payments.", price_monthly: 2999, unlocks: ["Billing"] },
-  { key: "advanced_reports", name: "Advanced reports", is_core: false, summary: "Cohort breakdowns, revenue mix and clinical-type analytics.", price_monthly: 1799, unlocks: ["Extra dashboard panels"] },
+  {
+    key: "patient",
+    name: "Patients",
+    is_core: true,
+    summary: "Registration, search and the patient record.",
+    price_monthly: 0,
+    unlocks: ["Patients"],
+    overview:
+      "The register every other module points at. One row per person, with an MRN the clinic chooses the shape of, and a record that gathers everything anybody writes about them.",
+    how_it_works: [
+      { title: "Register once", body: "Reception fills the form your clinic's schema builds — common fields, then the ones your discipline adds, then your own." },
+      { title: "Find them again", body: "Search runs in the database on name, MRN and phone, so a register of fifty thousand answers as fast as one of fifty." },
+      { title: "Read the whole history", body: "Visits, prescriptions, orders and invoices appear against the patient as they happen. Nothing is copied to get there." },
+    ],
+    demo_chapters: [
+      "Registering a walk-in at the desk",
+      "Searching by phone number and MRN",
+      "Reading a patient's history end to end",
+    ],
+    pricing_note: "Core. It is in every plan and cannot be switched off.",
+  },
+  {
+    key: "appointment",
+    name: "Appointments",
+    is_core: true,
+    summary: "Doctor calendars, booking and conflict checks.",
+    price_monthly: 0,
+    unlocks: ["Appointments"],
+    overview:
+      "A calendar per clinician, inside the clinic's own working day. Booking is checked against what is already there, so two patients cannot hold the same chair.",
+    how_it_works: [
+      { title: "Set the day", body: "Opening time, closing time and slot length are the clinic's settings; the grid follows them." },
+      { title: "Book against a doctor", body: "The server refuses an overlap rather than warning about one, so the diary and the room agree." },
+      { title: "Arrive into the queue", body: "Checking a booking in issues the token — the appointment and the waiting room are the same day, not two." },
+    ],
+    demo_chapters: [
+      "Booking a slot and hitting a conflict",
+      "Rescheduling without losing the trail",
+      "Check-in, and the token it issues",
+    ],
+    pricing_note: "Core. It is in every plan and cannot be switched off.",
+  },
+  {
+    key: "queue",
+    name: "Queue",
+    is_core: true,
+    summary: "Token issue, check-in and the waiting-room board.",
+    price_monthly: 0,
+    unlocks: ["Queue", "Waiting room display"],
+    overview:
+      "The day as it actually runs: who is waiting, who is in, who is done. Tokens are issued per clinic per day, and every move is a transition the server will refuse if it makes no sense.",
+    how_it_works: [
+      { title: "Issue a token", body: "From a booking at check-in, or straight to a walk-in at the desk." },
+      { title: "Work the board", body: "Called, in consultation, completed — the board is the same one the clinician and the desk are both looking at." },
+      { title: "Show the room", body: "The waiting-room screen follows the board live, with no staff chrome on it." },
+    ],
+    demo_chapters: [
+      "Issuing a token to a walk-in",
+      "Calling the next patient",
+      "Putting the waiting-room screen on a display",
+    ],
+    pricing_note: "Core. It is in every plan and cannot be switched off.",
+  },
+  {
+    key: "consultation",
+    name: "Consultation",
+    is_core: true,
+    summary: "Encounters with fields that follow your clinical type.",
+    price_monthly: 0,
+    unlocks: ["Consultation"],
+    overview:
+      "The encounter, written in your discipline's own terms — a tooth chart for a dental clinic, refraction for an eye clinic — on top of one common record.",
+    how_it_works: [
+      { title: "Open from the queue", body: "The clinician takes the next token; the patient, the complaint and the history come with it." },
+      { title: "Write in your own fields", body: "The form is built from your effective schema, so what you record is what your discipline records." },
+      { title: "Sign it", body: "Signing closes the token, releases the record, and hands whatever it created to prescriptions, lab and billing." },
+    ],
+    demo_chapters: [
+      "Taking the next patient from the board",
+      "Filling a clinical exam that fits the discipline",
+      "Signing, and what it sets in motion",
+    ],
+    pricing_note: "Core. It is in every plan and cannot be switched off.",
+  },
+  {
+    key: "prescription",
+    name: "Prescriptions",
+    is_core: true,
+    summary: "Write and print prescriptions. Works with or without a pharmacy.",
+    price_monthly: 0,
+    unlocks: ["Prescriptions"],
+    overview:
+      "What was prescribed, to whom, by whom, and whether anybody has handed it over. A clinic with no pharmacy still writes and prints them; one with a pharmacy dispenses against the same rows.",
+    how_it_works: [
+      { title: "Write it in the encounter", body: "Medicines, doses and durations are part of the consultation, not a separate errand afterwards." },
+      { title: "Print or hand over", body: "Print for the patient to take elsewhere, or leave it pending for your own counter." },
+      { title: "Watch what is outstanding", body: "Anything not yet dispensed stays visible, so nobody walks out with a piece of paper nobody acted on." },
+    ],
+    demo_chapters: [
+      "Writing a prescription inside a consultation",
+      "Printing for a patient going elsewhere",
+      "What the pharmacy counter sees next",
+    ],
+    pricing_note: "Core. It is in every plan and cannot be switched off.",
+  },
+  {
+    key: "pharmacy",
+    name: "Pharmacy",
+    is_core: false,
+    summary: "Dispense against prescriptions and draw stock from the ledger.",
+    price_monthly: 2499,
+    unlocks: ["Pharmacy"],
+    overview:
+      "Your own counter, reading the prescriptions your clinicians have already written. Handing medicine over is one action that dispenses the line, moves the stock and raises the charge — there is no second list to keep in step.",
+    how_it_works: [
+      { title: "The counter fills itself", body: "Every prescription still waiting appears here, oldest first, with the patient's allergies on the same screen. Nothing is copied into a pharmacy table." },
+      { title: "Hand it over", body: "Pick the batch, enter the quantity. The dispense and the stock movement are written in one transaction, so the ledger and the prescription cannot disagree." },
+      { title: "Take the money", body: "What was handed over becomes a charge at the pharmacy counter — settled there, or put on the patient's account for the desk." },
+    ],
+    demo_chapters: [
+      "The counter queue, and a part-dispense",
+      "Batch and expiry at the point of hand-over",
+      "Settling at the window, or billing it later",
+    ],
+    pricing_note: "One price for the clinic — every pharmacist you put on it is included.",
+  },
+  {
+    key: "lab",
+    name: "Lab",
+    is_core: false,
+    summary: "Order tests, enter results, and hold them behind verification.",
+    price_monthly: 1999,
+    unlocks: ["Lab"],
+    overview:
+      "Tests ordered from the consultation, worked at the bench, and released into the patient record only when somebody has verified them. A result nobody has checked is never a result a clinician reads.",
+    how_it_works: [
+      { title: "Order from the encounter", body: "Pick from the catalogue your discipline uses; the order carries the patient and the clinician who asked for it." },
+      { title: "Work the bench", body: "Start an order, enter analytes, attach the scan or the machine's printout against the order itself." },
+      { title: "Verify to release", body: "Verification is the transition that puts the result in front of the clinician, and it closes the order to new paper." },
+    ],
+    demo_chapters: [
+      "Ordering tests inside a consultation",
+      "Entering results and filing a report",
+      "Verifying, and what the clinician then sees",
+    ],
+    pricing_note: "One price for the clinic — the bench, the orders and the file store are all in it.",
+  },
+  {
+    key: "inventory",
+    name: "Inventory",
+    is_core: false,
+    summary: "One ledger for every stock movement, with expiry watch.",
+    price_monthly: 1499,
+    unlocks: ["Inventory"],
+    overview:
+      "Stock on hand is the sum of the ledger, never a number somebody typed. Deliveries, dispensing, adjustments and write-offs are all movements in the same book, so what the shelf holds and what the screen says are the same claim.",
+    how_it_works: [
+      { title: "Open a line", body: "SKU, form, strength, reorder level and how it is priced — cost plus margin, or a price you set." },
+      { title: "Book the delivery", body: "Quantity, batch and expiry go in with the supplier's figures in front of you, and the selling price follows the pricing mode." },
+      { title: "Watch it move", body: "Every dispense draws from the ledger. Anything under its reorder level, or inside your expiry window, says so." },
+    ],
+    demo_chapters: [
+      "Opening a stock line and pricing it",
+      "Receiving a delivery with batch and expiry",
+      "Reorder and expiry alerts, and the tenant's own threshold",
+    ],
+    pricing_note: "One price for the clinic, whatever the size of the shelf.",
+  },
+  {
+    key: "billing",
+    name: "Billing",
+    is_core: false,
+    summary: "Invoices composed from the visit, with part payments.",
+    price_monthly: 2999,
+    unlocks: ["Billing"],
+    overview:
+      "The invoice is composed from what the visit actually did — the consultation, the tests ordered, the medicine handed over — priced from your own tariff. Three counters keep their own books: clinic, lab and pharmacy.",
+    how_it_works: [
+      { title: "Compose from the visit", body: "The composer suggests the lines the encounter earned, and tells you which of them somebody has already billed." },
+      { title: "Issue and take payment", body: "Part payments, mixed methods, and a running balance per counter. Paying for medicine at the window is not paying for a scan." },
+      { title: "Read the account", body: "One patient, three counters: what is outstanding, and what nobody has billed yet." },
+    ],
+    demo_chapters: [
+      "Composing an invoice from a signed consultation",
+      "Taking a part payment at the counter",
+      "A patient account across clinic, lab and pharmacy",
+    ],
+    pricing_note: "One price for the clinic — invoices, counters and payment methods included.",
+  },
+  {
+    key: "advanced_reports",
+    name: "Advanced reports",
+    is_core: false,
+    summary: "Cohort breakdowns, revenue mix and clinical-type analytics.",
+    price_monthly: 1799,
+    unlocks: ["Extra dashboard panels"],
+    overview:
+      "The standard dashboard answers what happened today. This answers what has been happening — by clinician, by cohort, by where the money comes from — from the same transactional tables, with nothing recomputed by hand.",
+    how_it_works: [
+      { title: "Pick a window", body: "Any range the clinic has data for; every figure on the page moves with it." },
+      { title: "Break it down", body: "Per clinician, per cohort, per counter — encounters, prescriptions and revenue side by side." },
+      { title: "Trust the arithmetic", body: "Every panel is derived from the same rows the ledgers use, so a total here is the total there." },
+    ],
+    demo_chapters: [
+      "The clinician breakdown over a quarter",
+      "Revenue mix across the three counters",
+      "Cohort panels for your discipline",
+    ],
+    pricing_note: "One price for the clinic, and it reads history you already have.",
+  },
 ];
 
 export const FEATURE_BY_KEY = Object.fromEntries(FEATURES.map((f) => [f.key, f])) as Record<string, Feature>;

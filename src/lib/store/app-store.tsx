@@ -72,6 +72,8 @@ interface AppContextValue {
   setUserStatus: (userId: Id, status: AccountStatus) => void;
 
   updateConfig: (patch: Partial<TenantConfig>) => void;
+  /** Unused by the UI — a module is granted by a super admin, not bought from
+      inside the clinic. See the note in `lib/api`. */
   purchaseFeature: (key: FeatureKey) => void;
   deactivateFeature: (key: FeatureKey) => void;
   addFieldDefinition: (d: Omit<FieldDefinition, "id" | "tenant_id" | "scope" | "clinical_type">) => void;
@@ -205,8 +207,11 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     () => { void qc.invalidateQueries({ queryKey: qk.tenant(tenantId) }); },
     [qc, tenantId],
   );
+  /* The console reads a snapshot *and* per-clinic entitlement rows, so a grant
+     has to refresh both — invalidating only the snapshot would leave the module
+     screen insisting the switch is still where it was. */
   const invalidatePlatform = React.useCallback(
-    () => { void qc.invalidateQueries({ queryKey: qk.platform() }); },
+    () => { void qc.invalidateQueries({ queryKey: qk.platformRoot() }); },
     [qc],
   );
 

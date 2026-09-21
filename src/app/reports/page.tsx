@@ -4,6 +4,7 @@ import * as React from "react";
 import { useApp, useTenant } from "@/lib/store/app-store";
 import { useAnalytics } from "@/lib/query/hooks";
 import { CLINICAL_TYPES, FEATURE_BY_KEY } from "@/lib/data/catalog";
+import { modulePath } from "@/lib/nav";
 import { currency, duration, formatDate, pluralise, weekdayShort } from "@/lib/format";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -312,8 +313,8 @@ function Reports() {
               title={`${FEATURE_BY_KEY.advanced_reports.name} is not enabled`}
               body={FEATURE_BY_KEY.advanced_reports.summary}
               action={
-                <ButtonLink href="/settings?tab=features" variant="primary" size="sm">
-                  Manage modules <IconArrowRight size={14} />
+                <ButtonLink href={modulePath("advanced_reports")} variant="primary" size="sm">
+                  See what it adds <IconArrowRight size={14} />
                 </ButtonLink>
               }
             />

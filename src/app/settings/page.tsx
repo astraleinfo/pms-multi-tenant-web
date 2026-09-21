@@ -8,17 +8,17 @@ import { useClinicDb, useSchema, useAnalytics, useUsers } from "@/lib/query/hook
 import { qk } from "@/lib/query/keys";
 import { CLINICAL_TYPES, FEATURES } from "@/lib/data/catalog";
 import { activeFeatureKeys, selectUsers } from "@/lib/data/repository";
-import { ROLE_LABEL } from "@/lib/nav";
+import { ROLE_LABEL, modulePath } from "@/lib/nav";
 import { currency, formatDate, formatTime12, pluralise, titleCase } from "@/lib/format";
-import type { FeatureKey, FieldDefinition, FieldType, Role, User } from "@/lib/types";
+import type { FieldDefinition, FieldType, Role, User } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardFooter, CardHeader, Legend } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, EmptyState, KV } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import {
-  ChoiceGroup, Checkbox, Field, Input, NumberInput, Select, Switch,
+  ChoiceGroup, Checkbox, Field, Input, NumberInput, Select,
 } from "@/components/ui/field";
 import { Tabs } from "@/components/ui/tabs";
 import { DataTable, columnHelperFor } from "@/components/ui/data-table";
@@ -160,7 +160,7 @@ export default function SettingsPage(props: PageProps<"/settings">) {
 function Settings({ initial }: { initial: Tab }) {
   const router = useRouter();
   const {
-    session, can, hasFeature, purchaseFeature, deactivateFeature,
+    session, can, hasFeature,
     removeFieldDefinition, notify,
   } = useApp();
   const db = useClinicDb();
@@ -307,7 +307,7 @@ function Settings({ initial }: { initial: Tab }) {
             <CardHeader
               icon={<IconSpark size={16} />}
               title="Modules"
-              subtitle="Core modules ship with every tenant and cannot be switched off. The rest are entitlements — turning one on lights up its nav item and its analytics immediately."
+              subtitle="Core modules ship with every tenant. The rest are entitlements the Astrale team grants — open a locked one to see what it does, what it costs, and how to ask for it."
             />
             <CardBody className="pt-0">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -329,21 +329,10 @@ function Settings({ initial }: { initial: Tab }) {
                           </p>
                           <p className="mt-1 text-[0.8125rem] leading-snug text-ink-2">{f.summary}</p>
                         </div>
-                        {f.is_core ? (
+                        {on ? (
                           <Badge tone="ok" size="sm" dot>On</Badge>
                         ) : (
-                          <Switch
-                            checked={on}
-                            onChange={(v) => {
-                              if (v) {
-                                purchaseFeature(f.key as FeatureKey);
-                                notify({ tone: "ok", title: `${f.name} enabled`, body: "The nav, dashboard and reports pick it up straight away." });
-                              } else {
-                                deactivateFeature(f.key as FeatureKey);
-                                notify({ tone: "warn", title: `${f.name} switched off`, body: "Its routes now render the locked state." });
-                              }
-                            }}
-                          />
+                          <Badge tone="neutral" size="sm"><IconLock size={11} /> Locked</Badge>
                         )}
                       </div>
 
@@ -355,8 +344,15 @@ function Settings({ initial }: { initial: Tab }) {
                             </span>
                           ))}
                         </span>
-                        <span className="tnum font-mono text-[0.75rem] text-ink-3">
-                          {f.is_core ? "included" : `${currency(f.price_monthly)}/mo`}
+                        <span className="flex items-center gap-2">
+                          <span className="tnum font-mono text-[0.75rem] text-ink-3">
+                            {f.is_core ? "included" : `${currency(f.price_monthly)}/mo`}
+                          </span>
+                          {!f.is_core && (
+                            <ButtonLink href={modulePath(f.key)} size="sm" variant={on ? "ghost" : "secondary"}>
+                              {on ? "Details" : "View details"}
+                            </ButtonLink>
+                          )}
                         </span>
                       </div>
                     </div>
@@ -377,6 +373,11 @@ function Settings({ initial }: { initial: Tab }) {
                 Hiding a nav item is a courtesy. The server check is the enforcement — which is why every gated
                 page in this app renders through the same <span className="font-mono text-[0.75rem]">FeatureGate</span>{" "}
                 rather than each module inventing its own locked state.
+              </p>
+              <p className="mt-4 border-t border-line-soft pt-3 text-[0.75rem] leading-relaxed text-ink-3">
+                Which row exists is not a practice admin's decision. A module is switched on for this clinic by a
+                super admin in the platform console; a padlock here leads to that module's page, where support can
+                be asked for it.
               </p>
             </CardBody>
           </Card>

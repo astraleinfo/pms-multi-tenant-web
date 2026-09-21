@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
-import { NAV, ROLE_LABEL, roleAllows } from "@/lib/nav";
+import { NAV, ROLE_LABEL, modulePath, roleAllows } from "@/lib/nav";
 import { useApp, useTenant } from "@/lib/store/app-store";
 import { useRailCounters } from "@/lib/query/hooks";
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
@@ -137,7 +137,7 @@ export function Rail({ collapsed, onNavigate }: { collapsed: boolean; onNavigate
                   return (
                     <li key={item.href}>
                       <Link
-                        href={locked ? "/settings?tab=features" : item.href}
+                        href={locked && item.feature ? modulePath(item.feature) : item.href}
                         className={cls}
                         title={collapsed ? item.label : locked ? `${item.label} — not enabled for this clinic` : undefined}
                         onClick={onNavigate}

@@ -40,7 +40,18 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 export function Button({ variant = "secondary", size = "md", className, ...rest }: ButtonProps) {
-  return <button className={cn(base, variants[variant], sizes[size], className)} {...rest} />;
+  return <button className={buttonClass({ variant, size, className })} {...rest} />;
+}
+
+/**
+ * The button's own classes, for the anchors that cannot be a `Link` — a
+ * `mailto:` or a `tel:` goes to the mail client or the dialler, not through
+ * the router.
+ */
+export function buttonClass({
+  variant = "secondary", size = "md", className,
+}: { variant?: Variant; size?: Size; className?: string } = {}) {
+  return cn(base, variants[variant], sizes[size], className);
 }
 
 export interface ButtonLinkProps extends React.ComponentProps<typeof Link> {
@@ -49,7 +60,7 @@ export interface ButtonLinkProps extends React.ComponentProps<typeof Link> {
 }
 
 export function ButtonLink({ variant = "secondary", size = "md", className, ...rest }: ButtonLinkProps) {
-  return <Link className={cn(base, variants[variant], sizes[size], className)} {...rest} />;
+  return <Link className={buttonClass({ variant, size, className })} {...rest} />;
 }
 
 /** Segmented control — one row of mutually exclusive choices. */

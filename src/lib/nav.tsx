@@ -62,6 +62,13 @@ export const NAV: NavGroup[] = [
 
 export const ALL_NAV_ITEMS = NAV.flatMap((g) => g.items);
 
+/**
+ * Where a padlock leads. A module this clinic has not been given opens its own
+ * page — what it does, a walkthrough, the price, and how to ask for it — not
+ * Settings, where there is no switch for anybody inside the clinic to throw.
+ */
+export const modulePath = (feature: FeatureKey) => `/modules/${feature}`;
+
 export function navItemFor(pathname: string) {
   return ALL_NAV_ITEMS
     .filter((i) => pathname === i.href || pathname.startsWith(i.href + "/"))
