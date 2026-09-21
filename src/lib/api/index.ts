@@ -7,7 +7,8 @@ import type {
   LabResultLine, NewAppointment, NewEncounter, NewInventoryItem, NewServicePrice, Patient,
   PatientAccount, Payment, Prescription, PrescriptionItem, PricingMode, QueueEntry, Role,
   ServiceKind,
-  ServicePrice, ServicePricePatch, SuggestedLinesResponse, Tenant, TenantConfig, TenantFeature,
+  ServicePrice, ServicePricePatch, SuggestedLinesResponse, SupportRequest, SupportRequestKind, Tenant,
+  TenantConfig, TenantFeature,
   User,
 } from "@/lib/types";
 import {
@@ -483,6 +484,21 @@ function stripReadOnly(config: Partial<TenantConfig>) {
  * withdraw them with it.
  */
 
+/* ---- support desk ------------------------------------------------------------
+ *
+ * How a clinic asks for a module. The API stores the request and a background
+ * worker emails the desk, so "sent" here means "the platform has it" — not
+ * that the email has already left.
+ */
+
+export const listSupportRequests = () => get<SupportRequest[]>("/v1/tenant/support-requests");
+
+export const createSupportRequest = (input: {
+  kind: SupportRequestKind;
+  feature_key?: FeatureKey;
+  message?: string;
+}) => post<SupportRequest>("/v1/tenant/support-requests", input);
+
 export const purchaseFeature = (key: FeatureKey) =>
   post<TenantFeature>(`/v1/tenant/features/${key}/purchase`, {});
 export const deactivateFeature = (key: FeatureKey) =>
@@ -956,6 +972,10 @@ export const setTenantStatus = async (tenantId: Id, status: Tenant["status"]) =>
 /** This clinic's staff, as the console sees them — support accounts excluded. */
 export const tenantUsers = (tenantId: Id) =>
   get<User[]>(`/v1/platform/tenants/${tenantId}/users`);
+
+/** What one clinic has asked the desk for, newest first. */
+export const tenantSupportRequests = (tenantId: Id) =>
+  get<SupportRequest[]>(`/v1/platform/tenants/${tenantId}/support-requests`);
 
 export const tenantFeatures = (tenantId: Id) =>
   get<TenantFeature[]>(`/v1/platform/tenants/${tenantId}/features`);

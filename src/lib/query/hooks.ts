@@ -7,7 +7,8 @@ import { qk } from "./keys";
 import { useSession } from "@/lib/store/session";
 import { defaultConfig } from "@/lib/data/repository";
 import type {
-  FieldDefinition, Id, Patient, ServiceKind, ServicePrice, Tenant, TenantConfig, TenantFeature, User,
+  FieldDefinition, Id, Patient, ServiceKind, ServicePrice, SupportRequest, Tenant, TenantConfig,
+  TenantFeature, User,
 } from "@/lib/types";
 
 /* ==========================================================================
@@ -116,6 +117,13 @@ export function useFeatures() {
   const t = useTenantId();
   const query = useClinicQuery(qk.features(t), api.listFeatures);
   return { ...query, data: useResolved<TenantFeature[]>(query, EMPTY) };
+}
+
+/** This clinic's asks of the support desk, newest first. */
+export function useSupportRequests() {
+  const t = useTenantId();
+  const query = useClinicQuery(qk.supportRequests(t), api.listSupportRequests);
+  return { ...query, data: useResolved<SupportRequest[]>(query, EMPTY) };
 }
 
 export function useConfig() {

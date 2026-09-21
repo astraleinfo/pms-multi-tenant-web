@@ -93,6 +93,26 @@ export interface Feature {
 
 export type TenantFeatureStatus = "active" | "inactive" | "trial";
 
+/* ---- support desk ----------------------------------------------------------- */
+
+export type SupportRequestKind = "activation" | "walkthrough" | "general";
+/** Whether the desk has been emailed. The request stands either way. */
+export type SupportRequestStatus = "queued" | "sent" | "failed";
+
+export interface SupportRequest {
+  id: Id;
+  tenant_id: Id;
+  kind: SupportRequestKind;
+  feature_key: FeatureKey | null;
+  message: string;
+  /** "Name <email>" of whoever asked */
+  requested_by: string;
+  status: SupportRequestStatus;
+  /** `YYYY-MM-DD HH:mm`, clinic time */
+  created_at: string | null;
+  sent_at: string | null;
+}
+
 export interface TenantFeature {
   tenant_id: Id;
   feature_key: FeatureKey;

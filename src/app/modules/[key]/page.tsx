@@ -4,12 +4,14 @@ import * as React from "react";
 import { notFound } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useApp, useTenant } from "@/lib/store/app-store";
+import * as api from "@/lib/api";
 import { qk } from "@/lib/query/keys";
+import { useSupportRequests } from "@/lib/query/hooks";
 import { FEATURE_BY_KEY } from "@/lib/data/catalog";
 import { ALL_NAV_ITEMS } from "@/lib/nav";
 import { SUPPORT, moduleMailto, telHref } from "@/lib/support";
 import { currency } from "@/lib/format";
-import type { Feature, TenantFeature } from "@/lib/types";
+import type { Feature, SupportRequest, TenantFeature } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +28,11 @@ import {
  * an entitlement is the platform's to grant (§3.2), so there is no switch here
  * for anybody inside the clinic to throw — what there is instead is what the
  * module does, a walkthrough, the price, and the desk to ask.
+ *
+ * Asking goes through the API rather than the clinic's own mail client: the
+ * request is stored against the clinic and the platform emails the desk from
+ * it, so it arrives whether or not this machine has a mail client set up, and
+ * the page can say "requested" instead of offering the same button again.
  */
 export default function ModulePage(props: PageProps<"/modules/[key]">) {
   const { key } = React.use(props.params);
@@ -39,11 +46,55 @@ function moduleHome(feature: Feature) {
   return ALL_NAV_ITEMS.find((i) => i.feature === feature.key)?.href ?? "/reports";
 }
 
+type Ask = "activation" | "walkthrough";
+
+/**
+ * One ask of the desk about this module: the latest request of that kind, and
+ * a way to make one. A repeat inside the API's dedupe window comes back as the
+ * earlier request, so a double click cannot email the desk twice.
+ */
+function useModuleAsk(feature: Feature) {
+  const { notify, session } = useApp();
+  const qc = useQueryClient();
+  const { data: requests } = useSupportRequests();
+  const [busy, setBusy] = React.useState<Ask | null>(null);
+
+  /* Newest first from the API. A request whose email failed still counts as
+     asked — the request is on the platform's side either way. */
+  const latest = (kind: Ask): SupportRequest | undefined =>
+    requests.find((r) => r.kind === kind && r.feature_key === feature.key);
+
+  const ask = async (kind: Ask) => {
+    setBusy(kind);
+    try {
+      await api.createSupportRequest({ kind, feature_key: feature.key });
+      await qc.invalidateQueries({ queryKey: qk.supportRequests(session.tenantId) });
+      notify({
+        tone: "ok",
+        title: kind === "activation" ? "Activation requested" : "Walkthrough requested",
+        body: `The Astrale team has your request for ${feature.name} and will be in touch.`,
+      });
+    } catch (error) {
+      notify({
+        tone: "warn",
+        title: "Could not send the request",
+        body: `${error instanceof Error ? error.message : "Something went wrong."} You can also write to ${SUPPORT.email}.`,
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return { latest, ask, busy };
+}
+
 function ModuleDetail({ feature }: { feature: Feature }) {
   const { hasFeature } = useApp();
   const { tenant, user } = useTenant();
   const active = hasFeature(feature.key);
-  const mail = (ask: "activation" | "walkthrough") => moduleMailto(ask, { feature, tenant, user });
+  const { latest, ask, busy } = useModuleAsk(feature);
+  const activation = latest("activation");
+  const walkthrough = latest("walkthrough");
 
   return (
     <>
@@ -70,12 +121,22 @@ function ModuleDetail({ feature }: { feature: Feature }) {
             </ButtonLink>
           ) : (
             <>
-              <a className={buttonClass({ variant: "secondary" })} href={mail("walkthrough")}>
-                <IconPlay size={15} /> Ask for a walkthrough
-              </a>
-              <a className={buttonClass({ variant: "primary" })} href={mail("activation")}>
-                <IconMail size={15} /> Request activation
-              </a>
+              <AskButton
+                variant="secondary"
+                request={walkthrough}
+                busy={busy === "walkthrough"}
+                onAsk={() => void ask("walkthrough")}
+                idle={<><IconPlay size={15} /> Ask for a walkthrough</>}
+                done="Walkthrough requested"
+              />
+              <AskButton
+                variant="primary"
+                request={activation}
+                busy={busy === "activation"}
+                onAsk={() => void ask("activation")}
+                idle={<><IconMail size={15} /> Request activation</>}
+                done="Activation requested"
+              />
             </>
           )
         }
@@ -115,13 +176,41 @@ function ModuleDetail({ feature }: { feature: Feature }) {
             </CardBody>
           </Card>
 
-          <DemoVideo feature={feature} walkthroughHref={mail("walkthrough")} />
+          <DemoVideo
+            feature={feature}
+            walkthrough={
+              <AskButton
+                variant="secondary"
+                size="sm"
+                request={walkthrough}
+                busy={busy === "walkthrough"}
+                onAsk={() => void ask("walkthrough")}
+                idle="Book a live walkthrough"
+                done="Walkthrough requested"
+              />
+            }
+          />
         </div>
 
         <aside className="space-y-5">
           <div className="lg:sticky lg:top-[calc(var(--topbar-h)+1.25rem)] space-y-5">
             <Pricing feature={feature} />
-            <ContactSupport feature={feature} active={active} activationHref={mail("activation")} />
+            <ContactSupport
+              feature={feature}
+              active={active}
+              writeHref={moduleMailto("activation", { feature, tenant, user })}
+              activation={activation}
+              activate={
+                <AskButton
+                  variant="primary"
+                  request={activation}
+                  busy={busy === "activation"}
+                  onAsk={() => void ask("activation")}
+                  idle={<><IconMail size={15} /> Request activation</>}
+                  done="Activation requested"
+                />
+              }
+            />
           </div>
         </aside>
       </div>
@@ -136,7 +225,7 @@ function ModuleDetail({ feature }: { feature: Feature }) {
  * is pressed would be worse than saying so — the panel says what the film will
  * cover and offers the live version in the meantime.
  */
-function DemoVideo({ feature, walkthroughHref }: { feature: Feature; walkthroughHref: string }) {
+function DemoVideo({ feature, walkthrough }: { feature: Feature; walkthrough: React.ReactNode }) {
   return (
     <Card>
       <CardHeader
@@ -155,9 +244,7 @@ function DemoVideo({ feature, walkthroughHref }: { feature: Feature; walkthrough
               Until it is here, support will walk you through the module on a call, in your own clinic&rsquo;s data.
             </p>
           </div>
-          <a className={buttonClass({ variant: "secondary", size: "sm" })} href={walkthroughHref}>
-            Book a live walkthrough
-          </a>
+          {walkthrough}
         </div>
 
         <p className="mt-4 text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-3">
@@ -206,12 +293,52 @@ function Pricing({ feature }: { feature: Feature }) {
   );
 }
 
+/** `YYYY-MM-DD HH:mm` → `YYYY-MM-DD`: the day is what anybody asks about. */
+const askedOn = (r: SupportRequest) => r.created_at?.slice(0, 10) ?? "";
+
+/** "Hema Nair <admin@…>" → "Hema Nair". */
+const askedBy = (r: SupportRequest) => r.requested_by.replace(/\s*<.*>$/, "");
+
+/**
+ * A button that asks once. After the ask it says so, and when — the request is
+ * stored on the platform's side, so pressing it again would only repeat it.
+ */
+function AskButton({
+  variant, size, request, busy, onAsk, idle, done,
+}: {
+  variant: "primary" | "secondary";
+  size?: "sm";
+  request: SupportRequest | undefined;
+  busy: boolean;
+  onAsk: () => void;
+  idle: React.ReactNode;
+  done: string;
+}) {
+  if (request) {
+    return (
+      <Button variant="secondary" size={size} disabled title={`Asked by ${askedBy(request)}`}>
+        <IconCheck size={15} /> {done}
+        {askedOn(request) && <span className="text-ink-3">· {askedOn(request)}</span>}
+      </Button>
+    );
+  }
+  return (
+    <Button variant={variant} size={size} onClick={onAsk} disabled={busy}>
+      {busy ? "Sending…" : idle}
+    </Button>
+  );
+}
+
 function ContactSupport({
-  feature, active, activationHref,
+  feature, active, writeHref, activation, activate,
 }: {
   feature: Feature;
   active: boolean;
-  activationHref: string;
+  /** a prefilled mail, for a module already on — there is nothing to request */
+  writeHref: string;
+  activation: SupportRequest | undefined;
+  /** the request button, owned by the page so every copy of it agrees */
+  activate: React.ReactNode;
 }) {
   const { notify, session } = useApp();
   const qc = useQueryClient();
@@ -253,15 +380,20 @@ function ContactSupport({
       <CardBody className="space-y-3 pt-0">
         {!active && (
           <p className="text-[0.8125rem] leading-relaxed text-ink-2">
-            Modules are switched on by the Astrale team, not from inside the clinic. Send the request and it reaches
-            a super admin with your clinic and this module already filled in.
+            {activation
+              ? `Requested${askedOn(activation) ? ` on ${askedOn(activation)}` : ""} by ${askedBy(activation)}. A super admin switches it on once it is agreed — there is nothing more to send.`
+              : "Modules are switched on by the Astrale team, not from inside the clinic. Send the request and it reaches a super admin with your clinic and this module already filled in."}
           </p>
         )}
 
         <div className="flex flex-col gap-2">
-          <a className={buttonClass({ variant: active ? "secondary" : "primary" })} href={activationHref}>
-            <IconMail size={15} /> {active ? "Write to support" : "Request activation"}
-          </a>
+          {active ? (
+            <a className={buttonClass({ variant: "secondary" })} href={writeHref}>
+              <IconMail size={15} /> Write to support
+            </a>
+          ) : (
+            activate
+          )}
           <a className={buttonClass({ variant: "secondary" })} href={telHref(SUPPORT.phone)}>
             <IconPhone size={15} /> {SUPPORT.phone}
           </a>

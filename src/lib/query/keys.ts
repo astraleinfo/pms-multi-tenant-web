@@ -24,6 +24,7 @@ export const qk = {
   users: (t: Id) => ["tenant", t, "users"] as const,
   doctors: (t: Id) => ["tenant", t, "users", "doctors"] as const,
   features: (t: Id) => ["tenant", t, "features"] as const,
+  supportRequests: (t: Id) => ["tenant", t, "support-requests"] as const,
   config: (t: Id) => ["tenant", t, "config"] as const,
   fields: (t: Id) => ["tenant", t, "fields"] as const,
   schema: (t: Id, entity: FieldDefinition["entity"], clinicalType: string) =>
