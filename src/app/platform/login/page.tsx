@@ -3,30 +3,77 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useApp } from "@/lib/store/app-store";
-import { Button } from "@/components/ui/button";
-import { Field, Input, PasswordInput } from "@/components/ui/field";
-import { AuthStage, ConsolePreview } from "@/components/layout/auth-stage";
-import { IconAlert, IconArrowRight, IconLayers, IconLock, IconReceipt, IconShield } from "@/components/ui/icons";
+import { StageLoader } from "@/components/ui/loader";
+import {
+  EmailField, GlyphBilling, GlyphClinic, GlyphModules, GlyphShield, LoginAccent, LoginError,
+  LoginScene, PasswordField, RememberRow, SubmitButton, type LoginFeature,
+} from "@/components/layout/login-scene";
+import background from "../../../../public/images/admin-login-bg.webp";
 
-const POINTS = [
-  { title: "Onboard clinics", body: "A subdomain, an admin invitation and a staff import in minutes.", icon: <IconLayers size={15} /> },
-  { title: "Sell modules", body: "Set prices, grant access and see what each clinic runs.", icon: <IconReceipt size={15} /> },
-  { title: "Bill and remind", body: "Monthly bills, reminders, and a hold for anything unpaid.", icon: <IconLock size={15} /> },
-  { title: "Stay outside", body: "Platform staff have no clinic of their own and never appear inside one.", icon: <IconShield size={15} /> },
+/* ==========================================================================
+   Platform sign-in — the console's own address, in the night scene.
+   Same room, same layout as a clinic's sign-in, lit for after hours: the
+   people here work above every clinic, not inside one. There is no password
+   reset for platform staff from this page, so no link offers one.
+   ========================================================================== */
+
+const FEATURES: LoginFeature[] = [
+  {
+    title: "Onboard Clinics",
+    body: ["A subdomain, an admin", "invite and staff import"],
+    icon: <GlyphClinic />,
+    tile: "bg-[#16326E] text-[#8FB2FF]",
+  },
+  {
+    title: "Modules & Pricing",
+    body: ["Set prices and choose", "what each clinic runs"],
+    icon: <GlyphModules />,
+    tile: "bg-[#0F4540] text-[#4ADE9B]",
+  },
+  {
+    title: "Billing & Reminders",
+    body: ["Monthly bills, reminders", "and holds when unpaid"],
+    icon: <GlyphBilling />,
+    tile: "bg-[#2E2766] text-[#B7A2FF]",
+  },
+  {
+    title: "Kept Outside",
+    body: ["Platform staff never", "appear inside a clinic"],
+    icon: <GlyphShield />,
+    tile: "bg-[#4A2A1E] text-[#FF9A5C]",
+  },
 ];
+
+/* kept apart from the clinic sign-in's key: one browser may hold both */
+const REMEMBER_KEY = "astrale.platform-login.email";
 
 export default function PlatformLoginPage() {
   const router = useRouter();
-  const { host, platformSession, ready, platformSignIn } = useApp();
+  const { platformSession, ready, platformSignIn } = useApp();
+
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
+  const [remember, setRemember] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
 
   React.useEffect(() => {
     if (ready && platformSession.signedIn) router.replace("/platform");
   }, [ready, platformSession.signedIn, router]);
 
-  const [busy, setBusy] = React.useState(false);
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem(REMEMBER_KEY);
+      if (saved) {
+        setEmail(saved);
+        setRemember(true);
+      }
+    } catch {
+      /* storage blocked — nothing to restore */
+    }
+  }, []);
+
+  if (!ready) return <StageLoader className="!bg-stage" />;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,6 +81,12 @@ export default function PlatformLoginPage() {
     const result = await platformSignIn(email, password);
     setBusy(false);
     if (result.ok) {
+      try {
+        if (remember) localStorage.setItem(REMEMBER_KEY, email);
+        else localStorage.removeItem(REMEMBER_KEY);
+      } catch {
+        /* storage blocked — sign-in still stands */
+      }
       setError(null);
       router.replace("/platform");
     } else {
@@ -43,47 +96,55 @@ export default function PlatformLoginPage() {
   };
 
   return (
-    <AuthStage
-      eyebrow="Platform"
-      title="The platform console"
-      address={`admin.${host.root}${host.port ? `:${host.port}` : ""}`}
-      points={POINTS}
-      preview={<ConsolePreview />}
-      blurb="Above every clinic: onboard them, sell them modules, bill them, and switch them on or off. This address never serves patient data."
+    <LoginScene
+      tone="night"
+      background={background}
+      pitch={{
+        eyebrow: "The platform console. Astrale staff only.",
+        headline: (
+          <>
+            Every clinic on Astrale,
+            <br />
+            run from <LoginAccent>one console</LoginAccent>
+          </>
+        ),
+        lede: (
+          <>
+            Onboard clinics, sell modules and send the bills —
+            <br />
+            patient data never passes through here.
+          </>
+        ),
+        features: FEATURES,
+      }}
+      title="Platform Login"
+      subtitle=""
     >
-      <div className="flex flex-col items-center text-center">
-        <span className="flex h-12 w-12 items-center justify-center rounded-[14px] bg-accent text-accent-ink">
-          <IconShield size={22} />
-        </span>
-        <h2 className="mt-4 font-display text-h2 font-semibold tracking-[-0.02em] text-ink">
-          Platform sign-in
-        </h2>
-        <p className="mt-1 text-label text-ink-3">Astrale staff only</p>
-      </div>
-
-      <form onSubmit={submit} className="mt-7 space-y-4">
-        <Field label="Email" required htmlFor="pemail">
-          <Input id="pemail" type="email" autoComplete="username" value={email} required
-                 onChange={(e) => { setEmail(e.target.value); setError(null); }}
-                 placeholder="you@astrale.health" invalid={!!error} />
-        </Field>
-        <Field label="Password" required htmlFor="ppassword">
-          <PasswordInput id="ppassword" autoComplete="current-password" value={password} required
-                 onChange={(e) => { setPassword(e.target.value); setError(null); }}
-                 placeholder="••••••••" invalid={!!error} />
-        </Field>
-
-        {error && (
-          <p role="alert" className="flex items-start gap-2 rounded-[var(--r)] border border-critical-border bg-critical-soft px-3 py-2.5 text-label leading-snug text-critical-text">
-            <IconAlert size={15} className="mt-px shrink-0" />
-            {error}
-          </p>
-        )}
-
-        <Button type="submit" variant="primary" size="lg" className="w-full" disabled={busy}>
-          {busy ? "Signing in…" : <>Sign in <IconArrowRight size={16} /></>}
-        </Button>
+      <form onSubmit={submit} className="mt-5.5 space-y-3 short:mt-5">
+        <EmailField
+          id="pemail"
+          label="Email address"
+          autoComplete="username"
+          value={email}
+          onChange={(e) => { setEmail(e.target.value); setError(null); }}
+          placeholder="you@astrale.health"
+          invalid={!!error}
+          required
+        />
+        <PasswordField
+          id="ppassword"
+          label="Password"
+          autoComplete="current-password"
+          value={password}
+          onChange={(e) => { setPassword(e.target.value); setError(null); }}
+          placeholder="Enter your password"
+          invalid={!!error}
+          required
+        />
+        <RememberRow checked={remember} onChange={setRemember} />
+        {error && <LoginError>{error}</LoginError>}
+        <SubmitButton busy={busy}>Sign In</SubmitButton>
       </form>
-    </AuthStage>
+    </LoginScene>
   );
 }

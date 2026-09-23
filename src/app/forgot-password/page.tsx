@@ -3,11 +3,14 @@
 import * as React from "react";
 import * as api from "@/lib/api";
 import { useApp } from "@/lib/store/app-store";
-import { Button } from "@/components/ui/button";
-import { Field, Input } from "@/components/ui/field";
-import { AuthStage } from "@/components/layout/auth-stage";
-import { IconArrowRight, IconCheck, IconLock } from "@/components/ui/icons";
+import { cn } from "@/lib/cn";
+import { IconCheck } from "@/components/ui/icons";
 import { StageLoader } from "@/components/ui/loader";
+import {
+  EmailField, GlyphClock, GlyphPadlock, GlyphShield, GlyphSignOut, LoginAccent, LoginLink,
+  LoginNote, LoginScene, SubmitButton, useLoginPalette, type LoginFeature,
+} from "@/components/layout/login-scene";
+import background from "../../../public/images/tenant-login-bg.webp";
 
 /* ==========================================================================
    "I have forgotten my password."
@@ -19,17 +22,44 @@ import { StageLoader } from "@/components/ui/loader";
 
    That is also why there is no error state worth showing: the request cannot
    meaningfully fail from the visitor's side.
+
+   It sits in the clinic sign-in's daytime scene — the same room, one step on.
    ========================================================================== */
 
+const FEATURES: LoginFeature[] = [
+  {
+    title: "Same Answer",
+    body: ["Replies the same whether", "or not you have an account"],
+    icon: <GlyphShield />,
+    tile: "bg-[#E4ECFA] text-[#2F62C8]",
+  },
+  {
+    title: "Short-lived Link",
+    body: ["Expires in a couple of", "hours and works once"],
+    icon: <GlyphClock />,
+    tile: "bg-[#DDF6EC] text-[#10B866]",
+  },
+  {
+    title: "Signs You Out",
+    body: ["Using it ends every", "session, on every device"],
+    icon: <GlyphSignOut />,
+    tile: "bg-[#E6E6FD] text-[#7A4CF6]",
+  },
+  {
+    title: "Locks Still Hold",
+    body: ["A locked account stays", "locked until an admin acts"],
+    icon: <GlyphPadlock />,
+    tile: "bg-[#FDECE2] text-[#FB5A12]",
+  },
+];
+
 export default function ForgotPasswordPage() {
-  const { host, hostTenant, hostTenantPending, ready } = useApp();
+  const { hostTenant, hostTenantPending, ready } = useApp();
   const [email, setEmail] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [sent, setSent] = React.useState(false);
 
   if (!ready || hostTenantPending || !hostTenant) return <StageLoader className="!bg-stage" />;
-
-  const address = `${hostTenant.slug}.${host.root}${host.port ? `:${host.port}` : ""}`;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,91 +73,76 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <AuthStage
-      eyebrow="Forgotten password"
-      title={hostTenant.name}
-      address={address}
-      blurb={
-        <>
-          A link comes by email and you choose a new password yourself. Nobody at the clinic
-          can see what you pick, and nobody has to hand you a temporary one on the way.
-        </>
+    <LoginScene
+      tone="day"
+      background={background}
+      pitch={{
+        eyebrow: "Password reset. Private by design.",
+        headline: (
+          <>
+            Locked out? Get back in
+            <br />
+            with <LoginAccent>one secure link</LoginAccent>
+          </>
+        ),
+        lede: (
+          <>
+            A link comes by email and you choose the new
+            <br />
+            password — nobody at the clinic sees what you pick.
+          </>
+        ),
+        features: FEATURES,
+      }}
+      title={sent ? "Check your email" : "Forgot password"}
+      subtitle={sent ? undefined : "Enter the email you sign in with."}
+      below={
+        <div className="mt-3.5 text-center short:mt-4">
+          <LoginLink href="/login">Back to sign in</LoginLink>
+        </div>
       }
-      points={[
-        { title: "Same answer", body: "This page replies identically whether or not the address has an account." },
-        { title: "Short-lived", body: "The link expires in a couple of hours and works exactly once." },
-        { title: "Ends sessions", body: "Using it signs the account out everywhere, on every device." },
-        { title: "Still locked", body: "An account an admin locked stays locked. A link does not release it." },
-      ]}
     >
       {sent ? (
-        <div className="space-y-4 text-center">
-          <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-ok-soft text-ok-text">
-            <IconCheck size={20} />
-          </span>
-          <div>
-            <h2 className="font-display text-title font-semibold text-ink">
-              Check your email
-            </h2>
-            <p className="mt-2 text-label leading-relaxed text-ink-2">
-              If <span className="tnum font-mono text-ink">{email.trim()}</span> has an account at{" "}
-              {hostTenant.name}, a link is on its way. It works once and expires in a couple of
-              hours.
-            </p>
-          </div>
-          <p className="text-caption leading-relaxed text-ink-3">
-            Nothing has changed yet — your current password still works until you use the link.
-          </p>
-          <a
-            href="/login"
-            className="block text-center text-label text-accent-text underline-offset-4 hover:underline"
-          >
-            Back to sign in
-          </a>
-        </div>
+        <Sent email={email.trim()} clinic={hostTenant.name} />
       ) : (
-        <>
-          <h2 className="font-display text-title font-semibold text-ink">
-            Send me a link
-          </h2>
-          <p className="mt-1 text-label leading-relaxed text-ink-2">
-            The address you sign in to {hostTenant.name} with.
-          </p>
-
-          <form onSubmit={submit} className="mt-5 space-y-4">
-            <Field label="Email" required htmlFor="email">
-              <Input
-                id="email"
-                type="email"
-                autoComplete="username"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@clinic.example"
-                required
-              />
-            </Field>
-
-            <Button type="submit" variant="primary" size="lg" className="w-full" disabled={busy}>
-              {busy ? "Sending…" : "Send reset link"} <IconArrowRight size={16} />
-            </Button>
-          </form>
-
-          <div className="mt-4 border-t border-line-soft pt-3">
-            <a
-              href="/login"
-              className="text-label text-accent-text underline-offset-4 hover:underline"
-            >
-              Back to sign in
-            </a>
-          </div>
-
-          <p className="mt-3 flex items-start gap-1.5 text-micro leading-snug text-ink-3">
-            <IconLock size={12} className="mt-px shrink-0" />
-            This page answers the same way whatever you type, so it cannot be used to find out
-            who works here.
-          </p>
-        </>
+        <form onSubmit={submit} className="mt-5.5 space-y-3 short:mt-5">
+          <EmailField
+            id="email"
+            label="Email address"
+            autoComplete="username"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Enter your email address"
+            required
+          />
+          <SubmitButton busy={busy} busyLabel="Sending…">Send reset link</SubmitButton>
+          <LoginNote>
+            This page answers the same way whatever you type, so it can’t be used to find out who
+            works here.
+          </LoginNote>
+        </form>
       )}
-    </AuthStage>
+    </LoginScene>
+  );
+}
+
+/** The one reply this page ever gives. */
+function Sent({ email, clinic }: { email: string; clinic: string }) {
+  const p = useLoginPalette();
+  return (
+    <div className="mt-5.5 space-y-4">
+      <p className="flex items-start gap-3 text-[16px] leading-[1.55]">
+        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#10B866] text-white">
+          <IconCheck size={15} strokeWidth={2.6} />
+        </span>
+        <span>
+          If <span className="font-medium">{email}</span> has an account at {clinic}, a link is on
+          its way. It works once and expires in a couple of hours.
+        </span>
+      </p>
+      <p className={cn("text-[14px] leading-[1.5]", p.muted)}>
+        Nothing has changed yet — your current password still works until you use the link.
+      </p>
+    </div>
   );
 }
