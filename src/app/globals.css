@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* a laptop screen once the browser chrome has taken its share */
+@custom-variant short (@media (max-height: 860px));
+
 /* ==========================================================================
    Astrale PMS — design tokens
 
