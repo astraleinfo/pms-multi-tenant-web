@@ -10,8 +10,8 @@ import type {
    There is no billing service behind the console: no invoice table for
    clinics, no gateway, no dunning run. What there *is* is the entitlement row
    — which module a clinic holds, whether it is live or on trial, and the day
-   it was switched on — and the catalogue price sitting next to it. Those two
-   are enough to say what each clinic is charged this month, what the platform
+   it was switched on — and the catalogue price sitting next to it, which a
+   super admin sets in the console and the API serves. Those two are enough to say what each clinic is charged this month, what the platform
    collects across all of them, and when every subscription started.
 
    So every figure in the console is a pure function of those two inputs, and
@@ -20,6 +20,8 @@ import type {
    `Subscription`, `ModuleStats` and `LedgerEntry`, not prices and statuses.
    ========================================================================== */
 
+/** The paid modules by name — the copy only. What each costs is `Feature`,
+    from `usePlatformCatalog`. */
 export const PAID_FEATURES = FEATURES.filter((f) => !f.is_core);
 export const CORE_FEATURES = FEATURES.filter((f) => f.is_core);
 
@@ -86,13 +88,13 @@ export interface ConsoleRow extends PlatformTenantRow {
  * ledger and the trend leave undetailed rows out rather than guess a date.
  */
 export function consoleRows(
-  rows: readonly PlatformTenantRow[], entitlements: Entitlements,
+  rows: readonly PlatformTenantRow[], entitlements: Entitlements, features: readonly Feature[],
 ): ConsoleRow[] {
   return rows.map((row) => {
     const held = entitlements.get(row.tenant.id);
     const byKey = new Map((held ?? []).map((r) => [r.feature_key, r]));
 
-    const subscriptions = FEATURES.map<Subscription>((feature) => {
+    const subscriptions = features.map<Subscription>((feature) => {
       const entitlement = byKey.get(feature.key);
       const status: TenantFeatureStatus = entitlement
         ? entitlement.status
@@ -221,8 +223,10 @@ export interface ModuleStats {
   adoption: number;
 }
 
-export function moduleStats(rows: readonly ConsoleRow[]): ModuleStats[] {
-  return FEATURES.map((feature) => {
+export function moduleStats(
+  rows: readonly ConsoleRow[], features: readonly Feature[],
+): ModuleStats[] {
+  return features.map((feature) => {
     const lines = rows.map(
       (r) => r.subscriptions.find((s) => s.feature.key === feature.key)!,
     );

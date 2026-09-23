@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useApp } from "@/lib/store/app-store";
-import { usePlatformEntitlements, usePlatformSnapshot } from "@/lib/query/hooks";
+import { usePlatformCatalog, usePlatformEntitlements, usePlatformSnapshot } from "@/lib/query/hooks";
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
 import {
   TODAY, compactCurrency, currency, formatDate,
@@ -47,18 +47,21 @@ export default function PlatformPage() {
 
 function Overview() {
   const { host } = useApp();
-  const { data: snapshot, isPending } = usePlatformSnapshot();
+  const { data: snapshot, isPending: snapshotPending } = usePlatformSnapshot();
   const { byTenant } = usePlatformEntitlements();
+  const catalog = usePlatformCatalog();
   const [creating, setCreating] = React.useState(false);
+  /* Revenue is prices times entitlements, so neither half is drawn alone. */
+  const isPending = snapshotPending || catalog.isPending;
 
   const rows = React.useMemo(
-    () => consoleRows(snapshot?.tenants ?? [], byTenant),
-    [snapshot, byTenant],
+    () => consoleRows(snapshot?.tenants ?? [], byTenant, catalog.features),
+    [snapshot, byTenant, catalog.features],
   );
   const totals = React.useMemo(() => platformTotals(rows), [rows]);
   const stats = React.useMemo(
-    () => moduleStats(rows).filter((s) => !s.feature.is_core),
-    [rows],
+    () => moduleStats(rows, catalog.features).filter((s) => !s.feature.is_core),
+    [rows, catalog.features],
   );
 
   const today = React.useMemo(() => platformToday(rows, TODAY), [rows]);

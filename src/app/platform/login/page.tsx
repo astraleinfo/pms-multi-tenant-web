@@ -3,17 +3,16 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useApp } from "@/lib/store/app-store";
-import { DEMO_PLATFORM_ACCOUNTS } from "@/lib/demo-accounts";
 import { Button } from "@/components/ui/button";
-import { Field, Input } from "@/components/ui/field";
-import { AuthStage, DemoCredentials } from "@/components/layout/auth-stage";
-import { IconAlert, IconArrowRight, IconShield } from "@/components/ui/icons";
+import { Field, Input, PasswordInput } from "@/components/ui/field";
+import { AuthStage, ConsolePreview } from "@/components/layout/auth-stage";
+import { IconAlert, IconArrowRight, IconLayers, IconLock, IconReceipt, IconShield } from "@/components/ui/icons";
 
 const POINTS = [
-  { title: "Create clinics", body: "Each one gets its own subdomain the moment it exists." },
-  { title: "Hand over the keys", body: "The first admin account is created with the tenant." },
-  { title: "Lock and release", body: "Suspending a clinic takes its subdomain offline immediately." },
-  { title: "Stay outside", body: "Platform staff have no tenant and never appear inside one." },
+  { title: "Onboard clinics", body: "A subdomain, an admin invitation and a staff import in minutes.", icon: <IconLayers size={15} /> },
+  { title: "Sell modules", body: "Set prices, grant access and see what each clinic runs.", icon: <IconReceipt size={15} /> },
+  { title: "Bill and remind", body: "Monthly bills, reminders, and a hold for anything unpaid.", icon: <IconLock size={15} /> },
+  { title: "Stay outside", body: "Platform staff have no clinic of their own and never appear inside one.", icon: <IconShield size={15} /> },
 ];
 
 export default function PlatformLoginPage() {
@@ -46,31 +45,30 @@ export default function PlatformLoginPage() {
   return (
     <AuthStage
       eyebrow="Platform"
-      title="Super admin console"
-      address={`${host.root}${host.port ? `:${host.port}` : ""}`}
+      title="The platform console"
+      address={`admin.${host.root}${host.port ? `:${host.port}` : ""}`}
       points={POINTS}
-      blurb="Above every clinic: create tenants, hand them a subdomain, and switch them on or off. This host never serves patient data."
+      preview={<ConsolePreview />}
+      blurb="Above every clinic: onboard them, sell them modules, bill them, and switch them on or off. This address never serves patient data."
     >
-      <div className="flex items-center gap-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-accent text-accent-ink">
-          <IconShield size={19} />
+      <div className="flex flex-col items-center text-center">
+        <span className="flex h-12 w-12 items-center justify-center rounded-[14px] bg-accent text-accent-ink">
+          <IconShield size={22} />
         </span>
-        <div className="min-w-0">
-          <h2 className="truncate font-display text-title font-semibold text-ink">
-            Platform sign-in
-          </h2>
-          <p className="truncate text-caption text-ink-3">Astrale staff only</p>
-        </div>
+        <h2 className="mt-4 font-display text-h2 font-semibold tracking-[-0.02em] text-ink">
+          Platform sign-in
+        </h2>
+        <p className="mt-1 text-label text-ink-3">Astrale staff only</p>
       </div>
 
-      <form onSubmit={submit} className="mt-5 space-y-4">
+      <form onSubmit={submit} className="mt-7 space-y-4">
         <Field label="Email" required htmlFor="pemail">
           <Input id="pemail" type="email" autoComplete="username" value={email} required
                  onChange={(e) => { setEmail(e.target.value); setError(null); }}
                  placeholder="you@astrale.health" invalid={!!error} />
         </Field>
         <Field label="Password" required htmlFor="ppassword">
-          <Input id="ppassword" type="password" autoComplete="current-password" value={password} required
+          <PasswordInput id="ppassword" autoComplete="current-password" value={password} required
                  onChange={(e) => { setPassword(e.target.value); setError(null); }}
                  placeholder="••••••••" invalid={!!error} />
         </Field>
@@ -83,15 +81,9 @@ export default function PlatformLoginPage() {
         )}
 
         <Button type="submit" variant="primary" size="lg" className="w-full" disabled={busy}>
-          Sign in <IconArrowRight size={16} />
+          {busy ? "Signing in…" : <>Sign in <IconArrowRight size={16} /></>}
         </Button>
       </form>
-
-      <DemoCredentials
-        className="mt-4"
-        accounts={DEMO_PLATFORM_ACCOUNTS}
-        onPick={(e, p) => { setEmail(e); setPassword(p); setError(null); }}
-      />
     </AuthStage>
   );
 }

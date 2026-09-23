@@ -69,6 +69,7 @@ export const IconPhone = mk(<><path d="M6.4 3.6h3.2l1.6 4-2 1.4a12 12 0 0 0 5.8 
 export const IconMail = mk(<><rect x="3" y="5.5" width="18" height="13" rx="2.4" /><path d="m3.8 7 8.2 6 8.2-6" /></>);
 export const IconPin = mk(<><path d="M12 21s6.8-6.1 6.8-11A6.8 6.8 0 0 0 5.2 10c0 4.9 6.8 11 6.8 11Z" /><circle cx="12" cy="10" r="2.4" /></>);
 export const IconEye = mk(<><path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12Z" /><circle cx="12" cy="12" r="3" /></>);
+export const IconEyeOff = mk(<><path d="M3.5 3.5l17 17" /><path d="M10.6 5.6A9.7 9.7 0 0 1 12 5.5c5 0 8.5 4.3 9.5 6.5a12.6 12.6 0 0 1-2.8 3.7M6.6 6.9C4.6 8.2 3.2 10.2 2.5 12c1 2.2 4.5 6.5 9.5 6.5a9.2 9.2 0 0 0 4.3-1" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></>);
 export const IconDroplet = mk(<><path d="M12 3.2s6 6.3 6 10.2a6 6 0 0 1-12 0c0-3.9 6-10.2 6-10.2Z" /></>);
 export const IconTooth = mk(<><path d="M7.8 3.4C5.4 3.4 4 5.3 4 7.9c0 2.4 1 3.6 1.4 6.2.3 2 .3 6.4 2.2 6.4 1.7 0 1.6-4.6 2.9-4.6h3c1.3 0 1.2 4.6 2.9 4.6 1.9 0 1.9-4.4 2.2-6.4.4-2.6 1.4-3.8 1.4-6.2 0-2.6-1.4-4.5-3.8-4.5-1.6 0-2.4.9-4.2.9s-2.6-.9-4.2-.9Z" /></>);
 export const IconLayers = mk(<><path d="m12 3.5 8.5 4.3L12 12 3.5 7.8 12 3.5Z" /><path d="m3.5 12.2 8.5 4.3 8.5-4.3M3.5 16.4l8.5 4.2 8.5-4.2" /></>);
@@ -81,4 +82,5 @@ export const IconPlay = mk(<><path d="M8 5.5 18 12 8 18.5v-13Z" /></>);
 export const IconBookmark = mk(<><path d="M6 4.5h12v16l-6-4-6 4v-16Z" /></>);
 export const IconCard = mk(<><rect x="2.5" y="5" width="19" height="14" rx="2.6" /><path d="M2.5 9.8h19M6 15h4" /></>);
 export const IconDownload = mk(<><path d="M12 4v10.5M7.5 10.5 12 15l4.5-4.5" /><path d="M4.5 19.5h15" /></>);
+export const IconUpload = mk(<><path d="M12 15V4.5M7.5 9 12 4.5 16.5 9" /><path d="M4.5 19.5h15" /></>);
 export const IconExternal = mk(<><path d="M14 4.5h5.5V10" /><path d="m19.5 4.5-8 8" /><path d="M18.5 14v4.5a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2H10" /></>);

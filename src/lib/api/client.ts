@@ -26,6 +26,18 @@ export const getAccessToken = () => accessToken;
 /** The provider registers what to do when the session is definitively over. */
 export const onSessionLost = (handler: () => void) => { onSignedOut = handler; };
 
+let onHold: (() => void) | null = null;
+
+/** The shell registers what to do when the clinic turns out to be on hold for
+    an unpaid bill — which can happen mid-session, when the nightly run lands. */
+export const onAccountHold = (handler: (() => void) | null) => { onHold = handler; };
+
+function failed(status: number, parsed: unknown, fallback: string): ApiError {
+  const error = new ApiError(status, parsed as ApiErrorBody, fallback);
+  if (error.status === 402 && error.code === "account_on_hold") onHold?.();
+  return error;
+}
+
 /** The clinic this tab is on, as a header for development proxies (see next.config.ts). */
 function tenantHeaders(): Record<string, string> {
   if (typeof window === "undefined") return {};
@@ -153,7 +165,7 @@ export async function requestBlob(path: string, options: RequestOptions = {}): P
   if (!response.ok) {
     let parsed: Partial<ApiErrorBody> | null = null;
     try { parsed = JSON.parse(await response.text()) as ApiErrorBody; } catch { /* not JSON */ }
-    throw new ApiError(response.status, parsed, "Something went wrong.");
+    throw failed(response.status, parsed, "Something went wrong.");
   }
 
   return response.blob();
@@ -198,7 +210,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
       setAccessToken(null);
       onSignedOut?.();
     }
-    throw new ApiError(response.status, parsed as ApiErrorBody, "Something went wrong.");
+    throw failed(response.status, parsed, "Something went wrong.");
   }
 
   return parsed as T;
@@ -234,7 +246,7 @@ export async function upload<T>(path: string, form: FormData): Promise<T> {
   const parsed = text ? (JSON.parse(text) as unknown) : null;
 
   if (!response.ok) {
-    throw new ApiError(response.status, parsed as ApiErrorBody, "That upload did not go through.");
+    throw failed(response.status, parsed, "That upload did not go through.");
   }
   return parsed as T;
 }

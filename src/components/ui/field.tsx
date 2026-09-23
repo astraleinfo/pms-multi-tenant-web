@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/cn";
-import { IconCheck, IconChevronDown, IconSearch } from "./icons";
+import { IconCheck, IconChevronDown, IconEye, IconEyeOff, IconSearch } from "./icons";
 
 /**
  * Placeholder text is a token, not a faded copy of the muted ink. Diluting
@@ -81,6 +81,37 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
     );
   },
 );
+
+/**
+ * A password field that can be shown. Typing a long password blind on a phone
+ * is how accounts get locked; the toggle is a button, so it is reachable by
+ * keyboard, and it never submits the form.
+ */
+export const PasswordInput = React.forwardRef<
+  HTMLInputElement,
+  Omit<React.InputHTMLAttributes<HTMLInputElement>, "type"> & { invalid?: boolean }
+>(function PasswordInput({ className, invalid, ...rest }, ref) {
+  const [shown, setShown] = React.useState(false);
+  return (
+    <div className="relative">
+      <input
+        ref={ref}
+        type={shown ? "text" : "password"}
+        className={cn(controlBase, "h-9.5 pl-3 pr-10 text-body", invalid && "border-critical focus:border-critical", className)}
+        {...rest}
+      />
+      <button
+        type="button"
+        onClick={() => setShown((s) => !s)}
+        className="absolute inset-y-0 right-0 flex w-9 items-center justify-center rounded-r-[var(--r)] text-ink-3 transition-colors hover:text-ink"
+        aria-label={shown ? "Hide password" : "Show password"}
+        aria-pressed={shown}
+      >
+        {shown ? <IconEyeOff size={16} /> : <IconEye size={16} />}
+      </button>
+    </div>
+  );
+});
 
 export const Textarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement> & { invalid?: boolean }>(
   function Textarea({ className, invalid, rows = 3, ...rest }, ref) {

@@ -1,13 +1,15 @@
 "use client";
 
 import type {
-  AccountStatus, Appointment, BillingDepartment, ClinicalTypeKey, Encounter, FeatureKey,
+  AccountStatus, Appointment, BillingDepartment, CatalogFeature, ClinicalTypeKey, Encounter,
+  FeatureKey,
   Charge, FieldDefinition, HistoryEvent, Id, InventoryBatch, InventoryItem, InventoryItemPatch,
   InventoryTransaction, InventoryTxType, Invoice, InvoiceLineItem, LabAttachment, LabOrder,
   LabResultLine, NewAppointment, NewEncounter, NewInventoryItem, NewServicePrice, Patient,
   PatientAccount, Payment, Prescription, PrescriptionItem, PricingMode, QueueEntry, Role,
   ServiceKind,
-  ServicePrice, ServicePricePatch, SuggestedLinesResponse, SupportRequest, SupportRequestKind, Tenant,
+  ServicePrice, ServicePricePatch, Subscription, SubscriptionInvoice, SubscriptionSummary,
+  SuggestedLinesResponse, SupportRequest, SupportRequestKind, Tenant,
   TenantConfig, TenantFeature,
   User,
 } from "@/lib/types";
@@ -234,6 +236,9 @@ export interface MedicineSuggestionOut {
 }
 export const getMedicines = () => get<MedicineSuggestionOut[]>("/v1/catalog/medicines");
 
+/** The module catalogue with today's prices, as a clinic is quoted them. */
+export const listCatalogFeatures = () => get<CatalogFeature[]>("/v1/catalog/features");
+
 export interface PatientPage {
   items: Patient[];
   total: number;
@@ -418,6 +423,17 @@ export const listInvoicePage = (query: InvoiceQuery = {}) =>
   });
 
 export const getInvoice = (id: Id) => get<Invoice>(`/v1/billing/invoices/${id}`);
+
+/** The invoice on the clinic's letterhead, rendered by the API from the same
+    totals the screen shows. */
+export const getInvoicePdf = (id: Id) => requestBlob(`/v1/billing/invoices/${id}/pdf`);
+
+/* ---- the clinic's own subscription bills (practice admin) ------------------ */
+
+/** What this clinic owes the platform. Open even while the clinic is on hold. */
+export const getSubscription = () => get<Subscription>("/v1/tenant/subscription");
+export const getSubscriptionBillPdf = (billId: Id) =>
+  requestBlob(`/v1/tenant/subscription/invoices/${billId}/pdf`);
 
 /* ---- staff ---------------------------------------------------------------- */
 
@@ -877,6 +893,10 @@ export interface Analytics {
  */
 export const getAnalytics = (days: number) => get<Analytics>("/v1/analytics/dashboard", { days });
 
+/** The reports page as a PDF — the same read model, for filing or printing. */
+export const getReportPdf = (days: number) =>
+  requestBlob("/v1/analytics/report.pdf", { query: { days } });
+
 /* ---- platform (§3.1) ------------------------------------------------------------ */
 
 export interface PlatformTenantRow {
@@ -974,6 +994,8 @@ export interface TenantEdit {
   plan?: string;
   timezone?: string;
   clinical_type?: ClinicalTypeKey;
+  /** never bill this clinic, and lift any hold it is under */
+  billing_exempt?: boolean;
 }
 
 export const updateTenant = (tenantId: Id, changes: TenantEdit) =>
@@ -989,6 +1011,96 @@ export const tenantUsers = (tenantId: Id) =>
 /** What one clinic has asked the desk for, newest first. */
 export const tenantSupportRequests = (tenantId: Id) =>
   get<SupportRequest[]>(`/v1/platform/tenants/${tenantId}/support-requests`);
+
+/** The module catalogue with today's prices, as the console sells it. */
+export const listPlatformCatalogFeatures = () =>
+  get<CatalogFeature[]>("/v1/platform/catalog/features");
+
+/**
+ * Set what a module costs per month, for every clinic at once.
+ *
+ * Super admin only: the API answers 403 to the support desk, so hiding the
+ * control from `support` is presentation, not protection. A core module
+ * carries no price and is refused with a 409.
+ */
+export const setFeaturePrice = (featureKey: FeatureKey, priceMonthly: number) =>
+  patch_<CatalogFeature>(`/v1/platform/catalog/features/${featureKey}`, {
+    price_monthly: priceMonthly,
+  });
+
+/* ---- subscription billing, from the console ---------------------------------- */
+
+export interface PlatformBillingRow {
+  tenant: Tenant;
+  summary: SubscriptionSummary;
+  invoices: SubscriptionInvoice[];
+}
+
+export interface PlatformBilling {
+  /** whether the beat raises bills by itself; "run now" works either way */
+  enabled: boolean;
+  currency: string;
+  due_days: number;
+  grace_days: number;
+  reminder_days_before_due: number;
+  clinics: PlatformBillingRow[];
+}
+
+export interface BillingRun {
+  clinics: number;
+  raised: string[];
+  reminded: string[];
+  held: string[];
+  lifted: string[];
+  failed: string[];
+}
+
+export const platformBilling = () => get<PlatformBilling>("/v1/platform/billing");
+/** Super admin: raise this month's bills and send what is due now. Idempotent. */
+export const runBilling = () => post<BillingRun>("/v1/platform/billing/run");
+export const tenantSubscription = (tenantId: Id) =>
+  get<Subscription>(`/v1/platform/tenants/${tenantId}/subscription`);
+export const tenantBillPdf = (tenantId: Id, billId: Id) =>
+  requestBlob(`/v1/platform/tenants/${tenantId}/subscription/invoices/${billId}/pdf`);
+/** Super admin: record a bill as paid. Lifts the hold if it was the last thing holding the clinic. */
+export const settleBill = (tenantId: Id, billId: Id, reference: string) =>
+  post<Subscription>(`/v1/platform/tenants/${tenantId}/subscription/invoices/${billId}/settle`, { reference });
+/** Super admin: withdraw a bill raised in error. */
+export const voidBill = (tenantId: Id, billId: Id) =>
+  post<Subscription>(`/v1/platform/tenants/${tenantId}/subscription/invoices/${billId}/void`);
+
+/* ---- onboarding from a spreadsheet ------------------------------------------ */
+
+export type ImportKind = "users" | "patients";
+
+export interface ImportReport {
+  kind: ImportKind;
+  total: number;
+  valid: number;
+  invalid: number;
+  /** false for a preview — nothing was written */
+  committed: boolean;
+  created: number;
+  /** staff only: invitations that left */
+  invited: number;
+  rows: { row: number; label: string; ok: boolean; errors: string[] }[];
+}
+
+/** The sample sheet for this clinic — its own custom patient fields included. */
+export const importTemplate = (tenantId: Id, kind: ImportKind) =>
+  requestBlob(`/v1/platform/tenants/${tenantId}/imports/${kind}/template`);
+
+/**
+ * Check a filled-in sheet; with `commit`, write it. A commit is refused (422)
+ * unless every row passes, and then nothing at all is written.
+ */
+export const runImport = (tenantId: Id, kind: ImportKind, file: File, commit: boolean) => {
+  const form = new FormData();
+  form.append("file", file);
+  return upload<ImportReport>(
+    `/v1/platform/tenants/${tenantId}/imports/${kind}?commit=${commit ? "true" : "false"}`, form,
+  );
+};
 
 export const tenantFeatures = (tenantId: Id) =>
   get<TenantFeature[]>(`/v1/platform/tenants/${tenantId}/features`);

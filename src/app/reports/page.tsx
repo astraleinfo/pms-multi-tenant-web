@@ -2,13 +2,15 @@
 
 import * as React from "react";
 import { useApp, useTenant } from "@/lib/store/app-store";
+import * as api from "@/lib/api";
+import { openPdfBlob } from "@/lib/pdf";
 import { useAnalytics } from "@/lib/query/hooks";
 import { CLINICAL_TYPES, FEATURE_BY_KEY } from "@/lib/data/catalog";
 import { modulePath } from "@/lib/nav";
 import { currency, duration, formatDate, pluralise, weekdayShort } from "@/lib/format";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { ButtonLink, Segmented } from "@/components/ui/button";
+import { Button, ButtonLink, Segmented } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState, KV, Meter } from "@/components/ui/misc";
 import { Stat } from "@/components/ui/stat";
@@ -20,7 +22,8 @@ import { RoleGate } from "@/components/domain/gates";
 import { Avatar } from "@/components/ui/misc";
 import { PageLoader } from "@/components/ui/loader";
 import {
-  IconArrowRight, IconChart, IconClock, IconFlask, IconLock, IconMortar, IconReceipt, IconSpark,
+  IconArrowRight, IconChart, IconClock, IconDownload, IconFlask, IconLock, IconMortar, IconReceipt,
+  IconSpark,
   IconStethoscope, IconUsers
 } from "@/components/ui/icons";
 
@@ -33,9 +36,22 @@ export default function ReportsPage() {
 }
 
 function Reports() {
-  const { hasFeature } = useApp();
+  const { hasFeature, notify } = useApp();
   const { tenant } = useTenant();
   const [range, setRange] = React.useState<7 | 14 | 30>(14);
+  const [exporting, setExporting] = React.useState(false);
+
+  /* The same window as the page, so the PDF is the page on paper. */
+  const exportPdf = async () => {
+    setExporting(true);
+    try {
+      openPdfBlob(await api.getReportPdf(range));
+    } catch {
+      notify({ tone: "warn", title: "Could not generate the report PDF", body: "Try again in a moment." });
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const clinical = CLINICAL_TYPES.find((c) => c.key === tenant.clinical_type)!;
   const advanced = hasFeature("advanced_reports");
@@ -76,11 +92,16 @@ function Reports() {
         title="Reports"
         description="Everything here is read straight off the transactional collections. What gets computed depends on the modules this clinic runs and the shape of its clinical payloads — nothing is aggregated that the tenant does not own."
         actions={
-          <Segmented
-            value={range}
-            onChange={setRange}
-            options={[{ value: 7, label: "7 days" }, { value: 14, label: "14 days" }, { value: 30, label: "30 days" }]}
-          />
+          <>
+            <Segmented
+              value={range}
+              onChange={setRange}
+              options={[{ value: 7, label: "7 days" }, { value: 14, label: "14 days" }, { value: 30, label: "30 days" }]}
+            />
+            <Button variant="secondary" onClick={() => { void exportPdf(); }} disabled={exporting}>
+              <IconDownload size={15} /> {exporting ? "Preparing…" : "Export PDF"}
+            </Button>
+          </>
         }
         meta={
           <>

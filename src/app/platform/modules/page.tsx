@@ -3,14 +3,16 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { usePlatformEntitlements, usePlatformSnapshot } from "@/lib/query/hooks";
+import { usePlatformCatalog, usePlatformEntitlements, usePlatformSnapshot } from "@/lib/query/hooks";
 import { TODAY, compactCurrency, currency, formatDate, pluralise } from "@/lib/format";
 import {
   PAID_FEATURES, activationLedger, consoleRows, moduleStats, mrrSeries, platformToday,
   platformTotals,
   type BillingState, type ConsoleRow, type LedgerEntry, type ModuleStats, type Subscription,
 } from "@/lib/platform/subscriptions";
-import type { FeatureKey } from "@/lib/types";
+import type { Feature, FeatureKey } from "@/lib/types";
+import { isSuperAdmin } from "@/lib/api";
+import { useApp } from "@/lib/store/app-store";
 import { cn } from "@/lib/cn";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,8 +28,9 @@ import { ConsolePage } from "@/components/platform/chrome";
 import {
   BILLING_LABEL, BillingBadge, ModulePrice, useModuleSwitch,
 } from "@/components/platform/module-controls";
+import { FeaturePriceDialog } from "@/components/platform/price-editor";
 import {
-  IconChart, IconGrid, IconLayers, IconLock, IconReceipt, IconSpark, IconUsers
+  IconChart, IconEdit, IconGrid, IconLayers, IconLock, IconReceipt, IconSpark, IconUsers
 } from "@/components/ui/icons";
 
 /* ==========================================================================
@@ -52,8 +55,10 @@ export default function ModulesPage(props: PageProps<"/platform/modules">) {
 
 function ModuleConsole({ opening }: { opening: Tab }) {
   const router = useRouter();
-  const { data: snapshot, isPending } = usePlatformSnapshot();
+  const { data: snapshot, isPending: snapshotPending } = usePlatformSnapshot();
   const { byTenant, isPending: entitlementsPending } = usePlatformEntitlements();
+  const catalog = usePlatformCatalog();
+  const isPending = snapshotPending || catalog.isPending;
   /* Addressable, the way Settings is: the overview links at three different
      parts of this screen, and without a tab in the URL all three arrived at
      the catalogue and read as three links to the same place — which is what
@@ -66,12 +71,16 @@ function ModuleConsole({ opening }: { opening: Tab }) {
   const [focus, setFocus] = React.useState<FeatureKey | "any">("any");
 
   const rows = React.useMemo(
-    () => consoleRows(snapshot?.tenants ?? [], byTenant),
-    [snapshot, byTenant],
+    () => consoleRows(snapshot?.tenants ?? [], byTenant, catalog.features),
+    [snapshot, byTenant, catalog.features],
   );
   const totals = React.useMemo(() => platformTotals(rows), [rows]);
-  const stats = React.useMemo(() => moduleStats(rows), [rows]);
+  const stats = React.useMemo(() => moduleStats(rows, catalog.features), [rows, catalog.features]);
   const paidStats = React.useMemo(() => stats.filter((s) => !s.feature.is_core), [stats]);
+  const paidFeatures = React.useMemo(
+    () => catalog.features.filter((f) => !f.is_core),
+    [catalog.features],
+  );
 
   /* Jump from a catalogue card straight to that module's tenants. */
   const manage = (key: FeatureKey) => { setFocus(key); openTab("access"); };
@@ -129,7 +138,9 @@ function ModuleConsole({ opening }: { opening: Tab }) {
 
       {tab === "catalogue" && <CatalogueTab stats={stats} paid={paidStats} onManage={manage} />}
       {tab === "access" && (
-        <AccessTab rows={rows} focus={focus} onFocus={setFocus} loading={isPending} />
+        <AccessTab
+          rows={rows} paid={paidFeatures} focus={focus} onFocus={setFocus} loading={isPending}
+        />
       )}
       {tab === "activity" && <ActivityTab rows={rows} stats={paidStats} />}
     </>
@@ -152,14 +163,31 @@ function CatalogueTab({
   paid: ModuleStats[];
   onManage: (key: FeatureKey) => void;
 }) {
+  const { platformUser } = useApp();
+  /* The price is a super admin's to set; the API refuses the desk with a 403,
+     so the desk is not offered a button that can only fail. */
+  const canPrice = isSuperAdmin(platformUser);
+  const [pricing, setPricing] = React.useState<FeatureKey | null>(null);
   const core = stats.filter((s) => s.feature.is_core);
   const byRevenue = [...paid].sort((a, b) => b.mrr - a.mrr);
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
-        {paid.map((stat) => <ModuleCard key={stat.feature.key} stat={stat} onManage={onManage} />)}
+        {paid.map((stat) => (
+          <ModuleCard
+            key={stat.feature.key}
+            stat={stat}
+            onManage={onManage}
+            onPrice={canPrice ? setPricing : undefined}
+          />
+        ))}
       </div>
+
+      <FeaturePriceDialog
+        stat={paid.find((s) => s.feature.key === pricing) ?? null}
+        onClose={() => setPricing(null)}
+      />
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Card>
@@ -213,7 +241,14 @@ function CatalogueTab({
   );
 }
 
-function ModuleCard({ stat, onManage }: { stat: ModuleStats; onManage: (key: FeatureKey) => void }) {
+function ModuleCard({
+  stat, onManage, onPrice,
+}: {
+  stat: ModuleStats;
+  onManage: (key: FeatureKey) => void;
+  /** absent for anyone who may not set prices */
+  onPrice?: (key: FeatureKey) => void;
+}) {
   const { feature } = stat;
 
   return (
@@ -231,7 +266,19 @@ function ModuleCard({ stat, onManage }: { stat: ModuleStats; onManage: (key: Fea
       </div>
 
       <div className="mt-3.5 border-y border-line-soft bg-surface-2 px-5 py-3">
-        <ModulePrice feature={feature} size="lg" />
+        <div className="flex items-center justify-between gap-3">
+          <ModulePrice feature={feature} size="lg" />
+          {onPrice && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onPrice(feature.key)}
+              aria-label={`Change the price of ${feature.name}`}
+            >
+              <IconEdit size={14} /> Edit price
+            </Button>
+          )}
+        </div>
         <p className="mt-1 text-caption text-ink-3">{feature.pricing_note}</p>
       </div>
 
@@ -285,9 +332,11 @@ type AccessFilter = "any" | "subscribed" | "trial" | "locked";
  * quicker to reach, not quicker to make by accident.
  */
 function AccessTab({
-  rows, focus, onFocus, loading,
+  rows, paid, focus, onFocus, loading,
 }: {
   rows: ConsoleRow[];
+  /** the paid modules, priced — the column headers quote the price */
+  paid: Feature[];
   focus: FeatureKey | "any";
   onFocus: (key: FeatureKey | "any") => void;
   loading: boolean;
@@ -297,8 +346,8 @@ function AccessTab({
   const [state, setState] = React.useState<AccessFilter>("any");
 
   const columns = focus === "any"
-    ? PAID_FEATURES
-    : PAID_FEATURES.filter((f) => f.key === focus);
+    ? paid
+    : paid.filter((f) => f.key === focus);
 
   const shown = React.useMemo(() => {
     const term = q.trim().toLowerCase();

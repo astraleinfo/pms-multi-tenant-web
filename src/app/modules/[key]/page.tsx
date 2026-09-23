@@ -6,19 +6,24 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useApp, useTenant } from "@/lib/store/app-store";
 import * as api from "@/lib/api";
 import { qk } from "@/lib/query/keys";
-import { useSupportRequests } from "@/lib/query/hooks";
+import { useFeatureCatalog, useSupportRequests } from "@/lib/query/hooks";
 import { FEATURE_BY_KEY } from "@/lib/data/catalog";
 import { ALL_NAV_ITEMS } from "@/lib/nav";
 import { SUPPORT, moduleMailto, telHref } from "@/lib/support";
 import { currency } from "@/lib/format";
-import type { Feature, SupportRequest, TenantFeature } from "@/lib/types";
+import type { Feature, FeatureKey, SupportRequest, TenantFeature } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button, ButtonLink, buttonClass } from "@/components/ui/button";
 import { KV } from "@/components/ui/misc";
+import { ModuleScreens, hasScreens } from "@/components/domain/module-screens";
+import { MODULE_DOCS, type ModuleDocs } from "@/lib/data/module-docs";
+import { ROLE_LABEL } from "@/lib/nav";
+import { PageLoader } from "@/components/ui/loader";
 import {
-  IconArrowRight, IconCheck, IconLock, IconMail, IconPhone, IconPlay, IconRefresh, IconShield,
+  IconArrowRight, IconCheck, IconInfo, IconLock, IconMail, IconMonitor, IconPhone, IconPlay, IconRefresh,
+  IconShield, IconUsers,
 } from "@/components/ui/icons";
 
 /**
@@ -36,9 +41,12 @@ import {
  */
 export default function ModulePage(props: PageProps<"/modules/[key]">) {
   const { key } = React.use(props.params);
-  const feature = FEATURE_BY_KEY[key];
-  if (!feature) notFound();
-  return <ModuleDetail feature={feature} />;
+  const catalog = useFeatureCatalog();
+  if (!FEATURE_BY_KEY[key]) notFound();
+  /* The price is quoted in three places on this page and in the email to the
+     desk, so the page waits for the live figure rather than printing a guess. */
+  if (catalog.isPending) return <PageLoader label="Reading the price…" />;
+  return <ModuleDetail feature={catalog.byKey[key as FeatureKey]} />;
 }
 
 /** Where this module lives once it is on — `advanced_reports` sits inside Reports. */
@@ -105,9 +113,11 @@ function ModuleDetail({ feature }: { feature: Feature }) {
         meta={
           <>
             {active ? (
-              <Badge tone="ok" size="sm" dot>Enabled for {tenant.name}</Badge>
+              <Badge tone="ok" size="sm" dot><span className="whitespace-nowrap">Enabled</span></Badge>
             ) : (
-              <Badge tone="neutral" size="sm"><IconLock size={11} /> Not enabled for {tenant.name}</Badge>
+              <Badge tone="neutral" size="sm">
+                <IconLock size={11} /> <span className="whitespace-nowrap">Not enabled</span>
+              </Badge>
             )}
             <span className="tnum font-mono text-caption text-ink-3">
               {feature.is_core ? "included" : `${currency(feature.price_monthly)}/mo`}
@@ -176,6 +186,21 @@ function ModuleDetail({ feature }: { feature: Feature }) {
             </CardBody>
           </Card>
 
+          {hasScreens(feature.key) && (
+            <Card>
+              <CardHeader
+                tone="accent" icon={<IconMonitor size={16} />}
+                title={`${feature.name}, on screen`}
+                hint="The screens your team works in, filled with sample data."
+              />
+              <CardBody className="pt-0">
+                <ModuleScreens feature={feature.key} />
+              </CardBody>
+            </Card>
+          )}
+
+          {MODULE_DOCS[feature.key] && <ModuleDocumentation feature={feature} docs={MODULE_DOCS[feature.key]!} />}
+
           <DemoVideo
             feature={feature}
             walkthrough={
@@ -215,6 +240,79 @@ function ModuleDetail({ feature }: { feature: Feature }) {
         </aside>
       </div>
     </>
+  );
+}
+
+/**
+ * The documentation: what exactly is in it, who uses it, what to do first, and
+ * the questions every clinic asks support anyway. Enough to decide on, and
+ * enough to start with the day it is switched on.
+ */
+function ModuleDocumentation({ feature, docs }: { feature: Feature; docs: ModuleDocs }) {
+  return (
+    <Card>
+      <CardHeader
+        tone="info" icon={<IconInfo size={16} />}
+        title={`About ${feature.name}`}
+        hint="What you get, who uses it, and how to start."
+      />
+      <CardBody className="space-y-6 pt-0">
+        <section>
+          <p className="text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">What&rsquo;s included</p>
+          <ul className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
+            {docs.included.map((item) => (
+              <li key={item} className="flex items-start gap-2 text-label leading-relaxed text-ink">
+                <IconCheck size={14} className="mt-0.5 shrink-0 text-ok" />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section>
+          <p className="flex items-center gap-1.5 text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">
+            <IconUsers size={12} /> Who uses it
+          </p>
+          <dl className="mt-3 divide-y divide-line-soft rounded-[var(--r)] border border-line">
+            {docs.roles.map((r) => (
+              <div key={r.role} className="flex flex-col gap-0.5 px-3.5 py-2.5 sm:flex-row sm:gap-4">
+                <dt className="w-36 shrink-0 text-label font-medium text-ink">{ROLE_LABEL[r.role]}</dt>
+                <dd className="text-label leading-relaxed text-ink-2">{r.does}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+
+        <section>
+          <p className="text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">Once it&rsquo;s switched on</p>
+          <ol className="mt-3 space-y-2">
+            {docs.setup.map((step, i) => (
+              <li key={step} className="flex gap-3 text-label leading-relaxed text-ink">
+                <span className="tnum mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-soft font-mono text-micro font-semibold text-accent-text">
+                  {i + 1}
+                </span>
+                {step}
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <section>
+          <p className="text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">Questions clinics ask</p>
+          <div className="mt-3 divide-y divide-line-soft rounded-[var(--r)] border border-line">
+            {docs.faq.map((item) => (
+              <details key={item.q} className="group px-3.5 py-2.5 [&_summary::-webkit-details-marker]:hidden">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-label font-medium text-ink">
+                  {item.q}
+                  <span className="shrink-0 text-ink-3 transition-transform group-open:rotate-45" aria-hidden>+</span>
+                </summary>
+                <p className="mt-1.5 text-label leading-relaxed text-ink-2">{item.a}</p>
+              </details>
+            ))}
+          </div>
+        </section>
+      </CardBody>
+    </Card>
   );
 }
 

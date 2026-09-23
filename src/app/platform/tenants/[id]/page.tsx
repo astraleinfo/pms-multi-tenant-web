@@ -2,8 +2,12 @@
 
 import * as React from "react";
 import { useApp } from "@/lib/store/app-store";
+import { useQueryClient } from "@tanstack/react-query";
+import { isSuperAdmin } from "@/lib/api";
+import { qk } from "@/lib/query/keys";
 import {
-  usePlatformSnapshot, usePlatformTenantFeatures, usePlatformTenantUsers,
+  usePlatformCatalog, usePlatformSnapshot, usePlatformTenantFeatures, usePlatformTenantUsers,
+  usePlatformSubscription,
 } from "@/lib/query/hooks";
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
 import { currency, formatDate, pluralise, titleCase } from "@/lib/format";
@@ -26,6 +30,8 @@ import { Callout } from "@/components/ui/callout";
 import { Monogram } from "@/components/layout/rail";
 import { ConsolePage, TenantAddress, useEnterClinic } from "@/components/platform/chrome";
 import { TenantStatusButton } from "@/components/platform/tenant-actions";
+import { ClinicBills } from "@/components/platform/clinic-bills";
+import { ImportButton } from "@/components/platform/import-dialog";
 import {
   AccountBadge, BillingBadge, ModulePrice, ModuleSwitch, useModuleSwitch,
 } from "@/components/platform/module-controls";
@@ -47,11 +53,13 @@ export default function TenantPage(props: PageProps<"/platform/tenants/[id]">) {
   return <ConsolePage><TenantConsole id={id} /></ConsolePage>;
 }
 
-type Tab = "details" | "modules" | "staff";
+type Tab = "details" | "modules" | "bills" | "staff";
 
 function TenantConsole({ id }: { id: string }) {
-  const { data: snapshot, isPending } = usePlatformSnapshot();
+  const { data: snapshot, isPending: snapshotPending } = usePlatformSnapshot();
   const { data: entitlements, isPending: featuresPending } = usePlatformTenantFeatures(id);
+  const catalog = usePlatformCatalog();
+  const isPending = snapshotPending || catalog.isPending;
   const [tab, setTab] = React.useState<Tab>("details");
 
   const row = React.useMemo(() => {
@@ -59,8 +67,8 @@ function TenantConsole({ id }: { id: string }) {
     if (!snapshotRow) return null;
     const byTenant = new Map<string, TenantFeature[]>();
     if (!featuresPending) byTenant.set(id, entitlements);
-    return consoleRows([snapshotRow], byTenant)[0];
-  }, [snapshot, id, entitlements, featuresPending]);
+    return consoleRows([snapshotRow], byTenant, catalog.features)[0];
+  }, [snapshot, id, entitlements, featuresPending, catalog.features]);
 
   if (isPending) return <PageLoader label="Opening the clinic…" />;
   if (!row) return <NotHere />;
@@ -103,12 +111,14 @@ function TenantConsole({ id }: { id: string }) {
         tabs={[
           { value: "details", label: "Details", icon: <IconInfo size={15} /> },
           { value: "modules", label: "Modules", icon: <IconLayers size={15} />, count: paidOn.length },
+          { value: "bills", label: "Bills", icon: <IconReceipt size={15} /> },
           { value: "staff", label: "Staff", icon: <IconUsers size={15} />, count: row.users },
         ]}
       />
 
       {tab === "details" && <DetailsTab row={row} />}
       {tab === "modules" && <ModulesTab row={row} loading={featuresPending} />}
+      {tab === "bills" && <BillsTab tenantId={row.tenant.id} />}
       {tab === "staff" && <StaffTab row={row} />}
     </>
   );
@@ -169,6 +179,7 @@ function TenantHeader({ row }: { row: ConsoleRow }) {
             >
               <IconShield size={15} /> {entering === tenant.id ? "Opening…" : "Open as support"}
             </Button>
+            <ImportButton tenant={tenant} />
             <TenantStatusButton tenant={tenant} />
           </>
         }
@@ -308,7 +319,7 @@ function DetailsTab({ row }: { row: ConsoleRow }) {
               <KV label="Tenant id" value={tenant.id} mono className="col-span-2" />
               <KV label="On the platform since" value={formatDate(tenant.since, "long")} />
               <KV label="Timezone" value={tenant.timezone} />
-              <KV label="Its today" value={formatDate(tenant.today, "long")} />
+              <KV label="Local date" value={formatDate(tenant.today, "long")} />
               <KV
                 label="Last activity"
                 value={row.last_activity ? formatDate(row.last_activity, "long") : "—"}
@@ -570,6 +581,30 @@ function StaffTab({ row }: { row: ConsoleRow }) {
           nobody can create the rest.
         </p>
       </div>
+    </Card>
+  );
+}
+
+
+/** What this clinic owes the platform — the same list the Bills section shows. */
+function BillsTab({ tenantId }: { tenantId: string }) {
+  const { platformUser } = useApp();
+  const queryClient = useQueryClient();
+  const { data: tenant } = usePlatformSnapshot();
+  const { data, isPending } = usePlatformSubscription(tenantId);
+  const clinic = tenant?.tenants.find((r) => r.tenant.id === tenantId)?.tenant;
+
+  if (isPending || !data || !clinic) return <PageLoader label="Reading the bills…" minHeight="30vh" />;
+  return (
+    <Card>
+      <CardHeader icon={<IconReceipt size={15} />} tone="ok" title="Subscription bills" hint="Monthly bills for the paid modules switched on, and whether they are holding the clinic." />
+      <CardBody>
+        <ClinicBills
+          row={{ tenant: clinic, invoices: data.invoices, summary: data.summary }}
+          superAdmin={isSuperAdmin(platformUser)}
+          onChanged={() => { void queryClient.invalidateQueries({ queryKey: qk.platformRoot() }); }}
+        />
+      </CardBody>
     </Card>
   );
 }

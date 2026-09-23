@@ -6,8 +6,9 @@ import * as api from "@/lib/api";
 import { qk } from "./keys";
 import { useSession } from "@/lib/store/session";
 import { defaultConfig } from "@/lib/data/repository";
+import { withPrices } from "@/lib/data/catalog";
 import type {
-  FieldDefinition, Id, Patient, ServiceKind, ServicePrice, SupportRequest, Tenant, TenantConfig,
+  Feature, FieldDefinition, FeatureKey, Id, Patient, ServiceKind, ServicePrice, SupportRequest, Tenant, TenantConfig,
   TenantFeature, User,
 } from "@/lib/types";
 
@@ -117,6 +118,79 @@ export function useFeatures() {
   const t = useTenantId();
   const query = useClinicQuery(qk.features(t), api.listFeatures);
   return { ...query, data: useResolved<TenantFeature[]>(query, EMPTY) };
+}
+
+/** The module catalogue, priced — see `useFeatureCatalog` and `usePlatformCatalog`. */
+export interface FeatureCatalog {
+  features: Feature[];
+  byKey: Record<FeatureKey, Feature>;
+  /** false until the prices have arrived; a price shown before then is a guess */
+  priced: boolean;
+  /** still waiting on the first answer — false again if that answer was an error */
+  isPending: boolean;
+}
+
+function catalogOf(rows: Parameters<typeof withPrices>[0], isPending: boolean): FeatureCatalog {
+  const features = withPrices(rows);
+  return {
+    features,
+    byKey: Object.fromEntries(features.map((f) => [f.key, f])) as Record<FeatureKey, Feature>,
+    priced: !!rows,
+    isPending,
+  };
+}
+
+/**
+ * Every module with what this clinic would be charged for it.
+ *
+ * The price is the platform's, set in the console, so it is read rather than
+ * compiled in: a clinic looking at a padlocked module is quoted the figure the
+ * platform will actually bill. Screens render a placeholder until `priced`.
+ */
+export function useFeatureCatalog(): FeatureCatalog {
+  const t = useTenantId();
+  const query = useClinicQuery(qk.catalogFeatures(t), api.listCatalogFeatures, !!t);
+  return useMemo(() => catalogOf(query.data, query.isPending), [query.data, query.isPending]);
+}
+
+/** The same catalogue from the console, where the super admin sets the prices. */
+export function usePlatformCatalog(): FeatureCatalog {
+  const { platformSession } = useSession();
+  const query = useQuery({
+    queryKey: qk.platformCatalog(),
+    queryFn: api.listPlatformCatalogFeatures,
+    enabled: platformSession.signedIn,
+  });
+  return useMemo(() => catalogOf(query.data, query.isPending), [query.data, query.isPending]);
+}
+
+/**
+ * What this clinic owes the platform — the practice admin's view. Only asked
+ * for by someone who may see it; the API refuses everyone else with a 403.
+ */
+export function useSubscription(enabled = true) {
+  const t = useTenantId();
+  return useClinicQuery(qk.subscription(t), api.getSubscription, enabled && !!t);
+}
+
+/** Every clinic's bills, from the console. */
+export function usePlatformBilling() {
+  const { platformSession } = useSession();
+  return useQuery({
+    queryKey: qk.platformBilling(),
+    queryFn: api.platformBilling,
+    enabled: platformSession.signedIn,
+  });
+}
+
+/** One clinic's bills, from the console. */
+export function usePlatformSubscription(tenantId: Id | null) {
+  const { platformSession } = useSession();
+  return useQuery({
+    queryKey: qk.platformSubscription(tenantId ?? ""),
+    queryFn: () => api.tenantSubscription(tenantId!),
+    enabled: platformSession.signedIn && !!tenantId,
+  });
 }
 
 /** This clinic's asks of the support desk, newest first. */

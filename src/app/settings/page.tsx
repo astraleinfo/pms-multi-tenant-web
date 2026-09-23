@@ -4,7 +4,9 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useApp, useTenant } from "@/lib/store/app-store";
-import { useClinicDb, useSchema, useAnalytics, useUsers } from "@/lib/query/hooks";
+import {
+  useClinicDb, useFeatureCatalog, useSchema, useAnalytics, useSubscription, useUsers,
+} from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { CLINICAL_TYPES, FEATURES } from "@/lib/data/catalog";
 import { activeFeatureKeys, selectUsers } from "@/lib/data/repository";
@@ -31,12 +33,14 @@ import { useTour } from "@/components/onboarding/tour";
 import { Monogram } from "@/components/layout/rail";
 import {
   IconAlert, IconCheck, IconChevronRight, IconGrid, IconKey, IconLayers, IconList, IconLock, IconMail,
-  IconPlus, IconRefresh, IconSettings, IconShield, IconSpark, IconTrash, IconUnlock, IconUser,
-  IconUsers
+  IconPlus, IconReceipt, IconRefresh, IconSettings, IconShield, IconSpark, IconTrash, IconUnlock,
+  IconUser, IconUsers
 } from "@/components/ui/icons";
+import { HowToPay, SubscriptionBills, rentMoney } from "@/components/domain/subscription";
+import { Stat } from "@/components/ui/stat";
 import { InfoHint, Tooltip } from "@/components/ui/info";
 
-type Tab = "practice" | "config" | "features" | "fields" | "team" | "isolation";
+type Tab = "practice" | "config" | "features" | "subscription" | "fields" | "team" | "isolation";
 
 const userCol = columnHelperFor<User>();
 
@@ -187,6 +191,7 @@ function Settings({ initial }: { initial: Tab }) {
     removeFieldDefinition, notify,
   } = useApp();
   const db = useClinicDb();
+  const catalog = useFeatureCatalog();
   const { tenant } = useTenant();
   const t = session.tenantId;
   const queryClient = useQueryClient();
@@ -234,6 +239,7 @@ function Settings({ initial }: { initial: Tab }) {
           { value: "practice", label: "Practice", icon: <IconGrid size={15} /> },
           { value: "config", label: "Configuration", icon: <IconSettings size={15} /> },
           { value: "features", label: "Modules", icon: <IconLayers size={15} />, count: active.filter((k) => !FEATURES.find((f) => f.key === k)?.is_core).length },
+          { value: "subscription", label: "Subscription", icon: <IconReceipt size={15} /> },
           { value: "fields", label: "Custom fields", icon: <IconList size={15} />, count: customFields.length },
           { value: "team", label: "Team", icon: <IconUsers size={15} />, count: staff.length },
           { value: "isolation", label: "Isolation", icon: <IconShield size={15} /> },
@@ -352,7 +358,9 @@ function Settings({ initial }: { initial: Tab }) {
                       {f.is_core && <Badge tone="neutral" size="sm">Core</Badge>}
                     </div>
                     <span className="tnum shrink-0 font-mono text-caption text-ink-3">
-                      {f.is_core ? "included" : `${currency(f.price_monthly)}/mo`}
+                      {f.is_core
+                        ? "included"
+                        : catalog.priced ? `${currency(catalog.byKey[f.key].price_monthly)}/mo` : "…"}
                     </span>
                     <span className="w-[5.5rem] shrink-0 text-right">
                       {on ? (
@@ -480,6 +488,8 @@ function Settings({ initial }: { initial: Tab }) {
         </div>
       )}
 
+      {tab === "subscription" && <SubscriptionTab today={tenant.today} />}
+
       {tab === "isolation" && <IsolationTab />}
 
       <AddFieldModal open={addField} onClose={() => setAddField(false)} />
@@ -491,6 +501,61 @@ function Settings({ initial }: { initial: Tab }) {
     removeFieldDefinition(f.id);
     notify({ tone: "warn", title: `${f.label} removed`, body: "It disappears from every form that resolved it." });
   }
+}
+
+/**
+ * What the clinic pays the platform, and every bill it has been sent.
+ *
+ * One bill a month for the paid modules switched on, due a few days after it
+ * is raised. Left unpaid past the grace period, the clinic goes on hold until
+ * it is settled — this tab says exactly when, so nobody finds out by being
+ * locked out.
+ */
+function SubscriptionTab({ today }: { today: string }) {
+  const { data, isPending, isError } = useSubscription();
+
+  if (isPending) return <p className="py-10 text-center text-label text-ink-3">Reading the bills…</p>;
+  if (isError || !data) {
+    return <p className="py-10 text-center text-label text-ink-3">The bills could not be read. Try again in a moment.</p>;
+  }
+  const { summary } = data;
+
+  return (
+    <div className="space-y-block">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Stat
+          label="Outstanding" value={rentMoney(summary.outstanding, summary.currency)}
+          icon={<IconReceipt size={16} />}
+          hint={summary.open_count ? `${summary.open_count} open bill${summary.open_count === 1 ? "" : "s"}` : "Nothing to pay"}
+        />
+        <Stat
+          label="Next due" value={summary.next_due_on ? formatDate(summary.next_due_on) : "—"}
+          icon={<IconCheck size={16} />}
+          hint={summary.overdue ? "Overdue" : `Bills are due ${summary.due_days} days after they are raised`}
+        />
+        <Stat
+          label="Grace period" value={`${summary.grace_days} days`}
+          icon={<IconShield size={16} />}
+          hint={summary.next_hold_on && summary.open_count ? `On hold from ${formatDate(summary.next_hold_on)} if unpaid` : "After the due date, before a hold"}
+        />
+      </section>
+
+      {summary.exempt && (
+        <p className="rounded-[var(--r)] border border-line bg-surface-2 px-4 py-3 text-label text-ink-2">
+          This clinic is not billed by the platform.
+        </p>
+      )}
+
+      <SettingsSection
+        title="Bills"
+        hint="Raised at the start of each month for the paid modules switched on that day, at that day's price."
+      >
+        <SubscriptionBills subscription={data} today={today} />
+      </SettingsSection>
+
+      <HowToPay />
+    </div>
+  );
 }
 
 /**

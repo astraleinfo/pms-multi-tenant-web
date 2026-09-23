@@ -4,19 +4,32 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useApp } from "@/lib/store/app-store";
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
-import { demoAccountsFor } from "@/lib/demo-accounts";
 import { Button } from "@/components/ui/button";
-import { Field, Input } from "@/components/ui/field";
-import { AuthStage, DemoCredentials } from "@/components/layout/auth-stage";
+import { Field, Input, PasswordInput } from "@/components/ui/field";
+import { AuthStage, ClinicPreview } from "@/components/layout/auth-stage";
 import { Monogram } from "@/components/layout/rail";
-import { IconAlert, IconArrowRight, IconLayers, IconLock } from "@/components/ui/icons";
+import {
+  IconAlert, IconArrowRight, IconCalendar, IconLayers, IconLock, IconReceipt, IconStethoscope,
+} from "@/components/ui/icons";
 import { StageLoader } from "@/components/ui/loader";
 
+/* What the people signing in actually do here — in their terms, not ours. */
 const POINTS = [
-  { title: "Tenant", body: "Fixed by the address you came in on. Nothing in the app can change it." },
-  { title: "Clinical type", body: "Which exam fields and charts a visit gets — dental, eye, skin." },
-  { title: "Entitlement", body: "What the clinic has bought. Locks whole modules, not fields." },
-  { title: "Customisation", body: "The clinic's own extra fields, layered on top of the rest." },
+  {
+    title: "The day at a glance",
+    body: "Appointments, walk-ins and the waiting room on one screen.",
+    icon: <IconCalendar size={15} />,
+  },
+  {
+    title: "Notes that fit your speciality",
+    body: "Tooth charts, refraction, lesion maps — the exam your discipline needs.",
+    icon: <IconStethoscope size={15} />,
+  },
+  {
+    title: "Billing without re-typing",
+    body: "Invoices built from the visit, with pharmacy and lab on the same account.",
+    icon: <IconReceipt size={15} />,
+  },
 ];
 
 export default function LoginPage() {
@@ -41,7 +54,6 @@ export default function LoginPage() {
 
   const tenant = hostTenant;
   const clinical = CLINICAL_TYPES.find((c) => c.key === tenant.clinical_type)!;
-  const accounts = demoAccountsFor(tenant.slug);
   const address = `${tenant.slug}.${host.root}${host.port ? `:${host.port}` : ""}`;
 
   const submit = async (e: React.FormEvent) => {
@@ -61,31 +73,24 @@ export default function LoginPage() {
 
   return (
     <AuthStage
-      eyebrow="Clinic sign-in"
-      title={tenant.name}
+      eyebrow={`${clinical.label} practice`}
+      title={<>Welcome back to<br />{tenant.name}</>}
       address={address}
       points={POINTS}
-      blurb={
-        <>
-          This address <em className="not-italic text-stage-ink">is</em> the tenant. Every query made after you sign in
-          is scoped to {tenant.name} because of the host it arrived on — there is no clinic selector inside the app to
-          get that wrong.
-        </>
-      }
+      preview={<ClinicPreview />}
+      blurb="Everything your team needs for the day ahead — the diary, the queue, the notes and the bills — in one place, and only ever this clinic's."
     >
-      <div className="flex items-center gap-3">
-        <Monogram name={tenant.name} size={40} />
-        <div className="min-w-0">
-          <h2 className="truncate font-display text-title font-semibold text-ink">
-            Sign in
-          </h2>
-          <p className="truncate text-caption text-ink-3">
-            {clinical.label}
-          </p>
-        </div>
+      <div className="flex flex-col items-center text-center">
+        <Monogram name={tenant.name} size={48} />
+        <h2 className="mt-4 font-display text-h2 font-semibold tracking-[-0.02em] text-ink">
+          Sign in
+        </h2>
+        <p className="mt-1 text-label text-ink-3">
+          to <span className="font-medium text-ink-2">{tenant.name}</span>
+        </p>
       </div>
 
-      <form onSubmit={submit} className="mt-5 space-y-4">
+      <form onSubmit={submit} className="mt-7 space-y-4">
         <Field label="Email" required htmlFor="email">
           <Input
             id="email"
@@ -99,10 +104,18 @@ export default function LoginPage() {
           />
         </Field>
 
-        <Field label="Password" required htmlFor="password">
-          <Input
+        <Field
+          label="Password"
+          required
+          htmlFor="password"
+          hint={
+            <a href="/forgot-password" className="font-normal text-accent-text underline-offset-4 hover:underline">
+              Forgotten it?
+            </a>
+          }
+        >
+          <PasswordInput
             id="password"
-            type="password"
             autoComplete="current-password"
             value={password}
             onChange={(e) => { setPassword(e.target.value); setError(null); }}
@@ -120,23 +133,11 @@ export default function LoginPage() {
         )}
 
         <Button type="submit" variant="primary" size="lg" className="w-full" disabled={busy}>
-          Sign in <IconArrowRight size={16} />
+          {busy ? "Signing in…" : <>Sign in <IconArrowRight size={16} /></>}
         </Button>
-
-        <p className="text-center text-label text-ink-3">
-          <a href="/forgot-password" className="text-accent-text underline-offset-4 hover:underline">
-            Forgotten your password?
-          </a>
-        </p>
       </form>
 
-      <DemoCredentials
-        className="mt-4"
-        accounts={accounts}
-        onPick={(e, p) => { setEmail(e); setPassword(p); setError(null); }}
-      />
-
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-line-soft pt-3 text-caption text-ink-3">
+      <div className="mt-8 flex flex-wrap items-center justify-between gap-2 border-t border-line-soft pt-4 text-caption text-ink-3">
         <span className="inline-flex items-center gap-1.5">
           <IconLayers size={13} />
           {clinical.label} workflow

@@ -1,4 +1,4 @@
-import type { ClinicalType, ClinicalTypeKey, Feature } from "@/lib/types";
+import type { CatalogFeature, ClinicalType, ClinicalTypeKey, Feature, FeatureCopy } from "@/lib/types";
 
 /* ==========================================================================
    Platform catalogues.
@@ -6,9 +6,12 @@ import type { ClinicalType, ClinicalTypeKey, Feature } from "@/lib/types";
    These describe the product rather than any clinic: the disciplines on offer,
    the modules that can be bought, and the tests and medicines a discipline is
    offered when ordering. The API serves the same rows at /v1/catalog/*; they
-   are kept here because they are presentation constants — labels, blurbs and
-   prices the UI reads on every render — and they change with a release, not
-   with a request.
+   are kept here because they are presentation constants — labels and blurbs
+   the UI reads on every render — and they change with a release, not with a
+   request.
+
+   Module *prices* are the exception, and are not here: a super admin sets them
+   in the console, so they are fetched and joined on with `withPrices`.
 
    What is *not* here any more: field definitions. The effective schema for a
    clinic is resolved on the server (§3.3) and fetched with `useSchema`, because
@@ -40,8 +43,8 @@ export const CLINICAL_TYPES: ClinicalType[] = [
 ];
 
 /**
- * The module catalogue — what every module is, what it costs, and how it is
- * explained to a clinic that does not have it yet.
+ * The module catalogue — what every module is, and how it is explained to a
+ * clinic that does not have it yet. What it costs comes from the API.
  *
  * The last four fields on each row are what the module page renders behind a
  * padlock (§3.2). A locked module is not a dead end and not a redirect into
@@ -49,13 +52,12 @@ export const CLINICAL_TYPES: ClinicalType[] = [
  * prints the price, and offers the support desk — because the switch itself is
  * the platform's, and nobody inside a clinic can throw it.
  */
-export const FEATURES: Feature[] = [
+export const FEATURES: FeatureCopy[] = [
   {
     key: "patient",
     name: "Patients",
     is_core: true,
     summary: "Registration, search and the patient record.",
-    price_monthly: 0,
     unlocks: ["Patients"],
     overview:
       "The register every other module points at. One row per person, with an MRN the clinic chooses the shape of, and a record that gathers everything anybody writes about them.",
@@ -76,7 +78,6 @@ export const FEATURES: Feature[] = [
     name: "Appointments",
     is_core: true,
     summary: "Doctor calendars, booking and conflict checks.",
-    price_monthly: 0,
     unlocks: ["Appointments"],
     overview:
       "A calendar per clinician, inside the clinic's own working day. Booking is checked against what is already there, so two patients cannot hold the same chair.",
@@ -97,7 +98,6 @@ export const FEATURES: Feature[] = [
     name: "Queue",
     is_core: true,
     summary: "Token issue, check-in and the waiting-room board.",
-    price_monthly: 0,
     unlocks: ["Queue", "Waiting room display"],
     overview:
       "The day as it actually runs: who is waiting, who is in, who is done. Tokens are issued per clinic per day, and every move is a transition the server will refuse if it makes no sense.",
@@ -118,7 +118,6 @@ export const FEATURES: Feature[] = [
     name: "Consultation",
     is_core: true,
     summary: "Encounters with fields that follow your clinical type.",
-    price_monthly: 0,
     unlocks: ["Consultation"],
     overview:
       "The encounter, written in your discipline's own terms — a tooth chart for a dental clinic, refraction for an eye clinic — on top of one common record.",
@@ -139,7 +138,6 @@ export const FEATURES: Feature[] = [
     name: "Prescriptions",
     is_core: true,
     summary: "Write and print prescriptions. Works with or without a pharmacy.",
-    price_monthly: 0,
     unlocks: ["Prescriptions"],
     overview:
       "What was prescribed, to whom, by whom, and whether anybody has handed it over. A clinic with no pharmacy still writes and prints them; one with a pharmacy dispenses against the same rows.",
@@ -160,7 +158,6 @@ export const FEATURES: Feature[] = [
     name: "Pharmacy",
     is_core: false,
     summary: "Dispense against prescriptions and draw stock from the ledger.",
-    price_monthly: 2499,
     unlocks: ["Pharmacy"],
     overview:
       "Your own counter, reading the prescriptions your clinicians have already written. Handing medicine over is one action that dispenses the line, moves the stock and raises the charge — there is no second list to keep in step.",
@@ -181,7 +178,6 @@ export const FEATURES: Feature[] = [
     name: "Lab",
     is_core: false,
     summary: "Order tests, enter results, and hold them behind verification.",
-    price_monthly: 1999,
     unlocks: ["Lab"],
     overview:
       "Tests ordered from the consultation, worked at the bench, and released into the patient record only when somebody has verified them. A result nobody has checked is never a result a clinician reads.",
@@ -202,7 +198,6 @@ export const FEATURES: Feature[] = [
     name: "Inventory",
     is_core: false,
     summary: "One ledger for every stock movement, with expiry watch.",
-    price_monthly: 1499,
     unlocks: ["Inventory"],
     overview:
       "Stock on hand is the sum of the ledger, never a number somebody typed. Deliveries, dispensing, adjustments and write-offs are all movements in the same book, so what the shelf holds and what the screen says are the same claim.",
@@ -223,7 +218,6 @@ export const FEATURES: Feature[] = [
     name: "Billing",
     is_core: false,
     summary: "Invoices composed from the visit, with part payments.",
-    price_monthly: 2999,
     unlocks: ["Billing"],
     overview:
       "The invoice is composed from what the visit actually did — the consultation, the tests ordered, the medicine handed over — priced from your own tariff. Three counters keep their own books: clinic, lab and pharmacy.",
@@ -244,7 +238,6 @@ export const FEATURES: Feature[] = [
     name: "Advanced reports",
     is_core: false,
     summary: "Cohort breakdowns, revenue mix and clinical-type analytics.",
-    price_monthly: 1799,
     unlocks: ["Extra dashboard panels"],
     overview:
       "The standard dashboard answers what happened today. This answers what has been happening — by clinician, by cohort, by where the money comes from — from the same transactional tables, with nothing recomputed by hand.",
@@ -262,7 +255,20 @@ export const FEATURES: Feature[] = [
   },
 ];
 
-export const FEATURE_BY_KEY = Object.fromEntries(FEATURES.map((f) => [f.key, f])) as Record<string, Feature>;
+export const FEATURE_BY_KEY = Object.fromEntries(FEATURES.map((f) => [f.key, f])) as Record<string, FeatureCopy>;
+
+/**
+ * Join the live prices onto the copy.
+ *
+ * The copy decides which modules exist on screen and in what order; the API
+ * decides what each costs. A module the server has not priced reads as zero —
+ * it cannot happen with a seeded catalogue, and zero is the honest answer for
+ * "nobody has set a price".
+ */
+export function withPrices(rows: readonly CatalogFeature[] | undefined): Feature[] {
+  const prices = new Map((rows ?? []).map((r) => [r.key, Number(r.price_monthly) || 0]));
+  return FEATURES.map((f) => ({ ...f, price_monthly: f.is_core ? 0 : prices.get(f.key) ?? 0 }));
+}
 
 /* ==========================================================================
    Order catalogues. Tests and common medicines offered when writing an

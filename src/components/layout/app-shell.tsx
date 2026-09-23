@@ -4,7 +4,11 @@ import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
 import { useApp } from "@/lib/store/app-store";
-import { useShellReady } from "@/lib/query/hooks";
+import { useQueryClient } from "@tanstack/react-query";
+import { useShellReady, useTenantRecord } from "@/lib/query/hooks";
+import { qk } from "@/lib/query/keys";
+import { onAccountHold } from "@/lib/api/client";
+import { BillingBanner, OnHoldStage } from "@/components/domain/subscription";
 import { Rail } from "./rail";
 import { Topbar } from "./topbar";
 import { CommandPalette } from "./command-palette";
@@ -19,6 +23,8 @@ const RAIL_KEY = "astrale-pms.rail";
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { session, ready, host, hostTenant, hostTenantPending } = useApp();
   const shellReady = useShellReady();
+  const { data: tenantRecord } = useTenantRecord();
+  const queryClient = useQueryClient();
   const pathname = usePathname();
   const router = useRouter();
   /* Collapsed is the resting state. A clinic screen earns its keep in the
@@ -40,6 +46,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   });
 
   React.useEffect(() => { setMobileNav(false); }, [pathname]);
+
+  /* A clinic can be put on hold while somebody is working in it — the
+     billing run lands overnight, a tab stays open. The first request the API
+     refuses with a 402 re-reads the clinic, and the record says why. */
+  const tenantId = session.tenantId;
+  React.useEffect(() => {
+    onAccountHold(() => {
+      if (tenantId) void queryClient.invalidateQueries({ queryKey: qk.tenant(tenantId), exact: true });
+    });
+    return () => onAccountHold(null);
+  }, [queryClient, tenantId]);
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -94,6 +111,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
      agrees — this is not a courtesy a hand-written request could step around. */
   if (session.mustChangePassword) return <PasswordGate>{children}</PasswordGate>;
 
+  /* On hold for an unpaid bill: the server answers nothing but the bill, so
+     the bill is the screen. A support session is never held — it is how the
+     platform looks into a clinic in exactly this state. */
+  if (tenantRecord?.billing_hold && !session.impersonated) return <OnHoldStage />;
+
   /* the shell decides what to render from what this clinic bought and how it is
      configured — hold the chrome until those have arrived rather than flashing
      a nav that is about to change */
@@ -132,6 +154,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <SupportBanner />
+        <BillingBanner />
         <Topbar
           onToggleRail={toggleRail}
           onOpenSearch={() => setSearch(true)}

@@ -3,6 +3,8 @@
 import * as React from "react";
 import { useApp, useTenant } from "@/lib/store/app-store";
 import { useClinicDb, usePatient } from "@/lib/query/hooks";
+import * as api from "@/lib/api";
+import { openPdfBlob } from "@/lib/pdf";
 import { findInvoice, invoiceTotals } from "@/lib/data/repository";
 import { currency, formatDate, pluralise, relativeDay } from "@/lib/format";
 import type { Payment } from "@/lib/types";
@@ -40,6 +42,7 @@ function Invoice({ id }: { id: string }) {
   const t = session.tenantId;
   const invoice = findInvoice(db, t, id);
   const [paying, setPaying] = React.useState(false);
+  const [pdfBusy, setPdfBusy] = React.useState(false);
   /* Above the bail-out below, not next to where it is read. The invoice is not
      there on the first render and is a moment later, so a hook underneath that
      `return` is a hook this component calls sometimes — which React counts. */
@@ -58,6 +61,17 @@ function Invoice({ id }: { id: string }) {
     );
   }
 
+  const downloadPdf = async () => {
+    setPdfBusy(true);
+    try {
+      openPdfBlob(await api.getInvoicePdf(invoice.id));
+    } catch {
+      notify({ tone: "warn", title: "Could not generate the invoice PDF", body: "Try again in a moment." });
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
   const totals = invoiceTotals(invoice);
   const overdue = totals.balance > 0.005 && invoice.due_at < today && invoice.status !== "draft";
 
@@ -70,7 +84,9 @@ function Invoice({ id }: { id: string }) {
         status={<StatusPill kind="invoice" status={invoice.status} size="sm" />}
         actions={
           <>
-            <Button variant="ghost" onClick={() => window.print()}><IconPrint size={15} /> Print</Button>
+            <Button variant="ghost" onClick={() => { void downloadPdf(); }} disabled={pdfBusy}>
+              <IconPrint size={15} /> {pdfBusy ? "Preparing…" : "Print / PDF"}
+            </Button>
             {invoice.status === "draft" && (
               <Button variant="secondary" onClick={() => {
                 issueInvoice(invoice.id);

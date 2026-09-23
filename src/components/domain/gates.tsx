@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useApp, useTenant } from "@/lib/store/app-store";
-import { FEATURE_BY_KEY } from "@/lib/data/catalog";
+import { useFeatureCatalog } from "@/lib/query/hooks";
 import { ROLE_LABEL, modulePath } from "@/lib/nav";
 import type { FeatureKey, Role } from "@/lib/types";
 import { Card } from "@/components/ui/card";
@@ -27,9 +27,10 @@ export function FeatureGate({
 }) {
   const { hasFeature } = useApp();
   const { tenant } = useTenant();
+  const catalog = useFeatureCatalog();
   if (hasFeature(feature)) return <>{children}</>;
 
-  const f = FEATURE_BY_KEY[feature];
+  const f = catalog.byKey[feature];
 
   return (
     <Card className="mx-auto max-w-2xl overflow-hidden">
@@ -54,7 +55,9 @@ export function FeatureGate({
         </ul>
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-line-soft pt-4">
           <p className="text-label text-ink-2">
-            <span className="tnum font-mono font-medium text-ink">{currency(f.price_monthly)}</span> per month
+            <span className="tnum font-mono font-medium text-ink">
+              {catalog.priced ? currency(f.price_monthly) : "…"}
+            </span> per month
           </p>
           <ButtonLink href={modulePath(feature)} variant="primary">
             See what it does <IconArrowRight size={15} />

@@ -49,9 +49,15 @@ const SECTIONS = [
   },
   {
     href: "/platform/modules" as const,
-    label: "Modules & billing",
-    icon: <IconReceipt size={15} />,
+    label: "Modules & pricing",
+    icon: <IconLayers size={15} />,
     blurb: "Pricing, subscriptions, access",
+  },
+  {
+    href: "/platform/billing" as const,
+    label: "Bills",
+    icon: <IconReceipt size={15} />,
+    blurb: "Monthly bills, reminders and holds",
   },
   {
     href: "/platform/jobs" as const,

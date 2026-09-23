@@ -68,12 +68,17 @@ export interface ClinicalType {
   complaintExample: string;
 }
 
-export interface Feature {
+/**
+ * What a module *is* — the copy the product ships with. It carries no price:
+ * prices are set in the console by a super admin and change without a
+ * release, so they are read from the API (`useFeatureCatalog`,
+ * `usePlatformCatalog`) and joined on here as `Feature`.
+ */
+export interface FeatureCopy {
   key: FeatureKey;
   name: string;
   is_core: boolean;
   summary: string;
-  price_monthly: number;
   /** modules this one lights up in the nav */
   unlocks: string[];
   /**
@@ -89,6 +94,21 @@ export interface Feature {
   demo_chapters: string[];
   /** the one thing about the price that is not the number itself */
   pricing_note: string;
+}
+
+/** A module with its live price, as the catalogue endpoint serves it. */
+export interface Feature extends FeatureCopy {
+  price_monthly: number;
+}
+
+/** The module catalogue row as the API sends it. */
+export interface CatalogFeature {
+  key: FeatureKey;
+  name: string;
+  is_core: boolean;
+  summary: string;
+  price_monthly: number;
+  unlocks: string[];
 }
 
 export type TenantFeatureStatus = "active" | "inactive" | "trial";
@@ -133,6 +153,56 @@ export interface Tenant {
   /** the clinic's own zone, and its own date — never the browser's */
   timezone: string;
   today: string;
+  /** on hold for an unpaid subscription bill: staff see the bill and nothing else */
+  billing_hold?: boolean;
+  billing_hold_since?: string | null;
+  /** never billed by the platform */
+  billing_exempt?: boolean;
+}
+
+/* ---- the platform's monthly bill to a clinic ---------------------------------- */
+
+export type SubscriptionInvoiceStatus = "open" | "paid" | "void";
+
+export interface SubscriptionInvoice {
+  id: Id;
+  tenant_id: Id;
+  number: string;
+  period_start: string;
+  period_end: string;
+  currency: string;
+  amount: number;
+  lines: { feature_key: FeatureKey; name: string; amount: number }[];
+  issued_on: string;
+  due_on: string;
+  /** the first day the clinic is held if this is still open */
+  hold_on: string;
+  status: SubscriptionInvoiceStatus;
+  /** the furthest reminder emailed so far */
+  reminder_stage: "none" | "issued" | "due_soon" | "due" | "overdue" | "final" | "blocked";
+  reminders_sent: number;
+  paid_at: string | null;
+  payment_reference: string;
+  settled_by: string;
+}
+
+export interface SubscriptionSummary {
+  on_hold: boolean;
+  hold_since: string | null;
+  exempt: boolean;
+  currency: string;
+  outstanding: number;
+  open_count: number;
+  next_due_on: string | null;
+  next_hold_on: string | null;
+  overdue: boolean;
+  due_days: number;
+  grace_days: number;
+}
+
+export interface Subscription {
+  summary: SubscriptionSummary;
+  invoices: SubscriptionInvoice[];
 }
 
 export type FieldScope = "common" | "clinical_type" | "tenant";

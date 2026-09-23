@@ -11,8 +11,8 @@ import { SessionProvider, useSession } from "@/lib/store/session";
 import { useQueueStream, type ConnectionState } from "@/lib/realtime";
 import { setActiveCurrency, setToday, TODAY } from "@/lib/format";
 import type {
-  AccountStatus, Appointment, BillingDepartment, ClinicalTypeKey, Encounter, FeatureKey,
-  FieldDefinition, Id, InventoryItem, InventoryItemPatch, Invoice, InvoiceLineItem, LabAttachment,
+  AccountStatus, Appointment, BillingDepartment, CatalogFeature, ClinicalTypeKey, Encounter,
+  FeatureKey, FieldDefinition, Id, InventoryItem, InventoryItemPatch, Invoice, InvoiceLineItem, LabAttachment,
   LabResultLine, NewAppointment, NewEncounter, NewInventoryItem, NewServicePrice, Payment,
   PrescriptionItem, QueueEntry, ServicePrice, ServicePricePatch, Tenant, TenantConfig,
   TenantFeature, User,
@@ -163,6 +163,8 @@ interface AppContextValue {
   setTenantFeature: (
     tenantId: Id, featureKey: FeatureKey, status: TenantFeature["status"],
   ) => Promise<TenantFeature>;
+  /** Set a module's monthly price for every clinic. Super admin only. */
+  setFeaturePrice: (featureKey: FeatureKey, priceMonthly: number) => Promise<CatalogFeature>;
   resendTenantInvitation: (tenantId: Id, userId: Id) => Promise<api.TenantCreated>;
   openSupportSession: (tenantId: Id) => Promise<api.SupportSession>;
   /** Send this colleague their "set your password" link again. */
@@ -313,6 +315,12 @@ function AppFacade({ children }: { children: React.ReactNode }) {
       api.setTenantFeature(a.id, a.key, a.status),
     onSuccess: invalidatePlatform,
   });
+  /* The catalogue sits under `["platform"]`, so the one invalidation redraws
+     the price and every revenue figure computed from it together. */
+  const mFeaturePrice = useMutation({
+    mutationFn: (a: { key: FeatureKey; price: number }) => api.setFeaturePrice(a.key, a.price),
+    onSuccess: invalidatePlatform,
+  });
   const mResendTenantInvite = useMutation({
     mutationFn: (a: { id: Id; userId: Id }) => api.resendTenantInvitation(a.id, a.userId),
   });
@@ -417,6 +425,7 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     setTenantStatus: (id, status) => mTenantStatus.mutate({ id, status }),
     updateTenant: (id, changes) => mUpdateTenant.mutateAsync({ id, changes }),
     setTenantFeature: (id, key, status) => mTenantFeature.mutateAsync({ id, key, status }),
+    setFeaturePrice: (key, price) => mFeaturePrice.mutateAsync({ key, price }),
     resendTenantInvitation: (id, userId) => mResendTenantInvite.mutateAsync({ id, userId }),
     openSupportSession: (id) => api.openSupportSession(id),
     resendInvitation: (userId) => mResendInvite.mutateAsync(userId),

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { usePlatformEntitlements, usePlatformSnapshot } from "@/lib/query/hooks";
+import { usePlatformCatalog, usePlatformEntitlements, usePlatformSnapshot } from "@/lib/query/hooks";
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
 import { currency, formatDate, pluralise, titleCase } from "@/lib/format";
 import {
@@ -245,8 +245,10 @@ function activeCount(f: Filters) {
 function TenantDirectory() {
   const router = useRouter();
   const params = useSearchParams();
-  const { data: snapshot, isPending } = usePlatformSnapshot();
+  const { data: snapshot, isPending: snapshotPending } = usePlatformSnapshot();
   const { byTenant } = usePlatformEntitlements();
+  const catalog = usePlatformCatalog();
+  const isPending = snapshotPending || catalog.isPending;
   const [filters, setFilters] = React.useState<Filters>(() => seedFilters(params));
   const [creating, setCreating] = React.useState(false);
 
@@ -259,8 +261,8 @@ function TenantDirectory() {
   }, [query]);
 
   const rows = React.useMemo(
-    () => consoleRows(snapshot?.tenants ?? [], byTenant),
-    [snapshot, byTenant],
+    () => consoleRows(snapshot?.tenants ?? [], byTenant, catalog.features),
+    [snapshot, byTenant, catalog.features],
   );
   const totals = React.useMemo(() => platformTotals(rows), [rows]);
   const shown = React.useMemo(() => applyFilters(rows, filters), [rows, filters]);
