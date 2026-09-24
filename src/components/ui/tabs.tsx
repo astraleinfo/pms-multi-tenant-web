@@ -131,7 +131,7 @@ export function Tabs<T extends string>({
               on
                 ? "border-accent font-semibold text-accent-text"
                 : "border-transparent font-medium text-ink-3 hover:bg-surface-2 hover:text-ink",
-              t.disabled && "cursor-not-allowed opacity-60 hover:bg-transparent hover:text-ink-3",
+              t.disabled && "cursor-not-allowed !text-disabled-ink hover:bg-transparent",
             )}
           >
             {/* The inactive glyph is a step quieter than its own label, so the

@@ -1,18 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/navigation";
 import { useApp, useTenant } from "@/lib/store/app-store";
 import { useSchema } from "@/lib/query/hooks";
-import { CLINICAL_TYPES } from "@/lib/data/catalog";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardFooter, CardHeader } from "@/components/ui/card";
 import { Button, ButtonLink } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { DynamicForm, validateAgainstSchema, type FormValues } from "@/components/domain/dynamic-form";
 import { FeatureGate } from "@/components/domain/gates";
 import {
-  IconArrowRight, IconCheck, IconLayers, IconPlus, IconUser,
+  IconArrowRight, IconCheck, IconPlus, IconUser,
 } from "@/components/ui/icons";
 
 export default function NewPatientPage() {
@@ -32,18 +30,12 @@ function NewPatient() {
   const [values, setValues] = React.useState<FormValues>({});
   const [errors, setErrors] = React.useState<Record<string, string>>({});
 
-  const clinical = CLINICAL_TYPES.find((c) => c.key === tenant.clinical_type)!;
-  const counts = {
-    common: schema.filter((f) => f.scope === "common").length,
-    clinical_type: schema.filter((f) => f.scope === "clinical_type").length,
-    tenant: schema.filter((f) => f.scope === "tenant").length,
-  };
 
   const submit = async () => {
     const errs = validateAgainstSchema(schema, values);
     setErrors(errs);
     if (Object.keys(errs).length) {
-      notify({ tone: "warn", title: "Some required fields are blank", body: "The form validates against the resolved schema, not a hard-coded list." });
+      notify({ tone: "warn", title: "Some required fields are blank", body: "Fill in the fields marked as required, then register again." });
       return;
     }
     const id = await createPatient(values);
@@ -57,14 +49,14 @@ function NewPatient() {
         back={{ href: "/patients", label: "Patients" }}
         eyebrow="New record"
         title="Register a patient"
-        description="Every field below came from the schema resolver — common fields, then the ones your clinical type adds, then anything this clinic defined itself."
+        description="Add a new patient to the register. The form includes every field your clinic records."
       />
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <Card>
           <CardHeader
             icon={<IconUser size={15} />} tone="accent" title="Patient details"
-            hint="Required fields are marked. The tenant is stamped server-side and is never sent from here."
+            hint="Required fields are marked."
           />
           <CardBody>
             <DynamicForm
@@ -75,13 +67,10 @@ function NewPatient() {
                 setErrors((prev) => { const n = { ...prev }; delete n[k]; return n; });
               }}
               errors={errors}
-              showScopes
             />
           </CardBody>
           <CardFooter>
-            <p className="text-caption text-ink-3">
-              {schema.length} fields resolved for {tenant.name}
-            </p>
+            <span />
             <div className="flex items-center gap-2.5">
               <Button variant="ghost" onClick={() => { setValues({}); setErrors({}); }}>Clear</Button>
               <Button variant="primary" onClick={() => void submit()}>
@@ -93,42 +82,11 @@ function NewPatient() {
 
         <aside className="space-y-5">
           <Card>
-            <CardHeader tone="violet" icon={<IconLayers size={16} />} title="How this form was built"
-                        hint="Later scope wins on a field-key collision." />
-            <CardBody className="pt-0">
-              <ol className="space-y-3">
-                {[
-                  { badge: <Badge tone="neutral" size="sm">Common</Badge>, n: counts.common,
-                    d: "Fields every clinic gets, whatever it treats." },
-                  { badge: <Badge tone="accent" size="sm">Clinical</Badge>, n: counts.clinical_type,
-                    d: `Added because this tenant is ${clinical.label.toLowerCase()}.` },
-                  { badge: <Badge tone="accent" size="sm">Clinic</Badge>, n: counts.tenant,
-                    d: "Custom fields this practice defined in Settings." },
-                ].map((row, i) => (
-                  <li key={i} className="flex items-start gap-3">
-                    <span className="tnum mt-0.5 w-8 shrink-0 text-right font-mono text-body font-medium text-ink">
-                      {row.n}
-                    </span>
-                    <div className="min-w-0">
-                      {row.badge}
-                      <p className="mt-1 text-caption leading-snug text-ink-2">{row.d}</p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-              <p className="mt-4 border-t border-line-soft pt-3 text-caption leading-relaxed text-ink-3">
-                Switch the tenant in the topbar and this form changes shape — no branch in the component,
-                just a different resolved schema.
-              </p>
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader icon={<IconPlus size={15} />} tone="violet" title="Add a field" hint="Practice admins can extend this form." />
+            <CardHeader icon={<IconPlus size={15} />} title="Add a field" hint="Practice admins can extend this form." />
             <CardBody className="pt-0">
               <p className="text-label leading-relaxed text-ink-2">
-                Anything your clinic asks for that the standard record does not carry — an insurance number,
-                a referral source — is a field definition, not a schema migration.
+                Need something this form doesn’t ask — an insurance number, a referral source? A practice
+                admin can add it once and it appears here for every new patient.
               </p>
               <ButtonLink href="/settings?tab=fields" variant="secondary" size="sm" className="mt-3.5">
                 Manage custom fields <IconArrowRight size={14} />

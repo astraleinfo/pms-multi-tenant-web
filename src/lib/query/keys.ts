@@ -53,6 +53,7 @@ export const qk = {
   patientHistory: (t: Id, id: Id) => ["tenant", t, "patients", id, "history"] as const,
 
   appointments: (t: Id) => ["tenant", t, "appointments"] as const,
+  appointment: (t: Id, id: Id) => ["tenant", t, "appointments", "one", id] as const,
   /** Each page and search is its own cache entry, so going back a page is
       instant and a write still invalidates the whole clinic subtree. */
   appointmentPage: (t: Id, query: Record<string, unknown>) =>
@@ -66,6 +67,7 @@ export const qk = {
   prescriptions: (t: Id) => ["tenant", t, "prescriptions"] as const,
   prescriptionPage: (t: Id, query: Record<string, unknown>) =>
     ["tenant", t, "prescriptions", "page", query] as const,
+  prescription: (t: Id, id: Id) => ["tenant", t, "prescriptions", id] as const,
   labOrders: (t: Id) => ["tenant", t, "lab-orders"] as const,
   labOrderPage: (t: Id, query: Record<string, unknown>) =>
     ["tenant", t, "lab-orders", "page", query] as const,

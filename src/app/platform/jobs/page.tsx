@@ -2,12 +2,12 @@
 
 import * as React from "react";
 import * as api from "@/lib/api";
-import { usePlatformJob, usePlatformJobs } from "@/lib/query/hooks";
+import { usePlatformJobs } from "@/lib/query/hooks";
 import { useApp } from "@/lib/store/app-store";
 import { pluralise } from "@/lib/format";
 import {
-  JOB_LABEL, JOB_STATUSES, JOB_TONE,
-  agoOf, durationOf, lastEventOf, localInputToUtc, momentOf, shortTaskName,
+  JOB_LABEL, JOB_STATUSES, JOB_TONE, agoOf, durationOf, lastEventOf, localInputToUtc, momentOf,
+  shortTaskName,
 } from "@/lib/platform/jobs";
 import { cn } from "@/lib/cn";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -18,13 +18,13 @@ import { Stat } from "@/components/ui/stat";
 import { Tabs } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable, columnHelperFor } from "@/components/ui/data-table";
-import { Drawer } from "@/components/ui/modal";
 import { Field, Input, SearchInput, Select } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/loader";
 import { ConsolePage } from "@/components/platform/chrome";
+import { JobDetailModal } from "@/components/platform/job-detail";
 import {
   IconAlert, IconCheck, IconClock, IconExternal, IconFilter, IconLayers, IconList, IconMonitor,
-  IconPulse, IconRefresh
+  IconPulse, IconRefresh,
 } from "@/components/ui/icons";
 
 /* ==========================================================================
@@ -74,7 +74,7 @@ function JobsConsole() {
   const [tab, setTab] = React.useState<Tab>("jobs");
   const [filters, setFilters] = React.useState<Filters>(NO_FILTERS);
   const [page, setPage] = React.useState(0);
-  const [open, setOpen] = React.useState<string | null>(null);
+  const [open, setOpen] = React.useState<api.Job | null>(null);
 
   /* The query the server is asked for, rebuilt only when a filter really
      changes — it is the cache key, so a new object each render would refetch
@@ -198,7 +198,7 @@ function JobsConsole() {
       {tab === "workers" && <WorkersTab workers={data?.workers ?? []} loading={isPending} />}
       {tab === "flower" && <FlowerTab />}
 
-      <JobDrawer taskId={open} onClose={() => setOpen(null)} />
+      <JobDetailModal job={open} onClose={() => setOpen(null)} />
     </>
   );
 }
@@ -226,7 +226,7 @@ function MonitorDown({ problem }: { problem?: string | null }) {
 
 const col = columnHelperFor<api.Job>();
 
-function jobColumns(onOpen: (id: string) => void) {
+function jobColumns(onOpen: (job: api.Job) => void) {
   return col.columns([
     col.accessor((j) => j.name, {
       id: "task",
@@ -303,7 +303,7 @@ function jobColumns(onOpen: (id: string) => void) {
       header: "",
       meta: { align: "right", width: 90 },
       cell: ({ row }) => (
-        <Button variant="ghost" size="sm" onClick={() => onOpen(row.original.id)}>
+        <Button variant="ghost" size="sm" onClick={() => onOpen(row.original)}>
           Details
         </Button>
       ),
@@ -337,7 +337,7 @@ function JobsTab({
   activeFilters: number;
   page: number;
   onPage: (page: number) => void;
-  onOpen: (id: string) => void;
+  onOpen: (job: api.Job) => void;
 }) {
   const columns = React.useMemo(() => jobColumns(onOpen), [onOpen]);
 
@@ -418,7 +418,7 @@ function JobsTab({
         data={data?.items ?? []}
         getRowId={(j) => j.id}
         minWidth="76rem"
-        onRowClick={(j) => onOpen(j.id)}
+        onRowClick={(j) => onOpen(j)}
         server={{
           total: data?.total ?? 0,
           page,
@@ -612,91 +612,5 @@ function FlowerTab() {
         </div>
       )}
     </Card>
-  );
-}
-
-/* ---- one job --------------------------------------------------------------- */
-
-function JobDrawer({ taskId, onClose }: { taskId: string | null; onClose: () => void }) {
-  const { data: job, isPending, isError } = usePlatformJob(taskId);
-
-  return (
-    <Drawer
-      open={!!taskId}
-      onClose={onClose}
-      title="Job"
-      subtitle={job ? job.name : undefined}
-      width="lg"
-    >
-      {isPending && (
-        <div className="flex justify-center py-12"><Spinner /></div>
-      )}
-
-      {isError && (
-        <EmptyState
-          icon={<IconAlert size={20} />}
-          title="That job is no longer in the monitor's history"
-          body="Flower holds a bounded window in memory and drops the oldest as new work arrives. A restart empties it entirely."
-        />
-      )}
-
-      {job && (
-        <div className="space-y-5">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={JOB_TONE[job.status]} dot pulse={job.running}>
-              {JOB_LABEL[job.status]}
-            </Badge>
-            <span className="font-mono text-caption text-ink-3">{job.state}</span>
-          </div>
-
-          <dl className="grid grid-cols-2 gap-x-4 sm:grid-cols-3">
-            <KV label="Job id" value={job.id} mono className="col-span-2 sm:col-span-3" />
-            <KV label="Worker" value={job.worker ?? "unassigned"} mono />
-            <KV label="Queue" value={job.queue ?? "—"} mono />
-            <KV label="Retries" value={job.retries} mono />
-            <KV label="Received" value={momentOf(job.received_at)} mono />
-            <KV label="Started" value={momentOf(job.started_at)} mono />
-            <KV label="Finished" value={momentOf(job.finished_at)} mono />
-            <KV
-              label="Duration"
-              mono
-              value={`${durationOf(job.runtime_seconds)}${job.running ? " so far" : ""}`}
-            />
-            {job.eta && <KV label="Scheduled for" value={momentOf(job.eta)} mono />}
-          </dl>
-
-          <Block label="Arguments" value={[job.args, job.kwargs].filter(Boolean).join("\n")} />
-          {job.result && <Block label="Result" value={job.result} />}
-          {job.exception && <Block label="Error" value={job.exception} tone="critical" />}
-          {job.traceback && <Block label="Traceback" value={job.traceback} tone="critical" />}
-        </div>
-      )}
-    </Drawer>
-  );
-}
-
-function Block({
-  label, value, tone,
-}: {
-  label: string;
-  value: string;
-  tone?: "critical";
-}) {
-  if (!value.trim()) return null;
-  return (
-    <div>
-      <p className="mb-1.5 text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">
-        {label}
-      </p>
-      <pre
-        className={cn(
-          "max-h-72 overflow-auto rounded-[var(--r)] border border-line bg-surface-inset px-3 py-2.5",
-          "whitespace-pre-wrap break-words font-mono text-micro leading-relaxed",
-          tone === "critical" ? "text-critical-text" : "text-ink-2",
-        )}
-      >
-        {value}
-      </pre>
-    </div>
   );
 }

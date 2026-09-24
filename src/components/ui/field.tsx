@@ -413,7 +413,7 @@ export function Checkbox({
   className?: string;
 }) {
   return (
-    <label className={cn("group flex cursor-pointer items-start gap-2.5", disabled && "cursor-not-allowed opacity-65", className)}>
+    <label className={cn("group flex cursor-pointer items-start gap-2.5", disabled && "cursor-not-allowed [&_*]:!text-disabled-ink", className)}>
       <span
         className={cn(
           "mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] border transition-all duration-150 ease-[var(--ease-brand)]",
@@ -449,7 +449,7 @@ export function Switch({
   className?: string;
 }) {
   return (
-    <label className={cn("inline-flex cursor-pointer items-center gap-2.5", disabled && "cursor-not-allowed opacity-65", className)}>
+    <label className={cn("inline-flex cursor-pointer items-center gap-2.5", disabled && "cursor-not-allowed [&_*]:!text-disabled-ink", className)}>
       <button
         type="button"
         role="switch"

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/navigation";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/cn";
 import { useApp, useTenant } from "@/lib/store/app-store";
@@ -10,6 +10,7 @@ import { ALL_NAV_ITEMS, roleAllows } from "@/lib/nav";
 import { age } from "@/lib/format";
 import { IconArrowRight, IconSearch, IconUser } from "@/components/ui/icons";
 import { Kbd } from "@/components/ui/misc";
+import { usePresence } from "@/components/ui/modal";
 
 interface Row {
   id: string;
@@ -29,6 +30,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
+  const { present, leaving } = usePresence(open);
 
   React.useEffect(() => {
     if (open) { setQ(""); setCursor(0); setTimeout(() => inputRef.current?.focus(), 30); }
@@ -72,15 +74,22 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     if (e.key === "Escape") onClose();
   };
 
-  if (!mounted || !open) return null;
+  if (!mounted || !present) return null;
 
   let lastGroup = "";
 
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-start justify-center p-4 pt-[12vh]">
-      <div className="fixed inset-0 bg-[hsl(var(--sh)/.38)] backdrop-blur-[3px] fade" onClick={onClose} aria-hidden />
+    <div className={cn("fixed inset-0 z-[60] flex items-start justify-center p-4 pt-[12vh]", leaving && "pointer-events-none")}>
       <div
-        className="pop relative w-full max-w-xl overflow-hidden rounded-[var(--r-xl)] border border-line bg-surface shadow-e4"
+        className={cn("fixed inset-0 bg-[hsl(var(--sh)/.38)] backdrop-blur-[3px]", leaving ? "scrim-out" : "scrim")}
+        onClick={onClose}
+        aria-hidden
+      />
+      <div
+        className={cn(
+          "relative w-full max-w-xl overflow-hidden rounded-[var(--r-xl)] border border-line bg-surface shadow-e4",
+          leaving ? "dialog-out" : "dialog-in",
+        )}
         role="dialog"
         aria-modal="true"
         aria-label="Search"

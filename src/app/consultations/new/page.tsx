@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/navigation";
 import { useApp, useTenant } from "@/lib/store/app-store";
 import { useClinicDb, useSchema, usePatient } from "@/lib/query/hooks";
 import { selectDoctors, selectEncounters, selectQueue } from "@/lib/data/repository";
@@ -141,7 +141,7 @@ function Workspace({
         back={{ href: "/consultations", label: "Consultations" }}
         eyebrow={queueEntry ? `Token ${String(queueEntry.token_no).padStart(2, "0")}` : "New encounter"}
         title={record ? record.full_name : "Consultation"}
-        description={`One encounter row, one clinical payload. ${clinical.examLabel} is what this clinical type contributes.`}
+        description={`Record what happened at this visit — the ${clinical.examLabel.toLowerCase()}, the diagnosis, and any prescription or tests.`}
         meta={record ? <AllergyFlag patient={record} /> : undefined}
       />
 
@@ -209,7 +209,6 @@ function Workspace({
                         def={f}
                         value={ext[f.field_key]}
                         onChange={(v) => setExt((p) => ({ ...p, [f.field_key]: v }))}
-                        showScope
                       />
                     ))}
                   </div>
@@ -309,7 +308,6 @@ function Workspace({
                   <IconBookmark size={15} /> Save as draft
                 </Button>
                 <ul className="mt-2 space-y-1.5 border-t border-line-soft pt-3 text-caption leading-snug text-ink-2">
-                  <li>· Encounter written with {Object.keys(ext).length} clinical field{Object.keys(ext).length === 1 ? "" : "s"}.</li>
                   {rx.filter((r) => r.medicine.trim()).length > 0 && (
                     <li>· Prescription with {rx.filter((r) => r.medicine.trim()).length} line{rx.filter((r) => r.medicine.trim()).length === 1 ? "" : "s"}.</li>
                   )}
@@ -345,17 +343,6 @@ function Workspace({
               </Card>
             )}
 
-            <Card>
-              <CardHeader tone="info" icon={<IconStethoscope size={16} />} title="Why this form differs"
-                          hint={`${tenant.name} runs ${clinical.label.toLowerCase()}.`} />
-              <CardBody className="pt-0">
-                <p className="text-caption leading-relaxed text-ink-2">{clinical.blurb}</p>
-                <p className="mt-2.5 text-caption leading-relaxed text-ink-3">
-                  Switching the tenant in the topbar swaps both the extra fields above and the exam widget —
-                  the encounter table underneath is identical.
-                </p>
-              </CardBody>
-            </Card>
           </div>
         </aside>
       </div>

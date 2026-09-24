@@ -86,7 +86,7 @@ export function Callout({
             setShown(false);
             try { localStorage.setItem(storageKey, "1"); } catch { /* ignore */ }
           }}
-          className="-mr-1 shrink-0 rounded-[var(--r-sm)] p-1 opacity-70 transition-opacity hover:opacity-100"
+          className="-mr-1 shrink-0 rounded-[var(--r-sm)] p-1 transition-colors hover:bg-hover"
         >
           <IconX size={14} />
         </button>

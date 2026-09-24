@@ -22,6 +22,20 @@ const LABELS: Record<string, string> = {
   void: "Void",
 };
 
+/**
+ * The finished states. Most rows on most screens are in one — a visit
+ * completed, a bill paid, a result verified — and a green pill on each of them
+ * is a column of green that hides the one row still waiting. These say so in
+ * quiet text with a tick; the states that need somebody keep the coloured pill.
+ */
+const SETTLED: Partial<Record<keyof typeof MAPS, string[]>> = {
+  appointment: ["completed"],
+  queue: ["completed"],
+  prescription: ["dispensed"],
+  lab: ["verified"],
+  invoice: ["paid"],
+};
+
 /** One place decides what a status looks like, everywhere it appears. */
 export function StatusPill({
   kind, status, size = "md", dot = true, pulse,
@@ -33,6 +47,14 @@ export function StatusPill({
   pulse?: boolean;
 }) {
   const tone: Tone = MAPS[kind][status] ?? "neutral";
+  if (SETTLED[kind]?.includes(status)) {
+    return (
+      <span className="inline-flex items-center gap-1 whitespace-nowrap text-caption text-ink-3">
+        <IconCheck size={12} className="shrink-0" />
+        {LABELS[status] ?? sentenceCase(status)}
+      </span>
+    );
+  }
   return (
     <Badge tone={tone} size={size} dot={dot} pulse={pulse}>
       {LABELS[status] ?? sentenceCase(status)}

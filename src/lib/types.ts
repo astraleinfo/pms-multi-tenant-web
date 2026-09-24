@@ -29,6 +29,13 @@ export interface PlatformUser {
   title: string;
 }
 
+/** A kind of visit, and how long it takes — which is also its slot interval. */
+export interface AppointmentType {
+  id: string;
+  name: string;
+  minutes: number;
+}
+
 /**
  * Per-tenant configuration (§3.3). Distinct from entitlements: this is how a
  * clinic has set the product up, not what it is allowed to use.
@@ -46,6 +53,8 @@ export interface TenantConfig {
   day_end: string;
   slot_minutes: 15 | 20 | 30;
   default_duration: number;
+  /** the kinds of visit the diary books, in the order it offers them */
+  appointment_types: AppointmentType[];
   /* queue */
   token_prefix: string;
   urgent_first: boolean;
@@ -200,9 +209,30 @@ export interface SubscriptionSummary {
   grace_days: number;
 }
 
+/** One module the clinic has switched on, and what it costs. */
+export interface SubscribedModule {
+  feature_key: FeatureKey;
+  name: string;
+  is_core: boolean;
+  /** a trial is on, but not billed */
+  status: "active" | "trial";
+  activated_at: string | null;
+  /** today's monthly price; 0 for a core module */
+  price_monthly: number;
+  /** whether next month's bill charges for it */
+  billed: boolean;
+}
+
+export interface SubscriptionPlan {
+  modules: SubscribedModule[];
+  /** what the next bill will come to, at today's prices */
+  monthly_total: number;
+}
+
 export interface Subscription {
   summary: SubscriptionSummary;
   invoices: SubscriptionInvoice[];
+  plan: SubscriptionPlan | null;
 }
 
 export type FieldScope = "common" | "clinical_type" | "tenant";

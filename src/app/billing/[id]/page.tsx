@@ -6,7 +6,7 @@ import { useClinicDb, usePatient } from "@/lib/query/hooks";
 import * as api from "@/lib/api";
 import { openPdfBlob } from "@/lib/pdf";
 import { findInvoice, invoiceTotals } from "@/lib/data/repository";
-import { currency, formatDate, pluralise, relativeDay } from "@/lib/format";
+import { currency, formatDate, formatTime12, pluralise, relativeDay, sentenceCase } from "@/lib/format";
 import type { Payment } from "@/lib/types";
 import { PAYMENT_METHODS } from "@/lib/payment-methods";
 import { MetaItem, PageHeader } from "@/components/ui/page-header";
@@ -54,7 +54,7 @@ function Invoice({ id }: { id: string }) {
         <EmptyState
           icon={<IconReceipt size={26} />}
           title="No such invoice in this clinic"
-          body="Invoices are tenant-scoped; this one belongs elsewhere or has been removed."
+          body="This invoice doesn’t exist, or it has been removed."
           action={<ButtonLink href="/billing" variant="secondary" size="sm"><IconChevronLeft size={14} /> Back to billing</ButtonLink>}
         />
       </Card>
@@ -147,12 +147,7 @@ function Invoice({ id }: { id: string }) {
                     <TR key={li.id}>
                       <TD className="font-medium">{li.description}</TD>
                       <TD>
-                        <Badge
-                          tone={li.source === "pharmacy" ? "accent" : li.source === "lab" ? "warn" : li.source === "procedure" ? "info" : "neutral"}
-                          size="sm" dot={false}
-                        >
-                          {li.source}
-                        </Badge>
+                        <span className="text-caption text-ink-2">{sentenceCase(li.source)}</span>
                       </TD>
                       <TD align="right" className="tnum font-mono">{li.qty}</TD>
                       <TD align="right" className="tnum font-mono">{currency(li.unit_price)}</TD>
@@ -210,10 +205,13 @@ function Invoice({ id }: { id: string }) {
                       <div className="min-w-0">
                         <p className="text-body font-medium text-ink">{currency(p.amount)}</p>
                         <p className="text-caption text-ink-3">
-                          {p.method.toUpperCase()}{p.reference ? ` · ${p.reference}` : ""}
+                          {PAYMENT_METHODS.find((m) => m.value === p.method)?.label ?? sentenceCase(p.method)}
+                          {p.reference ? ` · ${p.reference}` : ""}
                         </p>
                       </div>
-                      <span className="tnum font-mono text-caption text-ink-3">{p.at}</span>
+                      <span className="tnum text-caption text-ink-3">
+                        {formatDate(p.at.slice(0, 10))} · {formatTime12(p.at.slice(11, 16))}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -270,9 +268,6 @@ function Invoice({ id }: { id: string }) {
               {config.contact_email && (
                 <p className="break-all text-caption text-ink-2">{config.contact_email}</p>
               )}
-              <p className="mt-2 text-caption text-ink-3">
-                Every invoice carries the tenant that raised it — this record can never appear in another clinic's ledger.
-              </p>
             </CardBody>
           </Card>
         </aside>

@@ -1,5 +1,39 @@
 @import "tailwindcss";
 
+/* a laptop screen once the browser chrome has taken its share */
+@custom-variant short (@media (max-height: 860px));
+
+/* ---------------------------------------------------------------- fallback ---
+   Google Sans is not in `next/font`'s precalculated metrics table (it keeps a
+   hand-maintained list — see the TODO in `get-fallback-font-override-metrics`
+   — and Google Sans was added to Google Fonts after it), so the build says:
+
+     Failed to find font override values for font `Google Sans`
+
+   and generates no metric-matched fallback. Without one, text painted before
+   the webfont arrives is laid out on the raw fallback's metrics and reflows
+   when Google Sans swaps in.
+
+   So it is written by hand. The numbers below were measured from the font
+   itself with fontkit and put through the same arithmetic `font-utils.js`
+   uses, so this face is what Next would have generated had it known the font:
+
+     unitsPerEm 1000, ascent 966, descent -286, lineGap 0
+     weighted average character width 0.44811em, against Arial's 0.44580em
+
+   The widths are within half a percent, so the horizontal reflow was never
+   the problem; the ascent is the part that moved (96.6% against Arial's
+   90.5%). Re-measure if the font is ever changed.
+   -------------------------------------------------------------------- */
+@font-face {
+  font-family: "Google Sans Fallback";
+  src: local("Arial");
+  size-adjust: 100.52%;
+  ascent-override: 96.10%;
+  descent-override: 28.45%;
+  line-gap-override: 0%;
+}
+
 /* ==========================================================================
    Astrale PMS — design tokens
 
@@ -55,9 +89,11 @@
   --lh-display:    1.12;
   --lh-display-lg: 1.08;
 
-  --tr-micro:       0.012em;
-  --tr-caption:     0.004em;
-  --tr-label:       0.002em;
+  /* Google Sans is set wide already; the small-size air Inter needed would
+     space it out further, so the small steps sit close to zero. */
+  --tr-micro:       0.004em;
+  --tr-caption:     0em;
+  --tr-label:       0em;
   --tr-body:        0em;
   --tr-lead:       -0.003em;
   --tr-title-sm:   -0.008em;
@@ -73,7 +109,7 @@
      everything shouts has no hierarchy left. */
   --fw-normal:   400;
   --fw-medium:   500;
-  --fw-strong:   550;  /* patient names, figures — emphasis below "heading" */
+  --fw-strong:   600;  /* patient names, figures — Google Sans needs the full step to hold its weight */
   --fw-semibold: 600;
 
   /* ---- surfaces --------------------------------------------------------
@@ -105,9 +141,12 @@
      Charcoal with a cool cast, not black. 15:1 on a card is emphatic without
      the halation that pure black on pure white throws at a tired eye.
      ------------------------------------------------------------------- */
-  --ink:             #1B2434;  /* primary            15.2:1 on surface */
-  --ink-2:           #4C566B;  /* secondary           7.2:1 on surface */
-  --ink-3:           #59657A;  /* muted               5.7:1 on surface */
+  /* Google Sans draws a lighter stroke than Inter did, so at the same hex the
+     text read as faded. Ink sits a shade deeper and the two greys a clear step
+     darker, so secondary lines are quieter than a name without looking washed. */
+  --ink:             #141C2B;  /* primary            16.6:1 on surface */
+  --ink-2:           #3D475B;  /* secondary           9.4:1 on surface */
+  --ink-3:           #4E596E;  /* muted               7.2:1 on surface */
   --ink-placeholder: #626E86;  /* placeholder         5.0:1 on surface */
   --ink-on:          #FFFFFF;  /* on a filled accent                   */
 
@@ -441,12 +480,14 @@
   --color-series-6: var(--series-6);
   --color-grid: var(--grid);
 
-  /* One sans for the whole application. A display serif on page titles is a
-     second typeface to read all day for no gain in comprehension, so the
-     display slot points at the same family, set tighter. */
-  --font-display: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-plex-mono), ui-monospace, Menlo, monospace;
+  /* One sans for the whole application — Google Sans, shared with the
+     sign-in pages. The display slot points at the same family, and so does
+     the "mono" slot: figures that used to be typewriter-set now take this
+     face with tabular numerals (see `.font-mono` in base), which keeps a
+     column of times aligned without a second voice on the page. */
+  --font-display: var(--font-app), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-app), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-app), ui-sans-serif, system-ui, sans-serif;
 
   --radius-sm: var(--r-sm);
   --radius-DEFAULT: var(--r);
@@ -496,10 +537,6 @@ body {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   font-optical-sizing: auto;
-  /* Inter's disambiguating alternates. In a system where a dose can read
-     "15 ml" or "l5 ml", the tailed lowercase l and the serifed capital I
-     are not a stylistic preference. */
-  font-feature-settings: "cv05" 1, "cv08" 1;
 }
 
 /* Headings inherit the scale rather than the browser's, so a bare <h1> in a
@@ -532,11 +569,25 @@ p { text-wrap: pretty; }
 
 /* numerals in data contexts always line up */
 .tnum { font-variant-numeric: tabular-nums; }
+/* the old monospace slot: same face as the page, figures held to a column */
+.font-mono { font-variant-numeric: tabular-nums; letter-spacing: 0; }
 
 /* ------------------------------------------------------------- motion --- */
-@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
-@keyframes pop { from { opacity: 0; transform: scale(.97) translateY(6px); } to { opacity: 1; transform: none; } }
+/* Entrances move; they do not fade. Text that arrives half-transparent is
+   text you cannot read for its first fifth of a second. */
+@keyframes rise { from { transform: translateY(6px); } to { transform: none; } }
+@keyframes fade { from { transform: translateY(2px); } to { transform: none; } }
+@keyframes pop { from { transform: scale(.98) translateY(4px); } to { transform: none; } }
+/* a backdrop arrives by getting darker, not by moving */
+@keyframes scrim { from { opacity: 0; } to { opacity: 1; } }
+/* a dialog settles, with no overshoot — a large panel that bounces reads as a jolt */
+@keyframes dialogin { from { opacity: 0; transform: scale(.985) translateY(6px); } to { opacity: 1; transform: none; } }
+/* and leaves the way it came, a little quicker */
+@keyframes scrimout { from { opacity: 1; } to { opacity: 0; } }
+@keyframes dialogout { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(.985) translateY(4px); } }
+/* the phone's drawer slides from the edge it lives on */
+@keyframes sheetin { from { transform: translateX(-100%); } to { transform: none; } }
+@keyframes sheetout { from { transform: none; } to { transform: translateX(-100%); } }
 @keyframes sweep { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @keyframes pulsedot { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
 @keyframes drawline { from { transform: scaleY(0); } to { transform: scaleY(1); } }
@@ -549,9 +600,58 @@ p { text-wrap: pretty; }
   100% { transform: translateX(100%)  scaleX(.4); }
 }
 
+/* ---- the sign-in aurora --------------------------------------------------
+   Four broad fields of colour drifting across the sign-in showcase, each on
+   its own period, so the four never line up twice and the movement never
+   reads as a repeat.
+
+   Each field breathes its own opacity as well as drifting, and the four are
+   out of phase. That is what makes the colour actually change rather than
+   merely move: as the blue field fades the violet behind it comes up, and
+   the blend under any given pixel travels through the hues between them.
+
+   Only `transform` and `opacity` are animated — both composited by the GPU.
+   Animating a gradient stop, a background-position or a filter repaints the
+   whole plane every frame, which is the difference between a login screen
+   that idles at 1% CPU and one that spins a laptop fan while somebody types
+   their password. The softness is the radial gradient's own falloff rather
+   than a `blur()`, for the same reason.
+
+   Each loop ends where it began, so the reduced-motion rule below — which
+   freezes every animation at its first frame — leaves a composed, still
+   background rather than a half-finished pose.
+   -------------------------------------------------------------------- */
+@keyframes aurora-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1);           opacity: .9; }
+  33%      { transform: translate3d(16%, 12%, 0) scale(1.28);    opacity: 1; }
+  66%      { transform: translate3d(-13%, 19%, 0) scale(.84);    opacity: .45; }
+}
+@keyframes aurora-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.06);        opacity: .5; }
+  40%      { transform: translate3d(-19%, -14%, 0) scale(.86);   opacity: 1; }
+  70%      { transform: translate3d(12%, -20%, 0) scale(1.3);    opacity: .75; }
+}
+@keyframes aurora-c {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(.92);         opacity: 1; }
+  45%      { transform: translate3d(21%, -11%, 0) scale(1.32);   opacity: .5; }
+  75%      { transform: translate3d(-15%, 9%, 0) scale(1.04);    opacity: .85; }
+}
+@keyframes aurora-d {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.12);        opacity: .6; }
+  35%      { transform: translate3d(-14%, 16%, 0) scale(.88);    opacity: 1; }
+  70%      { transform: translate3d(18%, 7%, 0) scale(1.24);     opacity: .45; }
+}
+
 .rise { animation: rise var(--d-3) var(--ease-out) both; }
 .fade { animation: fade var(--d-2) var(--ease) both; }
 .pop { animation: pop var(--d-2) var(--ease-spring) both; }
+.scrim { animation: scrim var(--d-2) var(--ease-out) both; }
+.dialog-in { animation: dialogin var(--d-2) var(--ease-out) both; }
+/* keep in step with EXIT_MS in ui/modal.tsx */
+.scrim-out { animation: scrimout 160ms var(--ease) both; }
+.dialog-out { animation: dialogout 160ms var(--ease) both; }
+.sheet-in { animation: sheetin var(--d-2) var(--ease-out) both; }
+.sheet-out { animation: sheetout 160ms var(--ease) both; }
 .spin { animation: spin 780ms linear infinite; }
 .indeterminate { animation: indeterminate 1.15s var(--ease) infinite; transform-origin: left center; }
 

@@ -26,7 +26,7 @@ import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/tabl
 import { PageLoader } from "@/components/ui/loader";
 import { DynamicForm, summaryRows, validateAgainstSchema, type FormValues } from "@/components/domain/dynamic-form";
 import { ActionItem, ActionList, DataList, DataRow } from "@/components/ui/data-list";
-import { LabFlag, StatusPill } from "@/components/domain/status";
+import { LabFlag, StatusPill, statusLabel } from "@/components/domain/status";
 import { AllergyFlag } from "@/components/domain/patient";
 import { PatientAccountSummary } from "@/components/domain/patient-account";
 import { AppointmentModal } from "@/components/domain/quick-actions";
@@ -41,11 +41,6 @@ type Tab = "overview" | "history" | "clinical" | "orders" | "billing" | "edit";
 
 /** Held in the Contact panel instead of among the record's rows. */
 const CONTACT_KEYS = new Set(["phone", "email", "address"]);
-
-const KIND_TONE: Record<string, Tone> = {
-  registration: "neutral", appointment: "info", queue: "accent", encounter: "accent",
-  prescription: "accent", lab: "warn", dispense: "ok", invoice: "warn", payment: "ok",
-};
 
 export default function PatientPage(props: PageProps<"/patients/[id]">) {
   const { id } = React.use(props.params);
@@ -411,20 +406,25 @@ function PatientRecord({ patient }: { patient: Patient }) {
                             style={{ background: `var(--${h.tone ?? "neutral"})` }}
                             aria-hidden
                           />
+                          {/* The title already says what kind of event it was, so it
+                              carries no type pill; it is the link when there is one. */}
                           <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                            <p className="text-body font-medium text-ink">{h.title}</p>
-                            <span className="tnum shrink-0 font-mono text-caption text-ink-3">{formatDate(h.at, "long")}</span>
-                          </div>
-                          {h.detail && <p className="mt-1 text-label leading-relaxed text-ink-2">{h.detail}</p>}
-                          <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                            <Badge tone={KIND_TONE[h.kind] ?? "neutral"} size="sm">{h.kind}</Badge>
-                            {h.meta && <span className="text-caption text-ink-3">{h.meta}</span>}
-                            {h.href && (
-                              <ButtonLink href={h.href} variant="ghost" size="sm" className="h-6 px-2 text-caption">
-                                Open
-                              </ButtonLink>
+                            {h.href ? (
+                              <Link href={h.href} className="text-body font-medium text-ink hover:text-accent-text hover:underline">
+                                {h.title}
+                              </Link>
+                            ) : (
+                              <p className="text-body font-medium text-ink">{h.title}</p>
                             )}
+                            <span className="tnum shrink-0 text-caption text-ink-3">{formatDate(h.at, "long")}</span>
                           </div>
+                          {(h.detail || h.meta) && (
+                            <p className="mt-1 text-label leading-relaxed text-ink-2">
+                              {h.meta && h.detail ? h.detail.replace(/\.$/, "") : h.detail}
+                              {h.detail && h.meta && " · "}
+                              {h.meta && <span className="text-ink-3">{statusLabel(h.meta)}</span>}
+                            </p>
+                          )}
                         </li>
                       ))}
                     </ol>
@@ -440,7 +440,7 @@ function PatientRecord({ patient }: { patient: Patient }) {
                 <Card>
                   <EmptyState
                     icon={<IconStethoscope size={26} />} title="No encounters"
-                    body="Consultations recorded for this patient will appear here with their clinical payload."
+                    body="Consultations recorded for this patient will appear here."
                   />
                 </Card>
               )}
@@ -453,7 +453,7 @@ function PatientRecord({ patient }: { patient: Patient }) {
                         subtitle={`${formatDate(e.date, "long")} · ${userName(db, e.doctor_id)}`}
                         actions={
                           <>
-                            <Badge tone={e.status === "signed" ? "ok" : "warn"} size="sm">{e.status}</Badge>
+                            {e.status !== "signed" && <Badge tone="warn" size="sm" dot>Draft</Badge>}
                             <ButtonLink href={`/consultations/${e.id}`} variant="ghost" size="sm">Open</ButtonLink>
                           </>
                         }
@@ -602,13 +602,13 @@ function PatientRecord({ patient }: { patient: Patient }) {
                         return (
                           <TR key={inv.id}>
                             <TD>
-                              <ButtonLink href={`/billing/${inv.id}`} variant="ghost" size="sm" className="h-7 px-2 font-mono text-label">
+                              <Link href={`/billing/${inv.id}`} className="font-medium text-ink hover:text-accent-text hover:underline">
                                 {inv.number}
-                              </ButtonLink>
+                              </Link>
                             </TD>
-                            <TD className="tnum font-mono text-label text-ink-2">{formatDate(inv.issued_at)}</TD>
-                            <TD align="right" className="tnum font-mono">{currency(tot.total)}</TD>
-                            <TD align="right" className="tnum font-mono text-ok-text">{currency(tot.paid)}</TD>
+                            <TD className="tnum text-label text-ink-2">{formatDate(inv.issued_at)}</TD>
+                            <TD align="right">{currency(tot.total)}</TD>
+                            <TD align="right" className={tot.paid > 0 ? "text-ink" : "text-ink-3"}>{tot.paid > 0 ? currency(tot.paid) : "—"}</TD>
                             <TD align="right"><StatusPill kind="invoice" status={inv.status} size="sm" dot={false} /></TD>
                           </TR>
                         );
@@ -623,7 +623,7 @@ function PatientRecord({ patient }: { patient: Patient }) {
 
           {tab === "edit" && (
             <Card>
-              <CardHeader icon={<IconEdit size={15} />} tone="neutral" title="Edit record" hint="Same resolved schema as registration — nothing here is hard coded." />
+              <CardHeader icon={<IconEdit size={15} />} tone="neutral" title="Edit record" hint="Update this patient’s details." />
               <CardBody>
                 <DynamicForm
                   fields={schema}
@@ -633,7 +633,6 @@ function PatientRecord({ patient }: { patient: Patient }) {
                     setErrors((prev) => { const n = { ...prev }; delete n[k]; return n; });
                   }}
                   errors={errors}
-                  showScopes
                 />
               </CardBody>
               <CardFooter>

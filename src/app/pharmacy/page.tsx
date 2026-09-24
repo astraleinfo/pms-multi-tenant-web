@@ -8,7 +8,8 @@ import {
   stockLevel, userName,
 } from "@/lib/data/repository";
 
-import { currency, formatDate, pluralise } from "@/lib/format";
+import { currency, formatDate, formatStamp, pluralise } from "@/lib/format";
+import { StockReference } from "@/components/domain/stock-reference";
 import type { Prescription } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader, Legend } from "@/components/ui/card";
@@ -54,7 +55,6 @@ function Pharmacy() {
   return (
     <>
       <PageHeader
-        eyebrow="Feature module"
         title="Pharmacy"
         description="The counter reads prescription rows straight from the clinical record. Handing medicine over writes a dispense transaction into the one inventory ledger — no second stock table, no copied prescription."
         actions={
@@ -70,8 +70,11 @@ function Pharmacy() {
         <Stat label="Fully dispensed" value={stats.fully_dispensed} tone="ok" icon={<IconCheck size={16} />} />
         <Stat label="Units out" value={stats.dispensed_units} icon={<IconMortar size={16} />}
               hint="Across every dispense transaction" />
-        <Stat label="Dispensed value" value={currency(stats.dispensed_value)} icon={<IconBox size={16} />}
-              hint="At cost price, from the ledger" />
+        {/* a money figure, so the practice admin's; the server leaves it out for anyone else */}
+        {stats.dispensed_value !== undefined && (
+          <Stat label="Dispensed value" value={currency(stats.dispensed_value)} icon={<IconBox size={16} />}
+                hint="At cost price, from the ledger" />
+        )}
       </section>
 
       <Tabs
@@ -139,7 +142,7 @@ function Pharmacy() {
           <TableWrap>
             <Table>
               <THead>
-                <tr><TH>When</TH><TH>Item</TH><TH>Batch</TH><TH>Against</TH><TH>By</TH><TH align="right">Quantity</TH></tr>
+                <tr><TH>When</TH><TH>Item</TH><TH>Batch</TH><TH>For</TH><TH>By</TH><TH align="right">Handed over</TH></tr>
               </THead>
               <TBody>
                 {selectInventoryTx(db, t).filter((x) => x.type === "dispense")
@@ -148,12 +151,12 @@ function Pharmacy() {
                     const item = selectInventoryItems(db, t).find((i) => i.id === tx.item_id);
                     return (
                       <TR key={tx.id}>
-                        <TD className="tnum whitespace-nowrap font-mono text-label text-ink-2">{tx.at}</TD>
+                        <TD className="tnum whitespace-nowrap text-label text-ink-2">{formatStamp(tx.at)}</TD>
                         <TD>{item?.name ?? tx.item_id}</TD>
                         <TD className="tnum font-mono text-label text-ink-2">{tx.batch_no}</TD>
-                        <TD className="tnum font-mono text-caption text-ink-3">{tx.ref_type}:{tx.ref_id}</TD>
+                        <TD><StockReference tx={tx} /></TD>
                         <TD className="text-ink-2">{userName(db, tx.actor_id)}</TD>
-                        <TD align="right" className="tnum font-mono font-medium text-critical-text">{tx.qty}</TD>
+                        <TD align="right" className="font-medium">{Math.abs(tx.qty)}</TD>
                       </TR>
                     );
                   })}
@@ -177,7 +180,7 @@ function DispensePanel({ rx, onDone }: { rx: Prescription; onDone: () => void })
   const [collecting, setCollecting] = React.useState(false);
   const db = useClinicDb();
   const t = session.tenantId;
-  /* The drawer shows allergies, which a list row does not carry. */
+  /* The panel shows allergies, which a list row does not carry. */
   const { data: patient } = usePatient(rx.patient_id);
 
   const [lines, setLines] = React.useState<Record<string, { qty: number; batch: string }>>(() =>
@@ -289,7 +292,7 @@ function DispensePanel({ rx, onDone }: { rx: Prescription; onDone: () => void })
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line-soft pt-4">
           <p className="text-caption leading-snug text-ink-3">
-            Dispensing updates the prescription item and writes one ledger transaction per stocked line.
+            What you hand over comes out of stock.
             {hasFeature("billing") && " What was handed over then becomes a charge at the pharmacy counter."}
           </p>
           <Button

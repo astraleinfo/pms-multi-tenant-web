@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
+import { useRouter } from "@/lib/navigation";
 import { cn } from "@/lib/cn";
 import { useApp } from "@/lib/store/app-store";
 import { useQueryClient } from "@tanstack/react-query";
@@ -17,6 +18,7 @@ import { PasswordGate } from "./password-gate";
 import { SupportBanner } from "./support-banner";
 import { TourProvider } from "@/components/onboarding/tour";
 import { StageLoader } from "@/components/ui/loader";
+import { usePresence } from "@/components/ui/modal";
 
 const RAIL_KEY = "astrale-pms.rail";
 
@@ -32,6 +34,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
      rail is one click — or one hover away from a tooltip — either way. */
   const [collapsed, setCollapsed] = React.useState(true);
   const [mobileNav, setMobileNav] = React.useState(false);
+  const mobileSheet = usePresence(mobileNav);
   const [search, setSearch] = React.useState(false);
 
   React.useEffect(() => {
@@ -131,22 +134,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* desktop rail */}
       <aside
         className={cn(
-          "sticky top-0 hidden h-dvh shrink-0 transition-[width] duration-300 ease-[var(--ease-brand)] lg:block",
+          "sticky top-0 z-[45] hidden h-dvh shrink-0 transition-[width] duration-300 ease-[var(--ease-brand)] lg:block",
         )}
         style={{ width: collapsed ? "var(--rail-w-collapsed)" : "var(--rail-w)" }}
       >
         <Rail collapsed={collapsed} onToggle={toggleRail} />
       </aside>
 
-      {/* mobile drawer rail */}
-      {mobileNav && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="fixed inset-0 bg-[hsl(var(--sh)/.4)] fade" onClick={() => setMobileNav(false)} aria-hidden />
+      {/* mobile drawer rail — slides in from its edge, and back out */}
+      {mobileSheet.present && (
+        <div className={cn("fixed inset-0 z-50 lg:hidden", mobileSheet.leaving && "pointer-events-none")}>
           <div
-            className="relative h-full w-[var(--rail-w)] max-w-[84vw] shadow-e4"
-            style={{ animation: "railin var(--d-3) var(--ease-out) both" }}
+            className={cn("fixed inset-0 bg-[hsl(var(--sh)/.4)]", mobileSheet.leaving ? "scrim-out" : "scrim")}
+            onClick={() => setMobileNav(false)}
+            aria-hidden
+          />
+          <div
+            className={cn(
+              "relative h-full w-[var(--rail-w)] max-w-[84vw] shadow-e4",
+              mobileSheet.leaving ? "sheet-out" : "sheet-in",
+            )}
           >
-            <style>{"@keyframes railin{from{transform:translateX(-18px);opacity:.5}to{transform:none;opacity:1}}"}</style>
             <Rail collapsed={false} onNavigate={() => setMobileNav(false)} />
           </div>
         </div>
@@ -156,7 +164,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <SupportBanner />
         <BillingBanner />
         <Topbar
-          onToggleRail={toggleRail}
           onOpenSearch={() => setSearch(true)}
           onOpenMobileNav={() => setMobileNav(true)}
         />

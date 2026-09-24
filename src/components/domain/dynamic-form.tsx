@@ -6,14 +6,7 @@ import { cn } from "@/lib/cn";
 import { DataList, DataRow } from "@/components/ui/data-list";
 import { Legend } from "@/components/ui/card";
 import { ChipMulti, Checkbox, Field, Input, Select, Textarea } from "@/components/ui/field";
-import { Badge, type Tone } from "@/components/ui/badge";
 import { formatDate } from "@/lib/format";
-
-const SCOPE_META: Record<FieldDefinition["scope"], { label: string; tone: Tone }> = {
-  common: { label: "Common", tone: "neutral" },
-  clinical_type: { label: "Clinical", tone: "accent" },
-  tenant: { label: "Clinic", tone: "accent" },
-};
 
 export type FormValues = Record<string, unknown>;
 
@@ -22,13 +15,12 @@ export type FormValues = Record<string, unknown>;
  * exist — it draws whatever the resolver returned, in order, grouped.
  */
 export function DynamicForm({
-  fields, values, onChange, errors, showScopes = false, columns = 2, className,
+  fields, values, onChange, errors, columns = 2, className,
 }: {
   fields: FieldDefinition[];
   values: FormValues;
   onChange: (key: string, value: unknown) => void;
   errors?: Record<string, string>;
-  showScopes?: boolean;
   columns?: 1 | 2;
   className?: string;
 }) {
@@ -55,7 +47,6 @@ export function DynamicForm({
                 value={values[f.field_key]}
                 onChange={(v) => onChange(f.field_key, v)}
                 error={errors?.[f.field_key]}
-                showScope={showScopes}
                 columns={columns}
               />
             ))}
@@ -67,24 +58,21 @@ export function DynamicForm({
 }
 
 export function DynamicField({
-  def, value, onChange, error, showScope, columns = 2,
+  def, value, onChange, error, columns = 2,
 }: {
   def: FieldDefinition;
   value: unknown;
   onChange: (v: unknown) => void;
   error?: string;
-  showScope?: boolean;
   columns?: 1 | 2;
 }) {
   const id = `f-${def.id}`;
   const span = columns === 2 && def.span === 2 ? "sm:col-span-2" : "";
-  const scope = SCOPE_META[def.scope];
 
   const label = (
-    <span className="inline-flex items-center gap-2">
-      {def.label}
-      {showScope && <Badge tone={scope.tone} size="sm">{scope.label}</Badge>}
-    </span>
+    /* Where a field comes from (common, clinical type, the clinic's own) is
+       the builder's business, not the person filling it in — so no tag. */
+    <span className="inline-flex items-center gap-2">{def.label}</span>
   );
 
   return (

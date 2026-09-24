@@ -29,17 +29,19 @@ const KIND_LABEL: Record<api.ImportKind, string> = { users: "Staff", patients: "
 
 export function ImportButton({ tenant }: { tenant: Tenant }) {
   const [open, setOpen] = React.useState(false);
+  /* each opening is a fresh dialog; the one closing stays long enough to leave */
+  const [session, setSession] = React.useState(0);
   return (
     <>
-      <Button variant="secondary" onClick={() => setOpen(true)}>
+      <Button variant="secondary" onClick={() => { setSession((n) => n + 1); setOpen(true); }}>
         <IconUpload size={15} /> Import from Excel
       </Button>
-      {open && <ImportDialog tenant={tenant} onClose={() => setOpen(false)} />}
+      <ImportDialog key={session} open={open} tenant={tenant} onClose={() => setOpen(false)} />
     </>
   );
 }
 
-function ImportDialog({ tenant, onClose }: { tenant: Tenant; onClose: () => void }) {
+function ImportDialog({ open, tenant, onClose }: { open: boolean; tenant: Tenant; onClose: () => void }) {
   const { notify } = useApp();
   const queryClient = useQueryClient();
   const [kind, setKind] = React.useState<api.ImportKind>("users");
@@ -94,7 +96,7 @@ function ImportDialog({ tenant, onClose }: { tenant: Tenant; onClose: () => void
 
   return (
     <Modal
-      open
+      open={open}
       onClose={() => { if (!busy) onClose(); }}
       width="lg"
       title={`Import into ${tenant.name}`}

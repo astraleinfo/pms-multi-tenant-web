@@ -324,7 +324,7 @@ const SCREENS: Partial<Record<FeatureKey, Screen[]>> = {
           <Head>New invoice · Samuel Rée · clinic counter</Head>
           <Rows>
             {[["Emergency consultation", "₹800.00", true, null], ["Composite build-up, tooth 21", "₹2,500.00", true, null], ["Periapical radiograph", "₹300.00", true, null], ["Chlorhexidine mouthwash", "₹115.00", false, "Billed at pharmacy"]].map(([line, amount, on, note]) => (
-              <Row key={line as string} className={on ? "" : "opacity-60"}>
+              <Row key={line as string} className={on ? "" : "text-ink-3"}>
                 <span className={cn("flex h-3.5 w-3.5 items-center justify-center rounded-[3px] border text-[9px]", on ? "border-accent bg-accent text-accent-ink" : "border-line-strong")}>{on ? "✓" : ""}</span>
                 <span className="flex-1">{line}</span>
                 {note && <Pill tone="warn">{note}</Pill>}

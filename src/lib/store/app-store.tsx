@@ -70,6 +70,10 @@ interface AppContextValue {
   createUser: (input: api.NewUser) => Promise<User>;
   setUserPassword: (userId: Id, password: string) => Promise<User>;
   setUserStatus: (userId: Id, status: AccountStatus) => void;
+  /** awaited: the edit form shows a refusal against the field it is about */
+  updateUser: (userId: Id, changes: api.UserChanges) => Promise<User>;
+  /** awaited: a refusal says what the person recorded, and offers a lock */
+  deleteUser: (userId: Id) => Promise<void>;
 
   updateConfig: (patch: Partial<TenantConfig>) => void;
   /** Unused by the UI — a module is granted by a super admin, not bought from
@@ -198,7 +202,9 @@ function AppFacade({ children }: { children: React.ReactNode }) {
   const connection = useQueueStream();
 
   /* every money figure follows the clinic's configured currency */
-  React.useEffect(() => { setActiveCurrency(config.currency); }, [config.currency]);
+  /* Rupees only. A clinic configured before that rule may still carry another
+     code in its settings; money is formatted as INR whatever it says. */
+  React.useEffect(() => { setActiveCurrency("INR"); }, []);
 
   /* "today" is the clinic's, not the browser's — a practice in Manchester and
      a screen in its waiting room must never disagree about the date */
@@ -293,6 +299,14 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     mutationFn: (input: api.NewUser) => api.createUser(input),
     onSuccess: invalidateTenant,
   });
+  const mUpdateUser = useMutation({
+    mutationFn: (a: { id: Id; changes: api.UserChanges }) => api.updateUser(a.id, a.changes),
+    onSuccess: invalidateTenant,
+  });
+  const mDeleteUser = useMutation({
+    mutationFn: (id: Id) => api.deleteUser(id),
+    onSuccess: invalidateTenant,
+  });
   const mUserPassword = useMutation({
     mutationFn: (a: { id: Id; password: string }) => api.setUserPassword(a.id, a.password),
     onSuccess: invalidateTenant,
@@ -365,6 +379,8 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     createUser: (input) => mCreateUser.mutateAsync(input),
     setUserPassword: (id, password) => mUserPassword.mutateAsync({ id, password }),
     setUserStatus: (id, status) => mUserStatus.mutate({ id, status }),
+    updateUser: (id, changes) => mUpdateUser.mutateAsync({ id, changes }),
+    deleteUser: (id) => mDeleteUser.mutateAsync(id),
 
     updateConfig: (patch) => mUpdateConfig.mutate(patch),
     purchaseFeature: (key) => mPurchase.mutate(key),

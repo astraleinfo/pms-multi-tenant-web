@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/navigation";
 import { useApp } from "@/lib/store/app-store";
 import { useDebounced } from "@/lib/debounce";
 import type { Patient } from "@/lib/types";
@@ -132,7 +132,7 @@ function PatientList() {
       <PageHeader
         eyebrow="Register"
         title="Patients"
-        description="The record is tenant-scoped: searching, sorting and paging all happen in the database, under this clinic's row-level policy, so the search below can only ever see this clinic's rows — and only ever sends the page you are looking at."
+        description="Everyone registered at this clinic. Search by name, record number or phone."
         actions={
           <ButtonLink href="/patients/new" variant="primary">
             <IconPlus size={15} /> Register patient

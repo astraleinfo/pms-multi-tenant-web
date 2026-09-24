@@ -63,6 +63,89 @@ export function useBillPdf() {
 }
 
 /** Every bill, newest first. */
+/**
+ * What the clinic has switched on, and what that comes to a month.
+ *
+ * Every module is listed, core and trial included, so "what do we have" and
+ * "what do we pay" are one read. The price column is the catalogue's today;
+ * the last column says whether the next bill charges for it, and the total is
+ * the server's sum of exactly those — the same rule the bill is raised by.
+ */
+export function SubscriptionPlan({ subscription }: { subscription: Subscription }) {
+  const plan = subscription.plan;
+  const code = subscription.summary.currency;
+  if (!plan || !plan.modules.length) {
+    return (
+      <EmptyState
+        icon={<IconReceipt size={20} />}
+        title="No modules switched on"
+        body="Modules are switched on for this clinic by the Astrale team."
+        compact
+      />
+    );
+  }
+
+  return (
+    <TableWrap>
+      <Table>
+        <THead>
+          <TR>
+            <TH>Module</TH>
+            <TH>Since</TH>
+            <TH align="right">Price / month</TH>
+            <TH align="right">On the bill</TH>
+          </TR>
+        </THead>
+        <TBody>
+          {plan.modules.map((m) => (
+            <TR key={m.feature_key}>
+              <TD>
+                <span className="flex items-center gap-2">
+                  <span className="text-label font-medium text-ink">{m.name}</span>
+                  {m.is_core && <Badge tone="neutral" size="sm">Core</Badge>}
+                  {m.status === "trial" && <Badge tone="info" size="sm">Trial</Badge>}
+                </span>
+              </TD>
+              <TD>
+                <span className="tnum text-label text-ink-2">
+                  {m.activated_at ? formatDate(m.activated_at) : "—"}
+                </span>
+              </TD>
+              <TD align="right">
+                <span className="tnum font-mono text-label text-ink">
+                  {m.is_core ? "Included" : rentMoney(m.price_monthly, code)}
+                </span>
+              </TD>
+              <TD align="right">
+                {m.billed ? (
+                  <Badge tone="ok" size="sm" dot>Billed</Badge>
+                ) : (
+                  <span className="text-caption text-ink-3">
+                    {m.is_core ? "Free" : m.status === "trial" ? "Not during trial" : subscription.summary.exempt ? "Exempt" : "Free"}
+                  </span>
+                )}
+              </TD>
+            </TR>
+          ))}
+        </TBody>
+        <tfoot>
+          <tr className="border-t border-line bg-surface-2">
+            <td colSpan={2} className="px-4 py-3 text-label font-semibold text-ink">
+              Monthly total
+              <span className="ml-2 font-normal text-caption text-ink-3">
+                {plan.modules.filter((m) => m.billed).length} billed of {plan.modules.length} on
+              </span>
+            </td>
+            <td colSpan={2} className="px-4 py-3 text-right">
+              <span className="tnum font-mono text-body font-semibold text-ink">{rentMoney(plan.monthly_total, code)}</span>
+            </td>
+          </tr>
+        </tfoot>
+      </Table>
+    </TableWrap>
+  );
+}
+
 export function SubscriptionBills({
   subscription, today, compact = false,
 }: {

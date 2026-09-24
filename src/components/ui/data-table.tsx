@@ -49,7 +49,24 @@ export type AppTableFeatures = typeof tableFeatureSet;
 export interface ColumnMeta {
   align?: "left" | "right" | "center";
   width?: string | number;
+  /**
+   * Drop the column on screens narrower than this breakpoint. For what is
+   * useful but not essential — a narrow screen shows fewer columns rather
+   * than making the whole table scroll sideways.
+   */
+  hideBelow?: "sm" | "md" | "lg" | "xl";
 }
+
+/* Whole class names, because Tailwind reads the source text: a class built at
+   runtime is one it never sees. */
+const HIDE_BELOW: Record<NonNullable<ColumnMeta["hideBelow"]>, string> = {
+  sm: "hidden sm:table-cell",
+  md: "hidden md:table-cell",
+  lg: "hidden lg:table-cell",
+  xl: "hidden xl:table-cell",
+};
+
+const hideClass = (meta: ColumnMeta | undefined) => (meta?.hideBelow ? HIDE_BELOW[meta.hideBelow] : undefined);
 
 /** Typed column helper for a row shape. Define columns outside render. */
 export function columnHelperFor<T extends RowData>() {
@@ -185,8 +202,8 @@ export function DataTable<T extends RowData>({
         {busy && !firstLoad && <LoadingBar />}
         <div
           className="-mx-px overflow-x-auto overscroll-x-contain"
-          /* the previous page stays legible while the next one is in flight */
-          style={busy && !firstLoad ? { opacity: 0.55, transition: "opacity var(--d-2) var(--ease-out)" } : undefined}
+          /* the previous page stays fully legible while the next one is in
+             flight; the bar above says it is working, the text is not faded */
           aria-busy={busy || undefined}
         >
           <table className="w-full border-collapse text-left" style={{ minWidth }}>
@@ -204,7 +221,7 @@ export function DataTable<T extends RowData>({
                         style={(header.column.columnDef.meta as ColumnMeta | undefined)?.width
                           ? { width: (header.column.columnDef.meta as ColumnMeta).width }
                           : undefined}
-                        className={thClass(align)}
+                        className={cn(thClass(align), hideClass(header.column.columnDef.meta as ColumnMeta | undefined))}
                       >
                         {header.isPlaceholder ? null : sortable ? (
                           <button
@@ -250,7 +267,7 @@ export function DataTable<T extends RowData>({
                     return (
                       <td
                         key={cell.id}
-                        className={tdClass(align)}
+                        className={cn(tdClass(align), hideClass(cell.column.columnDef.meta as ColumnMeta | undefined))}
                       >
                         <table.FlexRender cell={cell} />
                       </td>

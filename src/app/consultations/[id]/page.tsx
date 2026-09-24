@@ -38,7 +38,7 @@ export default function EncounterPage(props: PageProps<"/consultations/[id]">) {
         <EmptyState
           icon={<IconStethoscope size={26} />}
           title="No such encounter in this clinic"
-          body="Encounters are tenant-scoped; this one belongs elsewhere or no longer exists."
+          body="This consultation doesn’t exist, or it has been removed."
           action={<ButtonLink href="/consultations" variant="secondary" size="sm"><IconChevronLeft size={14} /> All consultations</ButtonLink>}
         />
       </Card>
@@ -144,7 +144,7 @@ function EncounterView({ id }: { id: string }) {
           </Card>
 
           <Card>
-            <CardHeader icon={<IconStethoscope size={15} />} tone="info" title={clinical.examLabel} hint="The clinical_ext payload for this encounter." />
+            <CardHeader icon={<IconStethoscope size={15} />} tone="info" title={clinical.examLabel} hint="What was recorded in the exam at this visit." />
             <CardBody className="space-y-5">
               <ClinicalExamPanel clinicalType={tenant.clinical_type} ext={encounter.clinical_ext} readOnly />
               <div className="border-t border-line-soft pt-4">

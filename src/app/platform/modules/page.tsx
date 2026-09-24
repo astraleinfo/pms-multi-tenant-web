@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/navigation";
 import { usePlatformCatalog, usePlatformEntitlements, usePlatformSnapshot } from "@/lib/query/hooks";
 import { TODAY, compactCurrency, currency, formatDate, pluralise } from "@/lib/format";
 import {
@@ -525,7 +525,7 @@ function AccessCell({
       className={cn(
         "inline-flex h-6 min-w-14 items-center justify-center rounded-[var(--r-pill)] border",
         "text-micro font-medium transition-[filter,border-color,color] duration-150",
-        "disabled:opacity-65",
+        "disabled:cursor-not-allowed disabled:text-disabled-ink",
         CELL_CLASS[line.state],
       )}
     >
