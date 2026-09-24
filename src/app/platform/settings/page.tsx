@@ -9,11 +9,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Field, Input, NumberInput, Select } from "@/components/ui/field";
 import { SettingRow, SettingsActions, SettingsSection } from "@/components/ui/settings";
-import { Tabs } from "@/components/ui/tabs";
 import { StageLoader } from "@/components/ui/loader";
-import { IconGrid, IconSettings } from "@/components/ui/icons";
-
-type Tab = "defaults" | "catalog";
 
 export default function PlatformSettingsPage() {
   return (
@@ -24,7 +20,6 @@ export default function PlatformSettingsPage() {
 }
 
 function SettingsConsole() {
-  const [tab, setTab] = React.useState<Tab>("defaults");
   const { data, isPending } = usePlatformSettings();
 
   return (
@@ -32,23 +27,12 @@ function SettingsConsole() {
       <PageHeader
         eyebrow="Platform"
         title="Settings"
-        description="What every new clinic starts with, who a clinic that can't self-serve should write to, and the shared catalogues every clinic reads from."
-      />
-      <Tabs
-        value={tab}
-        onChange={setTab}
-        className="my-5"
-        tabs={[
-          { value: "defaults", label: "Support & defaults", icon: <IconSettings size={15} /> },
-          { value: "catalog", label: "Catalog", icon: <IconGrid size={15} /> },
-        ]}
+        description="What every new clinic starts with, and who a clinic that can't self-serve should write to."
       />
       {isPending || !data ? (
         <StageLoader label="Reading platform settings…" />
-      ) : tab === "defaults" ? (
-        <DefaultsTab settings={data} />
       ) : (
-        <CatalogTab />
+        <DefaultsTab settings={data} />
       )}
     </>
   );
@@ -75,7 +59,7 @@ function DefaultsTab({ settings }: { settings: PlatformSettings }) {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="mt-5 space-y-5">
       <SettingsSection title="Support desk" hint="Shown in every clinic's Help menu and prefilled into module-request emails.">
         <SettingRow label="Email" htmlFor="cfg-support-email">
           <Input id="cfg-support-email" type="email" value={draft.support_email}
@@ -137,8 +121,4 @@ function DefaultsTab({ settings }: { settings: PlatformSettings }) {
       </SettingsSection>
     </div>
   );
-}
-
-function CatalogTab() {
-  return <p className="text-label text-ink-3">Catalog editing lands in the next task.</p>;
 }
