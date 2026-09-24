@@ -13,7 +13,7 @@ import type { Feature, FeatureKey } from "@/lib/types";
 import { isSuperAdmin } from "@/lib/api";
 import { useApp } from "@/lib/store/app-store";
 import { cn } from "@/lib/cn";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Card, CardBody, CardFooter, CardHeader, CardLink } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/misc";
 import { Tabs } from "@/components/ui/tabs";
@@ -26,8 +26,20 @@ import {
 } from "@/components/platform/module-controls";
 import { FeaturePriceDialog } from "@/components/platform/price-editor";
 import {
-  IconEdit, IconGrid, IconLayers, IconUsers
+  IconBox, IconChart, IconEdit, IconFlask, IconGrid, IconLayers, IconMortar, IconReceipt, IconUsers,
 } from "@/components/ui/icons";
+
+/** Every paid module already has a real icon somewhere in the app (the
+ *  clinic rail's own nav); reused here rather than inventing new ones so
+ *  the catalogue card and the module it describes look like the same
+ *  product. */
+const MODULE_ICON: Partial<Record<FeatureKey, React.ComponentType<{ size?: number }>>> = {
+  pharmacy: IconMortar,
+  lab: IconFlask,
+  inventory: IconBox,
+  billing: IconReceipt,
+  advanced_reports: IconChart,
+};
 
 /* ==========================================================================
    Modules, priced and sold.
@@ -193,42 +205,29 @@ function ModuleCard({
   onPrice?: (key: FeatureKey) => void;
 }) {
   const { feature } = stat;
+  const Icon = MODULE_ICON[feature.key];
 
   return (
     <Card className="flex flex-col">
-      <div className="px-5 pt-4.5">
-        <h3 className="text-body font-semibold leading-tight text-ink">{feature.name}</h3>
-        <p className="mt-1 text-label leading-snug text-ink-2">{feature.summary}</p>
-      </div>
+      <CardHeader icon={Icon && <Icon size={16} />} title={feature.name} />
 
-      <div className="mt-3.5 flex-1 border-y border-line-soft bg-surface-2 px-5 py-3">
+      <CardBody className="flex flex-1 flex-col justify-between gap-3">
+        <p className="text-label leading-snug text-ink-2">{feature.summary}</p>
         <div className="flex items-center justify-between gap-3">
           <ModulePrice feature={feature} size="lg" />
           {onPrice && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onPrice(feature.key)}
-              aria-label={`Change the price of ${feature.name}`}
-            >
-              <IconEdit size={14} /> Edit price
-            </Button>
+            <CardLink onClick={() => onPrice(feature.key)} icon={<IconEdit size={13} />}>
+              Edit price
+            </CardLink>
           )}
         </div>
-        <p className="mt-1 text-caption text-ink-3">{feature.pricing_note}</p>
-      </div>
+      </CardBody>
 
-      <div className="flex items-center justify-between gap-3 px-5 py-3">
-        <Link
-          href={`/modules/${feature.key}`}
-          className="text-caption text-ink-3 underline-offset-4 hover:text-ink hover:underline"
-        >
-          What clinics are shown
-        </Link>
-        <Button variant="secondary" size="sm" onClick={() => onManage(feature.key)}>
+      <CardFooter>
+        <Button variant="secondary" size="sm" className="w-full" onClick={() => onManage(feature.key)}>
           <IconGrid size={14} /> Manage access
         </Button>
-      </div>
+      </CardFooter>
     </Card>
   );
 }

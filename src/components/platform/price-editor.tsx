@@ -84,7 +84,7 @@ function PriceForm({ stat, onClose }: { stat: ModuleStats; onClose: () => void }
       onClose={close}
       width="sm"
       title={`Price of ${feature.name}`}
-      subtitle="One price for every clinic on the platform."
+      subtitle={feature.pricing_note}
       footer={
         <>
           <Button variant="ghost" onClick={close} disabled={busy}>Cancel</Button>
