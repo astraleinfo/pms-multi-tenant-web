@@ -6,8 +6,8 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
 import { NAV, ROLE_LABEL, modulePath, roleAllows } from "@/lib/nav";
 import { useApp, useTenant } from "@/lib/store/app-store";
-import { useRailCounters } from "@/lib/query/hooks";
-import { SUPPORT, telHref } from "@/lib/support";
+import { useRailCounters, useSupportInfo } from "@/lib/query/hooks";
+import { telHref } from "@/lib/support";
 import {
   IconChevronDown, IconInfo, IconLock, IconLogout, IconMail, IconPhone, IconSidebar, IconSpark,
 } from "@/components/ui/icons";
@@ -268,9 +268,13 @@ export function Rail({
 function SupportMenu({ collapsed }: { collapsed: boolean }) {
   const tour = useTour();
   const { tenant, user } = useTenant();
+  const { data: support } = useSupportInfo();
+  const supportEmail = support?.support_email ?? "";
+  const supportPhone = support?.support_phone ?? "";
+  const supportHours = support?.support_hours ?? "";
 
   const mailto =
-    `mailto:${SUPPORT.email}` +
+    `mailto:${supportEmail}` +
     `?subject=${encodeURIComponent(`Help with ${tenant.name}`)}` +
     `&body=${encodeURIComponent(
       [`Hello Astrale support,`, "", "", `Clinic:  ${tenant.name}${tenant.slug ? ` (${tenant.slug})` : ""}`,
@@ -313,18 +317,18 @@ function SupportMenu({ collapsed }: { collapsed: boolean }) {
             className="flex w-full items-center gap-2.5 rounded-[var(--r-sm)] px-2.5 py-2 text-label text-ink transition-colors hover:bg-hover"
           >
             <IconMail size={15} className="shrink-0 text-ink-3" />
-            <span className="min-w-0 flex-1 truncate">{SUPPORT.email}</span>
+            <span className="min-w-0 flex-1 truncate">{supportEmail}</span>
           </a>
           <a
             role="menuitem"
-            href={telHref(SUPPORT.phone)}
+            href={telHref(supportPhone)}
             onClick={close}
             className="flex w-full items-center gap-2.5 rounded-[var(--r-sm)] px-2.5 py-2 text-label text-ink transition-colors hover:bg-hover"
           >
             <IconPhone size={15} className="shrink-0 text-ink-3" />
-            <span className="tnum min-w-0 flex-1 truncate font-mono">{SUPPORT.phone}</span>
+            <span className="tnum min-w-0 flex-1 truncate font-mono">{supportPhone}</span>
           </a>
-          <p className="px-2.5 pb-1.5 pt-1 text-caption leading-snug text-ink-3">{SUPPORT.hours}</p>
+          <p className="px-2.5 pb-1.5 pt-1 text-caption leading-snug text-ink-3">{supportHours}</p>
           <MenuSep />
           <MenuItem icon={<IconSpark size={15} />} onClick={() => { close(); tour.start(); }}>
             Take the tour

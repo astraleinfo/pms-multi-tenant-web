@@ -11,7 +11,7 @@ import { Avatar } from "@/components/ui/misc";
 import { Menu, MenuItem, MenuSep } from "@/components/ui/modal";
 import { Tooltip } from "@/components/ui/info";
 import {
-  IconLayers, IconLogout, IconPulse, IconReceipt, IconShield, IconSidebar, IconUsers,
+  IconLayers, IconLogout, IconPulse, IconReceipt, IconSettings, IconShield, IconSidebar, IconUsers,
 } from "@/components/ui/icons";
 
 /* ==========================================================================
@@ -39,6 +39,13 @@ export const SECTIONS = [
     label: "Tenants",
     icon: <IconUsers size={17} />,
     blurb: "Every clinic, filtered",
+  },
+  {
+    href: "/platform/settings" as const,
+    label: "Settings",
+    icon: <IconSettings size={17} />,
+    blurb: "Catalog, new-clinic defaults, support contact",
+    superAdmin: true,
   },
   {
     href: "/platform/modules" as const,

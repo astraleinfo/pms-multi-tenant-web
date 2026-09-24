@@ -1,7 +1,7 @@
 "use client";
 
 import type {
-  AccountStatus, Appointment, BillingDepartment, CatalogFeature, ClinicalTypeKey, Encounter,
+  AccountStatus, Appointment, BillingDepartment, CatalogFeature, ClinicalType, ClinicalTypeKey, Encounter,
   FeatureKey,
   Charge, FieldDefinition, HistoryEvent, Id, InventoryBatch, InventoryItem, InventoryItemPatch,
   InventoryTransaction, InventoryTxType, Invoice, InvoiceLineItem, LabAttachment, LabOrder,
@@ -1026,6 +1026,81 @@ export const listPlatformCatalogFeatures = () =>
 export const setFeaturePrice = (featureKey: FeatureKey, priceMonthly: number) =>
   patch_<CatalogFeature>(`/v1/platform/catalog/features/${featureKey}`, {
     price_monthly: priceMonthly,
+  });
+
+/* ---- platform settings (§ platform settings) --------------------------------- */
+
+export interface PlatformSettings {
+  support_email: string;
+  support_phone: string;
+  support_hours: string;
+  default_day_start: string;
+  default_day_end: string;
+  default_slot_minutes: 15 | 20 | 30;
+  default_duration: number;
+  default_tax_pct: number;
+  default_payment_terms_days: number;
+  default_expiry_alert_days: number;
+  default_currency: "GBP" | "EUR" | "USD" | "INR";
+}
+
+export const getPlatformSettings = () => get<PlatformSettings>("/v1/platform/settings");
+
+export const updatePlatformSettings = (changes: Partial<PlatformSettings>) =>
+  patch_<PlatformSettings>("/v1/platform/settings", changes);
+
+export interface PublicSettings {
+  support_email: string;
+  support_phone: string;
+  support_hours: string;
+}
+
+/** No session needed — this is what a clinic that can't self-serve reads to
+ *  know who to ask. */
+export const getPublicSettings = () => get<PublicSettings>("/v1/public/settings");
+
+export interface LabTestAdmin {
+  code: string;
+  name: string;
+  panel: string;
+  clinical_types: string[] | null;
+}
+
+export const listPlatformLabTests = () => get<LabTestAdmin[]>("/v1/platform/catalog/lab-tests");
+export const createPlatformLabTest = (input: LabTestAdmin) =>
+  post<LabTestAdmin>("/v1/platform/catalog/lab-tests", input);
+export const updatePlatformLabTest = (code: string, changes: Partial<LabTestAdmin>) =>
+  patch_<LabTestAdmin>(`/v1/platform/catalog/lab-tests/${code}`, changes);
+export const deletePlatformLabTest = (code: string) =>
+  del<void>(`/v1/platform/catalog/lab-tests/${code}`);
+
+export interface MedicineAdmin {
+  id: Id;
+  medicine: string;
+  strength: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  clinical_types: string[] | null;
+}
+
+export const listPlatformMedicines = () => get<MedicineAdmin[]>("/v1/platform/catalog/medicines");
+export const createPlatformMedicine = (input: Omit<MedicineAdmin, "id">) =>
+  post<MedicineAdmin>("/v1/platform/catalog/medicines", input);
+export const updatePlatformMedicine = (id: Id, changes: Partial<Omit<MedicineAdmin, "id">>) =>
+  patch_<MedicineAdmin>(`/v1/platform/catalog/medicines/${id}`, changes);
+export const deletePlatformMedicine = (id: Id) =>
+  del<void>(`/v1/platform/catalog/medicines/${id}`);
+
+export const updatePlatformClinicalType = (
+  key: ClinicalTypeKey,
+  changes: { label?: string; blurb?: string; examLabel?: string; complaintExample?: string },
+) =>
+  patch_<ClinicalType>(`/v1/platform/catalog/clinical-types/${key}`, {
+    label: changes.label,
+    blurb: changes.blurb,
+    exam_label: changes.examLabel,
+    complaint_example: changes.complaintExample,
   });
 
 /* ---- subscription billing, from the console ---------------------------------- */

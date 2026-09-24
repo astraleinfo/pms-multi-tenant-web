@@ -164,6 +164,43 @@ export function usePlatformCatalog(): FeatureCatalog {
   return useMemo(() => catalogOf(query.data, query.isPending), [query.data, query.isPending]);
 }
 
+export function usePlatformSettings() {
+  const { platformSession } = useSession();
+  return useQuery({
+    queryKey: qk.platformSettings(),
+    queryFn: api.getPlatformSettings,
+    enabled: platformSession.signedIn,
+  });
+}
+
+/** No session gate — anyone on a clinic's own address may read who to ask
+ *  for help, signed in or not. */
+export function useSupportInfo() {
+  return useQuery({
+    queryKey: qk.publicSettings(),
+    queryFn: api.getPublicSettings,
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function usePlatformLabTests() {
+  const { platformSession } = useSession();
+  return useQuery({
+    queryKey: qk.platformLabTests(),
+    queryFn: api.listPlatformLabTests,
+    enabled: platformSession.signedIn,
+  });
+}
+
+export function usePlatformMedicines() {
+  const { platformSession } = useSession();
+  return useQuery({
+    queryKey: qk.platformMedicines(),
+    queryFn: api.listPlatformMedicines,
+    enabled: platformSession.signedIn,
+  });
+}
+
 /**
  * What this clinic owes the platform — the practice admin's view. Only asked
  * for by someone who may see it; the API refuses everyone else with a 403.
