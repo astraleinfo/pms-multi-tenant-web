@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useApp } from "@/lib/store/app-store";
 import {
   usePlatformBilling, usePlatformCatalog, usePlatformEntitlements, usePlatformSnapshot,
 } from "@/lib/query/hooks";
@@ -17,7 +16,7 @@ import {
   charges, revenueSeries, revenueTotals,
   type ChargeRow, type RevenuePeriod, type RevenueTotals,
 } from "@/lib/platform/revenue";
-import { rentMoney } from "@/components/domain/subscription";
+import { rentMoney, rentMoneyCompact } from "@/components/domain/subscription";
 import { billingStatus, periodLabel, type BillingStatus } from "@/components/platform/revenue-tabs";
 import { cn } from "@/lib/cn";
 import { Card, CardBody, CardHeader, CardLink } from "@/components/ui/card";
@@ -52,7 +51,6 @@ export default function PlatformPage() {
 }
 
 function Overview() {
-  const { host } = useApp();
   const { data: snapshot, isPending: snapshotPending } = usePlatformSnapshot();
   const { byTenant } = usePlatformEntitlements();
   const catalog = usePlatformCatalog();
@@ -162,22 +160,6 @@ function Overview() {
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <TopClinicsCard rows={rows} />
         <DisciplineCard rows={rows} />
-      </div>
-
-      <div className="mt-5 max-w-3xl space-y-2 text-caption leading-relaxed text-ink-3">
-        <p>
-          Monthly recurring and per-clinic figures are what the billing run has invoiced, the same
-          numbers as the Revenue tab on Billing &amp; revenue. Everything else on this page — module
-          adoption, held and trial values, the largest-accounts table — is the catalogue price of
-          what each clinic is set up to hold, not a bill.
-        </p>
-        {host.root === "localhost" && (
-          <p className="rounded-[var(--r)] border border-warn-border bg-warn-soft px-3 py-2 text-warn-text">
-            Local development note: a console session is not a clinic session. Opening a clinic from
-            here lands you on its sign-in screen unless you go in as support — platform staff have no
-            account inside any clinic, and the API refuses a console token at a clinic address.
-          </p>
-        )}
       </div>
 
       <CreateClinicFlow open={creating} onClose={() => setCreating(false)} />
@@ -320,7 +302,7 @@ function RunRateCard({
           <BarChart
             labels={series.map((p) => p.label)}
             series={[{ name: "Billed", values: series.map((p) => p.billed) }]}
-            format={(n: number) => rentMoney(n, currencyCode)}
+            format={(n: number) => rentMoneyCompact(n, currencyCode)}
             highlight={series.length - 1}
             height={200}
           />

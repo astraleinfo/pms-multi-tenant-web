@@ -40,7 +40,7 @@ describe("a withdrawn bill is not money", () => {
     }]);
 
     expect(revenueTotals(data).billed).toBe(100);
-    expect(revenueSeries(data, 6)[0].billed).toBe(100);
+    expect(revenueSeries(data, 6).at(-1)!.billed).toBe(100);
     expect(moduleRevenue(data).reduce((s, m) => s + m.billed, 0)).toBe(100);
     expect(charges(data)).toHaveLength(1);
   });
@@ -136,6 +136,37 @@ describe("the month label", () => {
       invoices: [invoice({ period_start: "2026-09-01" })],
     }]);
 
-    expect(revenueSeries(data, 6)[0].label).toBe("Sep");
+    expect(revenueSeries(data, 6).at(-1)!.label).toBe("Sep");
+  });
+});
+
+describe("revenueSeries zero-fills its window", () => {
+  it("shows a fixed six months even when only the latest one has been billed, so a single real month never looks like a broken chart", () => {
+    const data = billing([{
+      tenant: tenant("t1", "Northgate"),
+      summary: {} as never,
+      invoices: [invoice({ period_start: "2026-09-01", amount: 500 })],
+    }]);
+
+    const series = revenueSeries(data, 6);
+    expect(series.map((p) => p.period)).toEqual([
+      "2026-04-01", "2026-05-01", "2026-06-01", "2026-07-01", "2026-08-01", "2026-09-01",
+    ]);
+    expect(series.slice(0, 5).every((p) => p.billed === 0 && p.collected === 0 && p.clinics === 0)).toBe(true);
+    expect(series.at(-1)).toMatchObject({ billed: 500, clinics: 1 });
+  });
+
+  it("crosses a year boundary without losing a month", () => {
+    const data = billing([{
+      tenant: tenant("t1", "Northgate"),
+      summary: {} as never,
+      invoices: [invoice({ period_start: "2026-02-01", amount: 100 })],
+    }]);
+
+    const series = revenueSeries(data, 6);
+    expect(series.map((p) => p.period)).toEqual([
+      "2025-09-01", "2025-10-01", "2025-11-01", "2025-12-01", "2026-01-01", "2026-02-01",
+    ]);
+    expect(series.map((p) => p.label)).toEqual(["Sep", "Oct", "Nov", "Dec", "Jan", "Feb"]);
   });
 });

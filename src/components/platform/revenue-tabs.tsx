@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import type { PlatformBilling } from "@/lib/api";
 import { charges, moduleRevenue, revenueSeries, revenueTotals } from "@/lib/platform/revenue";
-import { rentMoney } from "@/components/domain/subscription";
+import { rentMoney, rentMoneyCompact } from "@/components/domain/subscription";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -106,6 +106,10 @@ export function RevenueTab({ query }: { query: BillingQuery }) {
   const series = React.useMemo(() => (billing ? revenueSeries(billing, 6) : []), [billing]);
   const modules = React.useMemo(() => (billing ? moduleRevenue(billing) : []), [billing]);
   const money = (n: number) => rentMoney(n, billing?.currency ?? "INR");
+  /* The chart's y-axis has a fixed, narrow gutter — a full figure like
+     "₹21,592.00" overflows it and gets clipped. Everywhere else on this
+     card keeps the full precision. */
+  const compactMoney = (n: number) => rentMoneyCompact(n, billing?.currency ?? "INR");
 
   if (status !== "billed" || !billing || !totals || totals.period === null) {
     return <BillingGate status={status === "billed" ? "never-billed" : status} what="revenue" />;
@@ -149,7 +153,7 @@ export function RevenueTab({ query }: { query: BillingQuery }) {
                 { name: "Billed", values: series.map((p) => p.billed) },
                 { name: "Collected", values: series.map((p) => p.collected) },
               ]}
-              format={money}
+              format={compactMoney}
               highlight={series.length - 1}
             />
             <p className="mt-3 text-caption leading-relaxed text-ink-3">

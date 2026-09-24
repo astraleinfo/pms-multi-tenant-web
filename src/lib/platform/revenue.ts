@@ -77,6 +77,20 @@ function monthLabel(period: string): string {
   return MONTHS[Number(period.slice(5, 7)) - 1] ?? period;
 }
 
+/**
+ * "2026-09-01" shifted by `delta` whole months (negative = earlier), always
+ * landing on the 1st. String arithmetic, for the same reason `monthLabel`
+ * avoids `Date`: no timezone to get wrong.
+ */
+function shiftPeriod(period: string, delta: number): string {
+  const year = Number(period.slice(0, 4));
+  const month0 = Number(period.slice(5, 7)) - 1;
+  const total = year * 12 + month0 + delta;
+  const y = Math.floor(total / 12);
+  const m = ((total % 12) + 12) % 12;
+  return `${y}-${String(m + 1).padStart(2, "0")}-01`;
+}
+
 /** The most recent period holding any invoice, or null if none ever has. */
 export function latestPeriod(billing: PlatformBilling): string | null {
   let latest: string | null = null;
@@ -86,10 +100,23 @@ export function latestPeriod(billing: PlatformBilling): string | null {
   return latest;
 }
 
-/** What was billed and collected each month, oldest first, last `months` of them. */
+/**
+ * What was billed and collected each month, oldest first — a fixed window
+ * of `months` consecutive calendar months ending at the latest billed
+ * period, zero-filled wherever nothing was raised.
+ *
+ * The window is anchored on the data's own latest period, not the wall
+ * clock: this stays a pure function of its input (testable without mocking
+ * `Date`), and in practice a billing run's latest invoice is the current
+ * month anyway. Zero-filling matters because one real month next to five
+ * gaps would otherwise render as a single bar spanning the whole chart —
+ * true, but reads as broken rather than as "billing just started."
+ */
 export function revenueSeries(billing: PlatformBilling, months: number): RevenuePeriod[] {
-  const byPeriod = new Map<string, { billed: number; collected: number; clinics: Set<string> }>();
+  const latest = latestPeriod(billing);
+  if (latest === null) return [];
 
+  const byPeriod = new Map<string, { billed: number; collected: number; clinics: Set<string> }>();
   for (const { tenant, invoice } of counted(billing)) {
     let bucket = byPeriod.get(invoice.period_start);
     if (!bucket) {
@@ -101,16 +128,19 @@ export function revenueSeries(billing: PlatformBilling, months: number): Revenue
     bucket.clinics.add(tenant.id);
   }
 
-  return [...byPeriod.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .slice(-months)
-    .map(([period, b]) => ({
+  const window: RevenuePeriod[] = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const period = shiftPeriod(latest, -i);
+    const bucket = byPeriod.get(period);
+    window.push({
       period,
       label: monthLabel(period),
-      billed: b.billed,
-      collected: b.collected,
-      clinics: b.clinics.size,
-    }));
+      billed: bucket?.billed ?? 0,
+      collected: bucket?.collected ?? 0,
+      clinics: bucket?.clinics.size ?? 0,
+    });
+  }
+  return window;
 }
 
 /** What each module earned in one period — the latest, unless told otherwise. */

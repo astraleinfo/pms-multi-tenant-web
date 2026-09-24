@@ -32,6 +32,20 @@ export const rentMoney = (amount: number, code: string) =>
     style: "currency", currency: code || "INR", maximumFractionDigits: 2,
   }).format(amount);
 
+/**
+ * Same currency, shortened — for a chart axis or any other spot with a
+ * fixed, narrow gutter that a full figure like "₹21,592.00" would overflow.
+ * Below a thousand the full figure is already short, so it's left whole.
+ */
+export const rentMoneyCompact = (amount: number, code: string) =>
+  Math.abs(amount) < 1000
+    ? new Intl.NumberFormat(code === "INR" ? "en-IN" : "en-GB", {
+        style: "currency", currency: code || "INR", maximumFractionDigits: 0,
+      }).format(amount)
+    : new Intl.NumberFormat(code === "INR" ? "en-IN" : "en-GB", {
+        style: "currency", currency: code || "INR", notation: "compact", maximumFractionDigits: 1,
+      }).format(amount);
+
 const STATUS: Record<SubscriptionInvoice["status"], { label: string; tone: Tone }> = {
   open: { label: "Open", tone: "warn" },
   paid: { label: "Paid", tone: "ok" },
