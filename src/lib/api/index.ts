@@ -1,7 +1,7 @@
 "use client";
 
 import type {
-  AccountStatus, Appointment, BillingDepartment, CatalogFeature, ClinicalType, ClinicalTypeKey, Encounter,
+  AccountStatus, Appointment, BillingDepartment, CatalogFeature, ClinicalTypeKey, Encounter,
   FeatureKey,
   Charge, FieldDefinition, HistoryEvent, Id, InventoryBatch, InventoryItem, InventoryItemPatch,
   InventoryTransaction, InventoryTxType, Invoice, InvoiceLineItem, LabAttachment, LabOrder,
@@ -1058,50 +1058,6 @@ export interface PublicSettings {
 /** No session needed — this is what a clinic that can't self-serve reads to
  *  know who to ask. */
 export const getPublicSettings = () => get<PublicSettings>("/v1/public/settings");
-
-export interface LabTestAdmin {
-  code: string;
-  name: string;
-  panel: string;
-  clinical_types: string[] | null;
-}
-
-export const listPlatformLabTests = () => get<LabTestAdmin[]>("/v1/platform/catalog/lab-tests");
-export const createPlatformLabTest = (input: LabTestAdmin) =>
-  post<LabTestAdmin>("/v1/platform/catalog/lab-tests", input);
-export const updatePlatformLabTest = (code: string, changes: Partial<LabTestAdmin>) =>
-  patch_<LabTestAdmin>(`/v1/platform/catalog/lab-tests/${code}`, changes);
-export const deletePlatformLabTest = (code: string) =>
-  del<void>(`/v1/platform/catalog/lab-tests/${code}`);
-
-export interface MedicineAdmin {
-  id: Id;
-  medicine: string;
-  strength: string;
-  dosage: string;
-  frequency: string;
-  duration: string;
-  clinical_types: string[] | null;
-}
-
-export const listPlatformMedicines = () => get<MedicineAdmin[]>("/v1/platform/catalog/medicines");
-export const createPlatformMedicine = (input: Omit<MedicineAdmin, "id">) =>
-  post<MedicineAdmin>("/v1/platform/catalog/medicines", input);
-export const updatePlatformMedicine = (id: Id, changes: Partial<Omit<MedicineAdmin, "id">>) =>
-  patch_<MedicineAdmin>(`/v1/platform/catalog/medicines/${id}`, changes);
-export const deletePlatformMedicine = (id: Id) =>
-  del<void>(`/v1/platform/catalog/medicines/${id}`);
-
-export const updatePlatformClinicalType = (
-  key: ClinicalTypeKey,
-  changes: { label?: string; blurb?: string; examLabel?: string; complaintExample?: string },
-) =>
-  patch_<ClinicalType>(`/v1/platform/catalog/clinical-types/${key}`, {
-    label: changes.label,
-    blurb: changes.blurb,
-    exam_label: changes.examLabel,
-    complaint_example: changes.complaintExample,
-  });
 
 /* ---- subscription billing, from the console ---------------------------------- */
 

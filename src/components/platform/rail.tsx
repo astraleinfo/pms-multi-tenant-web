@@ -44,7 +44,7 @@ export const SECTIONS = [
     href: "/platform/settings" as const,
     label: "Settings",
     icon: <IconSettings size={17} />,
-    blurb: "Catalog, new-clinic defaults, support contact",
+    blurb: "New-clinic defaults, support contact",
     superAdmin: true,
   },
   {

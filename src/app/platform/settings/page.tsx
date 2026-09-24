@@ -7,7 +7,7 @@ import type { PlatformSettings } from "@/lib/api";
 import { ConsolePage } from "@/components/platform/chrome";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
-import { Field, Input, NumberInput, Select } from "@/components/ui/field";
+import { Input, NumberInput, Select } from "@/components/ui/field";
 import { SettingRow, SettingsActions, SettingsSection } from "@/components/ui/settings";
 import { StageLoader } from "@/components/ui/loader";
 
@@ -32,13 +32,13 @@ function SettingsConsole() {
       {isPending || !data ? (
         <StageLoader label="Reading platform settings…" />
       ) : (
-        <DefaultsTab settings={data} />
+        <SettingsForm settings={data} />
       )}
     </>
   );
 }
 
-function DefaultsTab({ settings }: { settings: PlatformSettings }) {
+function SettingsForm({ settings }: { settings: PlatformSettings }) {
   const { updatePlatformSettings, notify } = useApp();
   const [draft, setDraft] = React.useState(settings);
   const [saving, setSaving] = React.useState(false);
@@ -51,7 +51,7 @@ function DefaultsTab({ settings }: { settings: PlatformSettings }) {
     setSaving(true);
     try {
       await updatePlatformSettings(draft);
-      notify({ tone: "ok", title: "Settings saved", body: "New clinics and the support menu pick this up immediately." });
+      notify({ tone: "ok", title: "Settings saved", body: "New clinics pick this up right away; the support menu within a few minutes." });
     } catch (error) {
       notify({ tone: "critical", title: "Not saved", body: error instanceof Error ? error.message : "Try again." });
     }

@@ -173,6 +173,15 @@ export function usePlatformSettings() {
   });
 }
 
+/** Astrale's own desk — shown until the live answer arrives, so the help
+ *  menu and the on-hold screen never render a blank phone number or a
+ *  `mailto:` with nobody in it. */
+const SUPPORT_FALLBACK: api.PublicSettings = {
+  support_email: "support@astrale.health",
+  support_phone: "+91 80 4718 2200",
+  support_hours: "Monday to Saturday, 9am – 7pm IST",
+};
+
 /** No session gate — anyone on a clinic's own address may read who to ask
  *  for help, signed in or not. */
 export function useSupportInfo() {
@@ -180,24 +189,7 @@ export function useSupportInfo() {
     queryKey: qk.publicSettings(),
     queryFn: api.getPublicSettings,
     staleTime: 5 * 60_000,
-  });
-}
-
-export function usePlatformLabTests() {
-  const { platformSession } = useSession();
-  return useQuery({
-    queryKey: qk.platformLabTests(),
-    queryFn: api.listPlatformLabTests,
-    enabled: platformSession.signedIn,
-  });
-}
-
-export function usePlatformMedicines() {
-  const { platformSession } = useSession();
-  return useQuery({
-    queryKey: qk.platformMedicines(),
-    queryFn: api.listPlatformMedicines,
-    enabled: platformSession.signedIn,
+    placeholderData: SUPPORT_FALLBACK,
   });
 }
 
