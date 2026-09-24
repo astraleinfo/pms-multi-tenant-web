@@ -37,7 +37,7 @@ function NeverBilled({ what }: { what: string }) {
 }
 
 /** The period a figure is quoted for, spelled out so nobody reads it as "now". */
-function periodLabel(period: string): string {
+export function periodLabel(period: string): string {
   return new Date(`${period}T00:00:00`).toLocaleDateString(undefined, {
     month: "long", year: "numeric",
   });

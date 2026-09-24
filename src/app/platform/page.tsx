@@ -3,16 +3,22 @@
 import * as React from "react";
 import Link from "next/link";
 import { useApp } from "@/lib/store/app-store";
-import { usePlatformCatalog, usePlatformEntitlements, usePlatformSnapshot } from "@/lib/query/hooks";
+import {
+  usePlatformBilling, usePlatformCatalog, usePlatformEntitlements, usePlatformSnapshot,
+} from "@/lib/query/hooks";
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
+import { currency, formatDate } from "@/lib/format";
 import {
-  TODAY, compactCurrency, currency, formatDate,
-} from "@/lib/format";
-import {
-  PAID_FEATURES, activationLedger, consoleRows, moduleStats, mrrSeries, platformToday,
+  PAID_FEATURES, consoleRows, moduleStats,
   platformTotals,
   type ConsoleRow, type PlatformTotals,
 } from "@/lib/platform/subscriptions";
+import {
+  charges, revenueSeries, revenueTotals,
+  type ChargeRow, type RevenuePeriod, type RevenueTotals,
+} from "@/lib/platform/revenue";
+import { rentMoney } from "@/components/domain/subscription";
+import { periodLabel } from "@/components/platform/revenue-tabs";
 import { cn } from "@/lib/cn";
 import { Card, CardBody, CardHeader, CardLink } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,7 +33,7 @@ import { seriesColor } from "@/components/charts/chart-kit";
 import { Monogram } from "@/components/layout/rail";
 import { ConsolePage } from "@/components/platform/chrome";
 import { CreateClinicFlow } from "@/components/platform/create-clinic";
-import { AccountBadge, BillingBadge } from "@/components/platform/module-controls";
+import { AccountBadge } from "@/components/platform/module-controls";
 import {
   IconAlert, IconArrowRight, IconChart, IconLayers, IconPlus, IconReceipt, IconSpark,
 } from "@/components/ui/icons";
@@ -50,6 +56,7 @@ function Overview() {
   const { data: snapshot, isPending: snapshotPending } = usePlatformSnapshot();
   const { byTenant } = usePlatformEntitlements();
   const catalog = usePlatformCatalog();
+  const { data: billing } = usePlatformBilling();
   const [creating, setCreating] = React.useState(false);
   /* Revenue is prices times entitlements, so neither half is drawn alone. */
   const isPending = snapshotPending || catalog.isPending;
@@ -64,9 +71,20 @@ function Overview() {
     [rows, catalog.features],
   );
 
-  const today = React.useMemo(() => platformToday(rows, TODAY), [rows]);
-  const series = React.useMemo(() => mrrSeries(rows, today, 6), [rows, today]);
-  const recent = React.useMemo(() => activationLedger(rows).slice(0, 7), [rows]);
+  /* Money is what was invoiced; the counts beside it are what clinics are
+     set up to hold. Two different questions, two different sources. */
+  const revenue = React.useMemo(
+    () => (billing ? revenueTotals(billing) : null),
+    [billing],
+  );
+  const series = React.useMemo(
+    () => (billing ? revenueSeries(billing, 6) : []),
+    [billing],
+  );
+  const recent = React.useMemo(
+    () => (billing ? charges(billing).slice(0, 7) : []),
+    [billing],
+  );
 
   if (isPending) {
     return (
@@ -115,11 +133,11 @@ function Overview() {
         }
       />
 
-      <HeroStats totals={totals} series={series} />
-      <SecondaryStats totals={totals} />
+      <HeroStats totals={totals} revenue={revenue} series={series} currency={billing?.currency ?? "INR"} />
+      <SecondaryStats totals={totals} revenue={revenue} currency={billing?.currency ?? "INR"} />
 
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <RunRateCard series={series} totals={totals} />
+        <RunRateCard series={series} currency={billing?.currency ?? "INR"} />
         <ModuleAdoptionCard stats={stats} tenants={rows.length} />
       </div>
 
@@ -129,7 +147,7 @@ function Overview() {
           box around the good news. */}
       <div className="mt-5 grid grid-cols-1 items-start gap-5 xl:grid-cols-2">
         <AttentionCard rows={rows} totals={totals} />
-        <RecentActivityCard recent={recent} />
+        <RecentActivityCard recent={recent} currency={billing?.currency ?? "INR"} />
       </div>
 
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
@@ -139,10 +157,10 @@ function Overview() {
 
       <div className="mt-5 max-w-3xl space-y-2 text-caption leading-relaxed text-ink-3">
         <p>
-          Money figures are the catalogue price of what is switched on, not invoices — the platform
-          has no billing service behind it yet, so every subscription figure here is worked out from
-          the entitlement rows and the module prices. When real invoices arrive they replace that
-          arithmetic and these screens keep their shape.
+          Monthly recurring and per-clinic figures are what the billing run has invoiced, the same
+          numbers as the Revenue tab on Billing &amp; revenue. Everything else on this page — module
+          adoption, held and trial values, the largest-accounts table — is the catalogue price of
+          what each clinic is set up to hold, not a bill.
         </p>
         {host.root === "localhost" && (
           <p className="rounded-[var(--r)] border border-warn-border bg-warn-soft px-3 py-2 text-warn-text">
@@ -160,10 +178,19 @@ function Overview() {
 
 /* ---- the numbers ------------------------------------------------------------ */
 
-function HeroStats({ totals, series }: { totals: PlatformTotals; series: ReturnType<typeof mrrSeries> }) {
-  const trend = series.map((p) => p.mrr);
+function HeroStats({
+  totals, revenue, series, currency: currencyCode,
+}: {
+  totals: PlatformTotals;
+  revenue: RevenueTotals | null;
+  series: RevenuePeriod[];
+  currency: string;
+}) {
+  const trend = series.map((p) => p.billed);
   const previous = trend[trend.length - 2] ?? 0;
-  const growth = previous > 0 ? Math.round(((totals.mrr - previous) / previous) * 100) : undefined;
+  const growth = revenue && previous > 0
+    ? Math.round(((revenue.billed - previous) / previous) * 100)
+    : undefined;
 
   return (
     <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -172,11 +199,13 @@ function HeroStats({ totals, series }: { totals: PlatformTotals; series: ReturnT
         hint={`${totals.active} active · ${totals.trial} trial · ${totals.suspended} suspended`}
       />
       <Stat
-        label="Monthly recurring" value={currency(totals.mrr)} unit="/mo"
+        label="Monthly recurring"
+        value={revenue?.period ? rentMoney(revenue.billed, currencyCode) : "—"}
+        unit={revenue?.period ? "/mo" : undefined}
         icon={<IconReceipt size={16} />}
         trend={trend.some((v) => v > 0) ? trend : undefined}
         delta={growth}
-        hint={`${currency(totals.arr)} annualised`}
+        hint={revenue?.period ? `billed for ${periodLabel(revenue.period)}` : "billing has not run yet"}
       />
       <Stat
         label="Live subscriptions" value={totals.billedSubscriptions}
@@ -197,14 +226,24 @@ function HeroStats({ totals, series }: { totals: PlatformTotals; series: ReturnT
   );
 }
 
-function SecondaryStats({ totals }: { totals: PlatformTotals }) {
+function SecondaryStats({
+  totals, revenue, currency: currencyCode,
+}: {
+  totals: PlatformTotals;
+  revenue: RevenueTotals | null;
+  currency: string;
+}) {
   const cells: Array<{ label: string; value: React.ReactNode; hint?: string }> = [
     { label: "Patients", value: totals.patients.toLocaleString(), hint: "across every register" },
     { label: "Encounters", value: totals.encounters.toLocaleString(), hint: "consultations signed" },
     { label: "Staff accounts", value: totals.users.toLocaleString(), hint: "sign-ins that exist" },
     { label: "Modules enabled", value: totals.enabledModules, hint: "core and paid, every clinic" },
     { label: "Modules locked", value: totals.lockedModules, hint: "paid, not yet sold" },
-    { label: "Per paying clinic", value: `${currency(totals.arpa)}/mo`, hint: `${totals.payingTenants} of ${totals.tenants} pay` },
+    {
+      label: "Per billed clinic",
+      value: revenue?.period ? `${rentMoney(revenue.arpa, currencyCode)}/mo` : "—",
+      hint: revenue?.period ? `${revenue.clinics} of ${totals.tenants} billed` : "billing has not run yet",
+    },
   ];
 
   return (
@@ -224,68 +263,32 @@ function SecondaryStats({ totals }: { totals: PlatformTotals }) {
 
 /* ---- charts ----------------------------------------------------------------- */
 
-function RunRateCard({
-  series, totals,
-}: {
-  series: ReturnType<typeof mrrSeries>;
-  totals: PlatformTotals;
-}) {
+function RunRateCard({ series, currency: currencyCode }: { series: RevenuePeriod[]; currency: string }) {
   return (
     <Card>
       <CardHeader
         icon={<IconChart size={15} />} tone="ok" title="Monthly run rate"
-        hint="Rebuilt from the day each live subscription was switched on."
+        hint="What the billing run has raised, month by month."
       />
       <CardBody>
-        {series.some((p) => p.mrr > 0) ? (
-          <>
-            <BarChart
-              labels={series.map((p) => p.label)}
-              series={[{ name: "Run rate", values: series.map((p) => p.mrr) }]}
-              format={compactCurrency}
-              highlight={series.length - 1}
-              height={200}
-            />
-            <div className="mt-4 grid grid-cols-3 gap-4 border-t border-line-soft pt-3.5">
-              <Figure label="Billed now" value={`${currency(totals.mrr)}/mo`} />
-              <Figure label="In trial" value={`${currency(totals.trialValue)}/mo`}
-                      tone={totals.trialValue ? "warn" : "ink"} />
-              <Figure label="Held" value={`${currency(totals.heldValue)}/mo`} tone={totals.heldValue ? "critical" : "ink"} />
-            </div>
-          </>
+        {series.some((p) => p.billed > 0) ? (
+          <BarChart
+            labels={series.map((p) => p.label)}
+            series={[{ name: "Billed", values: series.map((p) => p.billed) }]}
+            format={(n: number) => rentMoney(n, currencyCode)}
+            highlight={series.length - 1}
+            height={200}
+          />
         ) : (
           <EmptyState
             icon={<IconReceipt size={20} />}
             title="Nothing is being billed yet"
-            body="Switch a paid module on for a clinic and it starts counting from that day."
+            body="Run the billing cycle from the Bills tab and this fills in."
             compact
           />
         )}
       </CardBody>
     </Card>
-  );
-}
-
-/**
- * A figure under a chart. It wears ink unless the number is one somebody has to
- * do something about — there is no "good" colour here, because money arriving
- * as expected is the boring case and does not need to shout.
- */
-function Figure({
-  label, value, tone = "ink",
-}: {
-  label: string;
-  value: string;
-  tone?: "ink" | "warn" | "critical";
-}) {
-  const colour = {
-    ink: "text-ink", warn: "text-warn-text", critical: "text-critical-text",
-  }[tone];
-  return (
-    <div className="min-w-0">
-      <p className="text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">{label}</p>
-      <p className={cn("tnum mt-1 truncate font-mono text-body font-medium", colour)}>{value}</p>
-    </div>
   );
 }
 
@@ -437,14 +440,14 @@ function AttentionCard({ rows, totals }: { rows: ConsoleRow[]; totals: PlatformT
   );
 }
 
-function RecentActivityCard({ recent }: { recent: ReturnType<typeof activationLedger> }) {
+function RecentActivityCard({ recent, currency: currencyCode }: { recent: ChargeRow[]; currency: string }) {
   return (
     <Card className="overflow-hidden">
       <CardHeader
-        icon={<IconReceipt size={15} />} tone="ok" title="Recent subscription activity"
-        hint="The latest paid modules switched on, newest first."
+        icon={<IconReceipt size={15} />} tone="ok" title="Recent billing activity"
+        hint="The latest charges the billing run has raised, newest first."
         actions={
-          <CardLink href="/platform/modules?tab=activity" trailing={<IconArrowRight size={13} />}>
+          <CardLink href="/platform/billing?tab=activity" trailing={<IconArrowRight size={13} />}>
             All activity
           </CardLink>
         }
@@ -452,33 +455,35 @@ function RecentActivityCard({ recent }: { recent: ReturnType<typeof activationLe
       {recent.length === 0 ? (
         <EmptyState
           icon={<IconSpark size={20} />}
-          title="No subscriptions yet"
-          body="Paid modules stay off until the platform switches one on for a clinic."
+          title="No charges yet"
+          body="Nothing shows here until the billing run raises its first bill."
           compact
         />
       ) : (
         <ul className="divide-y divide-line-soft border-t border-line-soft">
-          {recent.map((entry) => (
-            <li key={entry.id} className="flex items-center justify-between gap-4 px-5 py-3">
+          {recent.map((row) => (
+            <li key={row.id} className="flex items-center justify-between gap-4 px-5 py-3">
               <div className="flex min-w-0 items-center gap-2.5">
-                <Monogram name={entry.tenant.name} size={28} />
+                <Monogram name={row.tenant.name} size={28} />
                 <div className="min-w-0">
                   <p className="truncate text-label text-ink">
                     <Link
-                      href={`/platform/tenants/${entry.tenant.id}`}
+                      href={`/platform/tenants/${row.tenant.id}`}
                       className="font-medium underline-offset-4 hover:underline"
                     >
-                      {entry.tenant.name}
+                      {row.tenant.name}
                     </Link>
-                    <span className="text-ink-3"> took </span>
-                    {entry.feature.name}
+                    <span className="text-ink-3"> billed for </span>
+                    {row.name}
                   </p>
                   <p className="tnum mt-0.5 font-mono text-caption text-ink-3">
-                    {formatDate(entry.date)} · {currency(entry.amount)}/mo
+                    {formatDate(row.date)} · {rentMoney(row.amount, currencyCode)}
                   </p>
                 </div>
               </div>
-              <BillingBadge state={entry.state} />
+              <Badge tone={row.status === "paid" ? "ok" : "warn"} size="sm">
+                {row.status === "paid" ? "Paid" : "Open"}
+              </Badge>
             </li>
           ))}
         </ul>
