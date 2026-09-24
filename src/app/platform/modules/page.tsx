@@ -26,7 +26,7 @@ import {
 } from "@/components/platform/module-controls";
 import { FeaturePriceDialog } from "@/components/platform/price-editor";
 import {
-  IconBox, IconChart, IconEdit, IconFlask, IconGrid, IconLayers, IconMortar, IconReceipt, IconUsers,
+  IconBox, IconChart, IconEdit, IconFlask, IconGrid, IconLayers, IconPill, IconReceipt, IconUsers,
 } from "@/components/ui/icons";
 
 /** Every paid module already has a real icon somewhere in the app (the
@@ -34,7 +34,7 @@ import {
  *  the catalogue card and the module it describes look like the same
  *  product. */
 const MODULE_ICON: Partial<Record<FeatureKey, React.ComponentType<{ size?: number }>>> = {
-  pharmacy: IconMortar,
+  pharmacy: IconPill,
   lab: IconFlask,
   inventory: IconBox,
   billing: IconReceipt,

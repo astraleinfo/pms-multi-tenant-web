@@ -26,7 +26,7 @@ import { StatusPill } from "@/components/domain/status";
 import { PatientChip, PatientRef } from "@/components/domain/patient";
 import { AppointmentModal, WalkInModal } from "@/components/domain/quick-actions";
 import {
-  IconAlert, IconArrowRight, IconBox, IconCalendar, IconChart, IconClock, IconFlask, IconMortar,
+  IconAlert, IconArrowRight, IconBox, IconCalendar, IconChart, IconClock, IconFlask, IconPill,
   IconPlus, IconQueue, IconReceipt, IconSpark, IconStethoscope, IconUsers
 } from "@/components/ui/icons";
 
@@ -374,7 +374,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-1">
             {pharm && (
               <Card>
-                <CardHeader tone="ok" icon={<IconMortar size={16} />} title="Pharmacy" hint="From the dispense ledger." />
+                <CardHeader tone="ok" icon={<IconPill size={16} />} title="Pharmacy" hint="From the dispense ledger." />
                 <CardBody className="pt-1">
                   <dl className="grid grid-cols-2 gap-x-4">
                     <KV label="Units out" value={<span className="tnum font-mono">{pharm.dispensed_units}</span>} />

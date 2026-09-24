@@ -25,7 +25,7 @@ import { CounterPayment } from "@/components/domain/counter-payment";
 import { PatientAccountSummary } from "@/components/domain/patient-account";
 import { cn } from "@/lib/cn";
 import {
-  IconAlert, IconBox, IconCheck, IconList, IconMortar, IconQueue, IconRx
+  IconAlert, IconBox, IconCheck, IconList, IconPill, IconQueue, IconRx
 } from "@/components/ui/icons";
 
 export default function PharmacyPage() {
@@ -68,7 +68,7 @@ function Pharmacy() {
         <Stat label="At the counter" value={stats.prescriptions_waiting} tone="warn" icon={<IconRx size={16} />}
               hint="Pending or part dispensed" />
         <Stat label="Fully dispensed" value={stats.fully_dispensed} tone="ok" icon={<IconCheck size={16} />} />
-        <Stat label="Units out" value={stats.dispensed_units} icon={<IconMortar size={16} />}
+        <Stat label="Units out" value={stats.dispensed_units} icon={<IconPill size={16} />}
               hint="Across every dispense transaction" />
         <Stat label="Dispensed value" value={currency(stats.dispensed_value)} icon={<IconBox size={16} />}
               hint="At cost price, from the ledger" />
@@ -79,7 +79,7 @@ function Pharmacy() {
         value={tab}
         onChange={setTab}
         tabs={[
-          { value: "counter", label: "Dispensing counter", icon: <IconMortar size={15} />, count: counter.length },
+          { value: "counter", label: "Dispensing counter", icon: <IconPill size={15} />, count: counter.length },
           { value: "history", label: "Ledger", icon: <IconList size={15} />, count: selectInventoryTx(db, t).filter((x) => x.type === "dispense").length },
         ]}
       />
@@ -127,7 +127,7 @@ function Pharmacy() {
               setSelectedId(next?.id ?? null);
             }} />
           ) : (
-            <Card><EmptyState icon={<IconMortar size={20} />} title="Nothing selected"
+            <Card><EmptyState icon={<IconPill size={20} />} title="Nothing selected"
                               body="Pick a prescription from the list to dispense against it." /></Card>
           )}
         </div>
@@ -135,7 +135,7 @@ function Pharmacy() {
 
       {tab === "history" && (
         <Card className="overflow-hidden">
-          <CardHeader icon={<IconMortar size={15} />} tone="ok" title="Dispense transactions" hint="Every hand-over as it hit the inventory ledger." />
+          <CardHeader icon={<IconPill size={15} />} tone="ok" title="Dispense transactions" hint="Every hand-over as it hit the inventory ledger." />
           <TableWrap>
             <Table>
               <THead>
