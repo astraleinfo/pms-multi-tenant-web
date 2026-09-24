@@ -55,9 +55,9 @@ export const SECTIONS = [
   },
   {
     href: "/platform/billing" as const,
-    label: "Bills",
+    label: "Billing & revenue",
     icon: <IconReceipt size={17} />,
-    blurb: "Monthly bills, reminders and holds",
+    blurb: "Bills, revenue and activity",
   },
   {
     href: "/platform/jobs" as const,

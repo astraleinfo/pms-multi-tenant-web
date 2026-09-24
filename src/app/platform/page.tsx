@@ -18,7 +18,7 @@ import {
   type ChargeRow, type RevenuePeriod, type RevenueTotals,
 } from "@/lib/platform/revenue";
 import { rentMoney } from "@/components/domain/subscription";
-import { periodLabel } from "@/components/platform/revenue-tabs";
+import { billingStatus, periodLabel, type BillingStatus } from "@/components/platform/revenue-tabs";
 import { cn } from "@/lib/cn";
 import { Card, CardBody, CardHeader, CardLink } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -56,9 +56,14 @@ function Overview() {
   const { data: snapshot, isPending: snapshotPending } = usePlatformSnapshot();
   const { byTenant } = usePlatformEntitlements();
   const catalog = usePlatformCatalog();
-  const { data: billing } = usePlatformBilling();
+  const { data: billing, isPending: billingPending, isError: billingIsError } = usePlatformBilling();
   const [creating, setCreating] = React.useState(false);
-  /* Revenue is prices times entitlements, so neither half is drawn alone. */
+  /* Billing is a separate query from the platform snapshot and the API
+     builds it one clinic at a time, so it routinely still resolves after
+     the rest of this page has rendered. It is deliberately left out of this
+     gate — the snapshot- and catalogue-driven parts of the page have no
+     reason to wait on it — and its own pending/error state is instead
+     threaded into every billing-driven stat below via `revenueStatus`. */
   const isPending = snapshotPending || catalog.isPending;
 
   const rows = React.useMemo(
@@ -73,6 +78,7 @@ function Overview() {
 
   /* Money is what was invoiced; the counts beside it are what clinics are
      set up to hold. Two different questions, two different sources. */
+  const revenueStatus = billingStatus({ data: billing, isPending: billingPending, isError: billingIsError });
   const revenue = React.useMemo(
     () => (billing ? revenueTotals(billing) : null),
     [billing],
@@ -133,11 +139,14 @@ function Overview() {
         }
       />
 
-      <HeroStats totals={totals} revenue={revenue} series={series} currency={billing?.currency ?? "INR"} />
-      <SecondaryStats totals={totals} revenue={revenue} currency={billing?.currency ?? "INR"} />
+      <HeroStats
+        totals={totals} revenue={revenue} status={revenueStatus} series={series}
+        currency={billing?.currency ?? "INR"}
+      />
+      <SecondaryStats totals={totals} revenue={revenue} status={revenueStatus} currency={billing?.currency ?? "INR"} />
 
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <RunRateCard series={series} currency={billing?.currency ?? "INR"} />
+        <RunRateCard status={revenueStatus} series={series} currency={billing?.currency ?? "INR"} />
         <ModuleAdoptionCard stats={stats} tenants={rows.length} />
       </div>
 
@@ -147,7 +156,7 @@ function Overview() {
           box around the good news. */}
       <div className="mt-5 grid grid-cols-1 items-start gap-5 xl:grid-cols-2">
         <AttentionCard rows={rows} totals={totals} />
-        <RecentActivityCard recent={recent} currency={billing?.currency ?? "INR"} />
+        <RecentActivityCard status={revenueStatus} recent={recent} currency={billing?.currency ?? "INR"} />
       </div>
 
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
@@ -178,11 +187,29 @@ function Overview() {
 
 /* ---- the numbers ------------------------------------------------------------ */
 
+/**
+ * value/unit/hint for a figure driven by `usePlatformBilling()`, so every
+ * stat that reads off it tells loading, error and never-billed apart the
+ * same way instead of each growing its own copy of the three-way branch.
+ */
+function billingCell(
+  status: BillingStatus,
+  ready: () => { value: React.ReactNode; unit?: string; hint: string },
+): { value: React.ReactNode; unit?: string; hint: string } {
+  switch (status) {
+    case "pending": return { value: "…", hint: "reading bills…" };
+    case "error": return { value: "—", hint: "bills could not be read" };
+    case "never-billed": return { value: "—", hint: "billing has not run yet" };
+    case "billed": return ready();
+  }
+}
+
 function HeroStats({
-  totals, revenue, series, currency: currencyCode,
+  totals, revenue, status, series, currency: currencyCode,
 }: {
   totals: PlatformTotals;
   revenue: RevenueTotals | null;
+  status: BillingStatus;
   series: RevenuePeriod[];
   currency: string;
 }) {
@@ -192,6 +219,12 @@ function HeroStats({
     ? Math.round(((revenue.billed - previous) / previous) * 100)
     : undefined;
 
+  const monthly = billingCell(status, () => ({
+    value: rentMoney(revenue!.billed, currencyCode),
+    unit: "/mo",
+    hint: `billed for ${periodLabel(revenue!.period!)}`,
+  }));
+
   return (
     <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <Stat
@@ -200,12 +233,12 @@ function HeroStats({
       />
       <Stat
         label="Monthly recurring"
-        value={revenue?.period ? rentMoney(revenue.billed, currencyCode) : "—"}
-        unit={revenue?.period ? "/mo" : undefined}
+        value={monthly.value}
+        unit={monthly.unit}
         icon={<IconReceipt size={16} />}
-        trend={trend.some((v) => v > 0) ? trend : undefined}
-        delta={growth}
-        hint={revenue?.period ? `billed for ${periodLabel(revenue.period)}` : "billing has not run yet"}
+        trend={status === "billed" && trend.some((v) => v > 0) ? trend : undefined}
+        delta={status === "billed" ? growth : undefined}
+        hint={monthly.hint}
       />
       <Stat
         label="Live subscriptions" value={totals.billedSubscriptions}
@@ -227,23 +260,25 @@ function HeroStats({
 }
 
 function SecondaryStats({
-  totals, revenue, currency: currencyCode,
+  totals, revenue, status, currency: currencyCode,
 }: {
   totals: PlatformTotals;
   revenue: RevenueTotals | null;
+  status: BillingStatus;
   currency: string;
 }) {
+  const perClinic = billingCell(status, () => ({
+    value: `${rentMoney(revenue!.arpa, currencyCode)}/mo`,
+    hint: `${revenue!.clinics} of ${totals.tenants} billed`,
+  }));
+
   const cells: Array<{ label: string; value: React.ReactNode; hint?: string }> = [
     { label: "Patients", value: totals.patients.toLocaleString(), hint: "across every register" },
     { label: "Encounters", value: totals.encounters.toLocaleString(), hint: "consultations signed" },
     { label: "Staff accounts", value: totals.users.toLocaleString(), hint: "sign-ins that exist" },
     { label: "Modules enabled", value: totals.enabledModules, hint: "core and paid, every clinic" },
     { label: "Modules locked", value: totals.lockedModules, hint: "paid, not yet sold" },
-    {
-      label: "Per billed clinic",
-      value: revenue?.period ? `${rentMoney(revenue.arpa, currencyCode)}/mo` : "—",
-      hint: revenue?.period ? `${revenue.clinics} of ${totals.tenants} billed` : "billing has not run yet",
-    },
+    { label: "Per billed clinic", value: perClinic.value, hint: perClinic.hint },
   ];
 
   return (
@@ -263,7 +298,13 @@ function SecondaryStats({
 
 /* ---- charts ----------------------------------------------------------------- */
 
-function RunRateCard({ series, currency: currencyCode }: { series: RevenuePeriod[]; currency: string }) {
+function RunRateCard({
+  status, series, currency: currencyCode,
+}: {
+  status: BillingStatus;
+  series: RevenuePeriod[];
+  currency: string;
+}) {
   return (
     <Card>
       <CardHeader
@@ -271,7 +312,11 @@ function RunRateCard({ series, currency: currencyCode }: { series: RevenuePeriod
         hint="What the billing run has raised, month by month."
       />
       <CardBody>
-        {series.some((p) => p.billed > 0) ? (
+        {status === "pending" ? (
+          <p className="py-16 text-center text-label text-ink-3">Reading bills…</p>
+        ) : status === "error" ? (
+          <p className="py-16 text-center text-label text-ink-3">Bills could not be read.</p>
+        ) : series.some((p) => p.billed > 0) ? (
           <BarChart
             labels={series.map((p) => p.label)}
             series={[{ name: "Billed", values: series.map((p) => p.billed) }]}
@@ -440,7 +485,13 @@ function AttentionCard({ rows, totals }: { rows: ConsoleRow[]; totals: PlatformT
   );
 }
 
-function RecentActivityCard({ recent, currency: currencyCode }: { recent: ChargeRow[]; currency: string }) {
+function RecentActivityCard({
+  status, recent, currency: currencyCode,
+}: {
+  status: BillingStatus;
+  recent: ChargeRow[];
+  currency: string;
+}) {
   return (
     <Card className="overflow-hidden">
       <CardHeader
@@ -452,7 +503,11 @@ function RecentActivityCard({ recent, currency: currencyCode }: { recent: Charge
           </CardLink>
         }
       />
-      {recent.length === 0 ? (
+      {status === "pending" ? (
+        <p className="px-5 py-10 text-center text-label text-ink-3">Reading bills…</p>
+      ) : status === "error" ? (
+        <p className="px-5 py-10 text-center text-label text-ink-3">Bills could not be read.</p>
+      ) : recent.length === 0 ? (
         <EmptyState
           icon={<IconSpark size={20} />}
           title="No charges yet"
@@ -501,7 +556,7 @@ function TopClinicsCard({ rows }: { rows: ConsoleRow[] }) {
     <Card className="overflow-hidden">
       <CardHeader
         icon={<IconReceipt size={15} />} tone="ok" title="Largest accounts"
-        hint="By what they pay the platform, then by how much they use it."
+        hint="By what their modules are priced at, then by how much they use it."
         actions={
           <Link
             href="/platform/tenants"

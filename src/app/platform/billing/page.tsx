@@ -28,12 +28,15 @@ import {
 } from "@/components/ui/icons";
 
 /* ==========================================================================
-   Subscription bills — what each clinic owes the platform, and the hold.
+   Billing & revenue — what each clinic owes the platform, what has been
+   raised and collected, and the hold.
 
    The run raises a bill per clinic per month, emails reminders as it nears
    and passes its due date, and holds a clinic that is still unpaid after the
-   grace period. This screen is where a payment is recorded (which lifts the
-   hold at once), a mistaken bill withdrawn, and a clinic exempted.
+   grace period. Bills is where a payment is recorded (which lifts the hold
+   at once), a mistaken bill withdrawn, and a clinic exempted; Revenue and
+   Activity read the same invoices as the platform's money, not a clinic's
+   standing.
    ========================================================================== */
 
 type Tab = "bills" | "revenue" | "activity";
@@ -156,8 +159,8 @@ function BillingConsole({ opening }: { opening: Tab }) {
         ]}
       />
 
-      {tab === "revenue" && data && <RevenueTab billing={data} />}
-      {tab === "activity" && data && <ActivityTab billing={data} />}
+      {tab === "revenue" && <RevenueTab query={{ data, isPending, isError }} />}
+      {tab === "activity" && <ActivityTab query={{ data, isPending, isError }} />}
 
       {tab === "bills" && (
         <>

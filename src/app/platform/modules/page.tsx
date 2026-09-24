@@ -32,11 +32,13 @@ import {
 /* ==========================================================================
    Modules, priced and sold.
 
-   One screen for the commercial side of the product: what the catalogue costs,
-   who is on what, what each module earns, and the switch for every clinic in
-   one grid rather than one dialog at a time. The switch here is the same call
-   the tenant page makes and asks the same question before it runs — there is
-   one way to grant a module, and this is a second door onto it.
+   One screen for the commercial side of the product: what the catalogue
+   costs, who is on what, and the switch for every clinic in one grid rather
+   than one dialog at a time. What each module earns lives under Billing &
+   revenue instead, read off raised invoices rather than the catalogue price.
+   The switch here is the same call the tenant page makes and asks the same
+   question before it runs — there is one way to grant a module, and this is
+   a second door onto it.
    ========================================================================== */
 
 type Tab = "catalogue" | "access";

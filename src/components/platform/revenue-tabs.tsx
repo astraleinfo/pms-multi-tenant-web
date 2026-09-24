@@ -14,7 +14,7 @@ import { Select } from "@/components/ui/field";
 import { EmptyState } from "@/components/ui/misc";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { BarChart, RankBar } from "@/components/charts/bar-chart";
-import { IconChart, IconReceipt, IconSpark, IconUsers } from "@/components/ui/icons";
+import { IconAlert, IconChart, IconReceipt, IconSpark, IconUsers } from "@/components/ui/icons";
 
 /* ==========================================================================
    Revenue and activity, both read off raised invoices.
@@ -43,14 +43,72 @@ export function periodLabel(period: string): string {
   });
 }
 
-export function RevenueTab({ billing }: { billing: PlatformBilling }) {
-  const totals = React.useMemo(() => revenueTotals(billing), [billing]);
-  const series = React.useMemo(() => revenueSeries(billing, 6), [billing]);
-  const modules = React.useMemo(() => moduleRevenue(billing), [billing]);
-  const money = (n: number) => rentMoney(n, billing.currency);
+/* ==========================================================================
+   Loading and failure are not "billing has never run".
 
-  if (totals.period === null) {
-    return <Card><NeverBilled what="revenue" /></Card>;
+   `usePlatformBilling()` can leave a screen in three states before there is
+   ever a real figure to show: still resolving, failed outright, or resolved
+   with nothing ever billed. Only the last of those is "billing has not run
+   yet" — the first two just don't know yet, and every surface that reads
+   this query (Overview's stats, the Revenue tab, the Activity tab) has to
+   tell them apart the same way rather than growing its own copy of the
+   three-way branch.
+   ========================================================================== */
+
+export interface BillingQuery {
+  data: PlatformBilling | undefined;
+  isPending: boolean;
+  isError: boolean;
+}
+
+export type BillingStatus = "pending" | "error" | "never-billed" | "billed";
+
+export function billingStatus(query: BillingQuery): BillingStatus {
+  if (query.isPending) return "pending";
+  if (query.isError) return "error";
+  if (!query.data || revenueTotals(query.data).period === null) return "never-billed";
+  return "billed";
+}
+
+/** Card-level stand-in for whichever of the three non-"billed" states applies. */
+export function BillingGate({ status, what }: { status: Exclude<BillingStatus, "billed">; what: string }) {
+  if (status === "pending") {
+    return (
+      <Card>
+        <EmptyState
+          icon={<IconReceipt size={20} />}
+          title="Reading bills…"
+          body={`Fetching ${what} from the billing run.`}
+          compact
+        />
+      </Card>
+    );
+  }
+  if (status === "error") {
+    return (
+      <Card>
+        <EmptyState
+          icon={<IconAlert size={20} />}
+          title="Bills could not be read"
+          body="Try again in a moment."
+          compact
+        />
+      </Card>
+    );
+  }
+  return <Card><NeverBilled what={what} /></Card>;
+}
+
+export function RevenueTab({ query }: { query: BillingQuery }) {
+  const status = billingStatus(query);
+  const billing = query.data;
+  const totals = React.useMemo(() => (billing ? revenueTotals(billing) : null), [billing]);
+  const series = React.useMemo(() => (billing ? revenueSeries(billing, 6) : []), [billing]);
+  const modules = React.useMemo(() => (billing ? moduleRevenue(billing) : []), [billing]);
+  const money = (n: number) => rentMoney(n, billing?.currency ?? "INR");
+
+  if (status !== "billed" || !billing || !totals || totals.period === null) {
+    return <BillingGate status={status === "billed" ? "never-billed" : status} what="revenue" />;
   }
 
   return (
@@ -128,11 +186,13 @@ export function RevenueTab({ billing }: { billing: PlatformBilling }) {
   );
 }
 
-export function ActivityTab({ billing }: { billing: PlatformBilling }) {
-  const rows = React.useMemo(() => charges(billing), [billing]);
+export function ActivityTab({ query }: { query: BillingQuery }) {
+  const queryStatus = billingStatus(query);
+  const billing = query.data;
+  const rows = React.useMemo(() => (billing ? charges(billing) : []), [billing]);
   const [module, setModule] = React.useState<string>("any");
   const [status, setStatus] = React.useState<"any" | "open" | "paid">("any");
-  const money = (n: number) => rentMoney(n, billing.currency);
+  const money = (n: number) => rentMoney(n, billing?.currency ?? "INR");
 
   /* The modules that have actually been charged for, not the whole
      catalogue — a filter offering something with no rows behind it is a
@@ -147,8 +207,8 @@ export function ActivityTab({ billing }: { billing: PlatformBilling }) {
     (r) => (module === "any" || r.feature_key === module) && (status === "any" || r.status === status),
   );
 
-  if (!rows.length) {
-    return <Card><NeverBilled what="activity" /></Card>;
+  if (queryStatus !== "billed" || !billing || !rows.length) {
+    return <BillingGate status={queryStatus === "billed" ? "never-billed" : queryStatus} what="activity" />;
   }
 
   return (

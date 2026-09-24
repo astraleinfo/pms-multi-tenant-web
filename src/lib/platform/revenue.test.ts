@@ -46,6 +46,26 @@ describe("a withdrawn bill is not money", () => {
   });
 });
 
+describe("a void-only period is not the current one", () => {
+  it("falls back to the last period with real money, not the one with only a void bill", () => {
+    const data = billing([{
+      tenant: tenant("t1", "Northgate"),
+      summary: {} as never,
+      invoices: [
+        invoice({ id: "a", period_start: "2026-08-01", amount: 300, status: "paid" }),
+        invoice({ id: "b", period_start: "2026-09-01", amount: 900, status: "void" }),
+      ],
+    }]);
+
+    expect(latestPeriod(data)).toBe("2026-08-01");
+
+    const totals = revenueTotals(data);
+    expect(totals.period).toBe("2026-08-01");
+    expect(totals.billed).toBe(300);
+    expect(totals.collected).toBe(300);
+  });
+});
+
 describe("no invoices at all", () => {
   it("reports no period rather than a zero total", () => {
     expect(latestPeriod(EMPTY)).toBeNull();
