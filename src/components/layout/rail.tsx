@@ -79,13 +79,14 @@ export function Rail({
         )}
       >
         {collapsed ? (
-          <Tooltip label={`${tenant.name} — expand`}>
+          <Tooltip label="Expand sidebar">
             <button
               onClick={onToggle}
               aria-label="Expand sidebar"
-              className="rounded-[var(--r-sm)] p-0.5 transition-opacity hover:opacity-80"
+              aria-expanded={false}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--r-sm)] text-rail-ink-dim transition-colors hover:bg-rail-2 hover:text-rail-ink-strong"
             >
-              <Monogram name={tenant.name} size={28} />
+              <IconSidebar size={17} />
             </button>
           </Tooltip>
         ) : (
@@ -145,6 +146,7 @@ export function Rail({
                 <button
                   onClick={onToggle}
                   aria-label="Collapse sidebar"
+                  aria-expanded={true}
                   className="shrink-0 rounded-[var(--r-sm)] p-1.5 text-rail-ink-dim transition-colors hover:bg-rail-2 hover:text-rail-ink-strong"
                 >
                   <IconSidebar size={16} />

@@ -36,7 +36,8 @@ export const IconFlask = mk(<><path d="M9.5 3v6.2L4.6 17.4A2 2 0 0 0 6.3 20.5h11
 export const IconBox = mk(<><path d="M3.5 7.6 12 3.4l8.5 4.2v8.8L12 20.6 3.5 16.4V7.6Z" /><path d="m3.5 7.6 8.5 4.3 8.5-4.3M12 11.9v8.7" /></>);
 export const IconReceipt = mk(<><path d="M5 3.6 7 5l2-1.4L11 5l2-1.4L15 5l2-1.4v16.8L17 19l-2 1.4L13 19l-2 1.4L9 19l-2 1.4L5 19V3.6Z" /><path d="M8.5 9h7M8.5 13h4.5" /></>);
 export const IconChart = mk(<><path d="M4 20V4M4 20h16" /><rect x="7.5" y="12" width="3" height="5" rx="1" /><rect x="12.5" y="8" width="3" height="9" rx="1" /><rect x="17.5" y="14" width="3" height="3" rx="1" /></>);
-export const IconSettings = mk(<><circle cx="12" cy="12" r="3" /><path d="M12 2.6v2.2M12 19.2v2.2M21.4 12h-2.2M4.8 12H2.6M18.6 5.4 17 7M7 17l-1.6 1.6M18.6 18.6 17 17M7 7 5.4 5.4" /></>);
+export const IconSettings = mk(<><path d="M4 7h10M18 7h2M4 12h3M11 12h9M4 17h7M15 17h5" /><circle cx="16" cy="7" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="13" cy="17" r="2" /></>);
+export const IconGauge = mk(<><path d="M12 13.5 16 9" /><circle cx="12" cy="13.5" r="1.4" /><path d="M4.2 17a9 9 0 1 1 15.6 0" /></>);
 export const IconMonitor = mk(<><rect x="2.5" y="4" width="19" height="12.5" rx="2" /><path d="M8.5 20.5h7M12 16.5v4" /></>);
 export const IconSearch = mk(<><circle cx="10.8" cy="10.8" r="6.3" /><path d="m15.4 15.4 4.1 4.1" /></>);
 export const IconBell = mk(<><path d="M18 9a6 6 0 1 0-12 0c0 5-2 6.2-2 6.2h16S18 14 18 9Z" /><path d="M13.7 19a2 2 0 0 1-3.4 0" /></>);

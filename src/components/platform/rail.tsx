@@ -11,7 +11,7 @@ import { Avatar } from "@/components/ui/misc";
 import { Menu, MenuItem, MenuSep } from "@/components/ui/modal";
 import { Tooltip } from "@/components/ui/info";
 import {
-  IconLayers, IconLogout, IconPulse, IconReceipt, IconSettings, IconShield, IconSidebar, IconUsers,
+  IconGauge, IconLayers, IconLogout, IconPulse, IconReceipt, IconSettings, IconShield, IconSidebar, IconUsers,
 } from "@/components/ui/icons";
 
 /* ==========================================================================
@@ -31,7 +31,7 @@ export const SECTIONS = [
   {
     href: "/platform" as const,
     label: "Overview",
-    icon: <IconLayers size={17} />,
+    icon: <IconGauge size={17} />,
     blurb: "Everything at once",
   },
   {
@@ -92,13 +92,14 @@ export function ConsoleRail({
         )}
       >
         {collapsed ? (
-          <Tooltip label="Astrale Platform — expand">
+          <Tooltip label="Expand sidebar">
             <button
               onClick={onToggle}
               aria-label="Expand sidebar"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-accent text-accent-ink"
+              aria-expanded={false}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--r-sm)] text-stage-dim transition-colors hover:bg-stage-2 hover:text-stage-ink"
             >
-              <IconShield size={17} />
+              <IconSidebar size={17} />
             </button>
           </Tooltip>
         ) : (
@@ -127,6 +128,7 @@ export function ConsoleRail({
                 <button
                   onClick={onToggle}
                   aria-label="Collapse sidebar"
+                  aria-expanded={true}
                   className="shrink-0 rounded-[var(--r-sm)] p-1.5 text-stage-dim transition-colors hover:bg-stage-2 hover:text-stage-ink"
                 >
                   <IconSidebar size={16} />
