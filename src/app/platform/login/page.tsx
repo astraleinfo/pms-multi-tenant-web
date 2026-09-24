@@ -1,51 +1,55 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/navigation";
 import { useApp } from "@/lib/store/app-store";
 import { StageLoader } from "@/components/ui/loader";
 import {
-  EmailField, GlyphBilling, GlyphClinic, GlyphModules, GlyphShield, LoginAccent, LoginError,
-  LoginScene, PasswordField, RememberRow, SubmitButton, type LoginFeature,
-} from "@/components/layout/login-scene";
-import background from "../../../../public/images/admin-login-bg.webp";
+  AuthError, AuthNote, AuthSplit, EmailField, PasswordField, RememberRow, SubmitButton,
+  type ShowcaseSlide,
+} from "@/components/layout/auth-split";
 
 /* ==========================================================================
-   Platform sign-in — the console's own address, in the night scene.
-   Same room, same layout as a clinic's sign-in, lit for after hours: the
-   people here work above every clinic, not inside one. There is no password
-   reset for platform staff from this page, so no link offers one.
+   Platform sign-in — the console's own address.
+
+   The same window as a clinic's sign-in, because it is the same product, and
+   marked at the wordmark as the console, because it is not the same job: the
+   people here work above every clinic rather than inside one. The showcase
+   opposite is the console's own work, not the clinical modules — a super
+   admin never opens a queue or writes a prescription.
+
+   There is no password reset for platform staff from this page, so no link
+   offers one.
    ========================================================================== */
 
-const FEATURES: LoginFeature[] = [
+const CONSOLE: ShowcaseSlide[] = [
   {
-    title: "Onboard Clinics",
-    body: ["A subdomain, an admin", "invite and staff import"],
-    icon: <GlyphClinic />,
-    tile: "bg-[#16326E] text-[#8FB2FF]",
+    key: "console.onboard",
+    name: "Onboard clinics",
+    blurb: "A subdomain, an admin invite and a staff import — a clinic live in one sitting.",
   },
   {
-    title: "Modules & Pricing",
-    body: ["Set prices and choose", "what each clinic runs"],
-    icon: <GlyphModules />,
-    tile: "bg-[#0F4540] text-[#4ADE9B]",
+    key: "console.modules",
+    name: "Modules & pricing",
+    blurb: "Set what each module costs and choose which of them a clinic runs.",
   },
   {
-    title: "Billing & Reminders",
-    body: ["Monthly bills, reminders", "and holds when unpaid"],
-    icon: <GlyphBilling />,
-    tile: "bg-[#2E2766] text-[#B7A2FF]",
+    key: "console.billing",
+    name: "Billing & reminders",
+    blurb: "Monthly bills, reminders before they fall due, and holds when they go unpaid.",
   },
   {
-    title: "Kept Outside",
-    body: ["Platform staff never", "appear inside a clinic"],
-    icon: <GlyphShield />,
-    tile: "bg-[#4A2A1E] text-[#FF9A5C]",
+    key: "console.apart",
+    name: "Kept outside",
+    blurb: "Platform staff never appear inside a clinic, and patient data never passes through here.",
   },
 ];
 
 /* kept apart from the clinic sign-in's key: one browser may hold both */
 const REMEMBER_KEY = "astrale.platform-login.email";
+
+const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const GENERIC = /invalid|incorrect|credential|do(es)? not match|not found|no account|unauthor/i;
 
 export default function PlatformLoginPage() {
   const router = useRouter();
@@ -54,6 +58,7 @@ export default function PlatformLoginPage() {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [remember, setRemember] = React.useState(false);
+  const [emailError, setEmailError] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
@@ -73,10 +78,15 @@ export default function PlatformLoginPage() {
     }
   }, []);
 
-  if (!ready) return <StageLoader className="!bg-stage" />;
+  if (!ready) return <StageLoader />;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!LOOKS_LIKE_EMAIL.test(email.trim())) {
+      setEmailError("Please enter a valid email address.");
+      return;
+    }
+    setEmailError(null);
     setBusy(true);
     const result = await platformSignIn(email, password);
     setBusy(false);
@@ -90,45 +100,38 @@ export default function PlatformLoginPage() {
       setError(null);
       router.replace("/platform");
     } else {
-      setError(result.error);
+      setError(
+        GENERIC.test(result.error)
+          ? "We couldn’t sign you in with those credentials. Please check your email and password and try again."
+          : result.error,
+      );
       setPassword("");
     }
   };
 
   return (
-    <LoginScene
-      tone="night"
-      background={background}
-      pitch={{
-        eyebrow: "The platform console. Astrale staff only.",
-        headline: (
-          <>
-            Every clinic on Astrale,
-            <br />
-            run from <LoginAccent>one console</LoginAccent>
-          </>
-        ),
-        lede: (
-          <>
-            Onboard clinics, sell modules and send the bills —
-            <br />
-            patient data never passes through here.
-          </>
-        ),
-        features: FEATURES,
-      }}
-      title="Platform Login"
-      subtitle=""
+    <AuthSplit
+      slides={CONSOLE}
+      badge="Console"
+      tone="console"
+      title="Platform sign-in"
+      subtitle="Astrale staff only. This is the console that runs every clinic."
+      below={
+        <AuthNote>
+          Platform accounts are issued by Astrale, and there is no self-service reset for them —
+          ask another super admin.
+        </AuthNote>
+      }
     >
-      <form onSubmit={submit} className="mt-5.5 space-y-3 short:mt-5">
+      <form onSubmit={submit} noValidate className="mt-8 space-y-5">
         <EmailField
           id="pemail"
           label="Email address"
           autoComplete="username"
           value={email}
-          onChange={(e) => { setEmail(e.target.value); setError(null); }}
+          onChange={(e) => { setEmail(e.target.value); setEmailError(null); setError(null); }}
           placeholder="you@astrale.health"
-          invalid={!!error}
+          error={emailError}
           required
         />
         <PasswordField
@@ -142,9 +145,9 @@ export default function PlatformLoginPage() {
           required
         />
         <RememberRow checked={remember} onChange={setRemember} />
-        {error && <LoginError>{error}</LoginError>}
-        <SubmitButton busy={busy}>Sign In</SubmitButton>
+        {error && <AuthError>{error}</AuthError>}
+        <SubmitButton busy={busy}>Sign in</SubmitButton>
       </form>
-    </LoginScene>
+    </AuthSplit>
   );
 }

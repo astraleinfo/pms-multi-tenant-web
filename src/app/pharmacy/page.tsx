@@ -70,8 +70,11 @@ function Pharmacy() {
         <Stat label="Fully dispensed" value={stats.fully_dispensed} tone="ok" icon={<IconCheck size={16} />} />
         <Stat label="Units out" value={stats.dispensed_units} icon={<IconMortar size={16} />}
               hint="Across every dispense transaction" />
-        <Stat label="Dispensed value" value={currency(stats.dispensed_value)} icon={<IconBox size={16} />}
-              hint="At cost price, from the ledger" />
+        {/* a money figure, so the practice admin's; the server leaves it out for anyone else */}
+        {stats.dispensed_value !== undefined && (
+          <Stat label="Dispensed value" value={currency(stats.dispensed_value)} icon={<IconBox size={16} />}
+                hint="At cost price, from the ledger" />
+        )}
       </section>
 
       <Tabs
@@ -177,7 +180,7 @@ function DispensePanel({ rx, onDone }: { rx: Prescription; onDone: () => void })
   const [collecting, setCollecting] = React.useState(false);
   const db = useClinicDb();
   const t = session.tenantId;
-  /* The drawer shows allergies, which a list row does not carry. */
+  /* The panel shows allergies, which a list row does not carry. */
   const { data: patient } = usePatient(rx.patient_id);
 
   const [lines, setLines] = React.useState<Record<string, { qty: number; batch: string }>>(() =>

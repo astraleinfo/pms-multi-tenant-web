@@ -343,6 +343,8 @@ export const listAppointmentPage = (query: AppointmentQuery = {}) =>
     doctor_id: query.doctor_id,
   });
 
+export const getAppointment = (id: Id) => get<Appointment>(`/v1/appointments/${id}`);
+
 export const listQueue = () => get<QueueEntry[]>("/v1/queue");
 
 export interface EncounterQuery extends PageQuery {
@@ -368,6 +370,8 @@ export interface PrescriptionQuery extends PageQuery {
 
 export const listPrescriptions = async () =>
   (await get<CountedPage<Prescription>>("/v1/prescriptions", WHOLE_COLLECTION)).items;
+
+export const getPrescription = (id: Id) => get<Prescription>(`/v1/prescriptions/${id}`);
 
 export const listPrescriptionPage = (query: PrescriptionQuery = {}) =>
   get<CountedPage<Prescription>>("/v1/prescriptions", {
@@ -493,6 +497,28 @@ export const resendInvitation = (userId: Id) => post<User>(`/v1/users/${userId}/
 
 export const setUserStatus = (userId: Id, status: AccountStatus) =>
   patch_<User>(`/v1/users/${userId}/status`, { status });
+
+export interface UserChanges {
+  name?: string;
+  /** a new username; anyone still invited is sent a fresh link at it */
+  email?: string;
+  role?: Role;
+  /** "" clears it */
+  speciality?: string;
+}
+
+/**
+ * Correct a colleague's details. Refused (409) for an admin's own role, for
+ * the clinic's last practice admin, and for an email somebody else uses.
+ */
+export const updateUser = (userId: Id, changes: UserChanges) =>
+  patch_<User>(`/v1/users/${userId}`, changes);
+
+/**
+ * Remove an account that never recorded anything. Anyone whose name is on a
+ * record is refused (409) with what they recorded — lock them instead.
+ */
+export const deleteUser = (userId: Id) => del<void>(`/v1/users/${userId}`);
 
 /* ---- configuration (§3.3) --------------------------------------------------- */
 
@@ -734,6 +760,88 @@ export interface StockMovement {
 export const recordStockMovement = async (input: StockMovement) =>
   (await post<InventoryTransaction>("/v1/inventory/transactions", input)).item_id;
 
+/* A sheet of stock lines, in and out. A row is matched on its SKU — a known
+   code updates the line, a new one opens it — and a quantity received goes on
+   the ledger as a purchase. The import runs in the background: the upload is
+   answered with a job, the worker writes every row or none, and the file is
+   deleted when it finishes either way. The export is in the import's own
+   layout, so it can be edited and sent back. */
+
+/** What a finished background import says — the counts for its kind, and on a
+    failure the rows to fix. */
+export interface ImportJobReport {
+  total: number;
+  valid: number;
+  invalid: number;
+  committed: boolean;
+  created: number;
+  updated: number;
+  /** inventory: rows that brought stock with them */
+  stocked: number;
+  /** staff: invitations that left */
+  invited: number;
+  /** rows that repeat another row, or something already here */
+  duplicates: number;
+  /** on a failure, the rows that need fixing */
+  rows: {
+    row: number;
+    label: string;
+    ok: boolean;
+    errors: string[];
+    action: "create" | "update";
+    qty: number;
+    /** set when the row repeats another: "row 4", or the SKU or email already here */
+    duplicate_of: string | null;
+  }[];
+}
+
+export interface ImportJob {
+  id: Id;
+  status: "queued" | "running" | "done" | "failed";
+  filename: string;
+  created_at: string;
+  finished_at: string | null;
+  /** on a failure, the one sentence that says why */
+  error: string;
+  report: ImportJobReport | null;
+}
+
+/** The sample sheet: every field, the fixed choices as dropdowns, an example per pricing mode. */
+export const inventoryImportTemplate = () => requestBlob("/v1/inventory/import/template");
+
+/** Hand a sheet to the worker. Answers at once with the job to poll. */
+export const startInventoryImport = (file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  return upload<ImportJob>("/v1/inventory/import", form);
+};
+
+export const getInventoryImport = (id: Id) => get<ImportJob>(`/v1/inventory/import/jobs/${id}`);
+
+/** The clinic's most recent import — null when there has never been one. */
+export const latestInventoryImport = () => get<ImportJob | null>("/v1/inventory/import/jobs/latest");
+
+/* ---- the staff list as a spreadsheet — the Team tab's import and export.
+   The import only adds people: an email the clinic already has is a
+   duplicate, never an update. Each person is emailed an invitation. */
+
+export const staffImportTemplate = () => requestBlob("/v1/users/import/template");
+
+export const exportStaff = () => requestBlob("/v1/users/export");
+
+export const startStaffImport = (file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  return upload<ImportJob>("/v1/users/import", form);
+};
+
+export const getStaffImport = (id: Id) => get<ImportJob>(`/v1/users/import/jobs/${id}`);
+
+export const latestStaffImport = () => get<ImportJob | null>("/v1/users/import/jobs/latest");
+
+/** Every stock line with what is on hand, and the batches on the shelf. */
+export const exportInventory = () => requestBlob("/v1/inventory/export");
+
 /* ---- billing (§3.12) ------------------------------------------------------------ */
 
 export const createInvoice = async (input: {
@@ -831,8 +939,15 @@ export interface DayValue { date: string; value: number }
 export interface AttendanceDay { date: string; kept: number; missed: number; cancelled: number }
 export interface Labelled { label: string; value: number }
 
+/*
+ * The money figures below are optional because the server leaves them out for
+ * anyone but a practice admin — `revenue:read` — rather than sending them for
+ * the screen to hide. `revenue_visible` says which answer this is.
+ */
 export interface Analytics {
   range: { from: string; to: string; days: number };
+  /** false when the money figures were left out */
+  revenue_visible: boolean;
   core: {
     patients: number;
     new_patients: number;
@@ -842,7 +957,7 @@ export interface Analytics {
     no_shows: number;
     encounters: number;
     prescriptions: number;
-    revenue: number;
+    revenue?: number;
     waiting_now: number;
     in_consultation: number;
     completed_today: number;
@@ -857,7 +972,7 @@ export interface Analytics {
   };
   modules: {
     pharmacy?: {
-      dispensed_units: number; dispensed_value: number;
+      dispensed_units: number; dispensed_value?: number;
       prescriptions_waiting: number; fully_dispensed: number;
     };
     lab?: {
@@ -870,16 +985,16 @@ export interface Analytics {
       expiring_soon: Array<{ batch_no: string; expiry: string; qty: number; item: string; days_left: number }>;
     };
     billing?: {
-      billed: number; paid: number; outstanding: number;
+      billed?: number; paid?: number; outstanding?: number;
       count: number; unpaid: number; drafts: number;
-      revenue_mix: Labelled[];
+      revenue_mix?: Labelled[];
     };
     advanced_reports?: {
       age_cohort: Labelled[];
       sex_split: Labelled[];
       clinicians: Array<{
         user_id: Id; name: string; initials: string; speciality: string | null;
-        encounters: number; prescriptions: number; revenue: number;
+        encounters: number; prescriptions: number; revenue?: number;
       }>;
     };
   };

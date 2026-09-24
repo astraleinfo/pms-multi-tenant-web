@@ -3,14 +3,10 @@
 import * as React from "react";
 import * as api from "@/lib/api";
 import { useApp } from "@/lib/store/app-store";
-import { cn } from "@/lib/cn";
-import { IconCheck } from "@/components/ui/icons";
 import { StageLoader } from "@/components/ui/loader";
 import {
-  EmailField, GlyphClock, GlyphPadlock, GlyphShield, GlyphSignOut, LoginAccent, LoginLink,
-  LoginNote, LoginScene, SubmitButton, useLoginPalette, type LoginFeature,
-} from "@/components/layout/login-scene";
-import background from "../../../public/images/tenant-login-bg.webp";
+  AuthLink, AuthNote, AuthSplit, EmailField, SubmitButton,
+} from "@/components/layout/auth-split";
 
 /* ==========================================================================
    "I have forgotten my password."
@@ -21,128 +17,131 @@ import background from "../../../public/images/tenant-login-bg.webp";
    sentence either way and the only difference is visible in an inbox.
 
    That is also why there is no error state worth showing: the request cannot
-   meaningfully fail from the visitor's side.
-
-   It sits in the clinic sign-in's daytime scene — the same room, one step on.
+   meaningfully fail from the visitor's side. It is also why the confirmation
+   never names the address back — repeating it would turn the screen into the
+   oracle the sameness was protecting.
    ========================================================================== */
 
-const FEATURES: LoginFeature[] = [
-  {
-    title: "Same Answer",
-    body: ["Replies the same whether", "or not you have an account"],
-    icon: <GlyphShield />,
-    tile: "bg-[#E4ECFA] text-[#2F62C8]",
-  },
-  {
-    title: "Short-lived Link",
-    body: ["Expires in a couple of", "hours and works once"],
-    icon: <GlyphClock />,
-    tile: "bg-[#DDF6EC] text-[#10B866]",
-  },
-  {
-    title: "Signs You Out",
-    body: ["Using it ends every", "session, on every device"],
-    icon: <GlyphSignOut />,
-    tile: "bg-[#E6E6FD] text-[#7A4CF6]",
-  },
-  {
-    title: "Locks Still Hold",
-    body: ["A locked account stays", "locked until an admin acts"],
-    icon: <GlyphPadlock />,
-    tile: "bg-[#FDECE2] text-[#FB5A12]",
-  },
-];
+const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Long enough that the button is not a way to send somebody a dozen emails. */
+const RESEND_SECONDS = 45;
 
 export default function ForgotPasswordPage() {
   const { hostTenant, hostTenantPending, ready } = useApp();
   const [email, setEmail] = React.useState("");
+  const [emailError, setEmailError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [sent, setSent] = React.useState(false);
+  const [cooldown, setCooldown] = React.useState(0);
 
-  if (!ready || hostTenantPending || !hostTenant) return <StageLoader className="!bg-stage" />;
+  React.useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setTimeout(() => setCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.trim()) return;
+  if (!ready || hostTenantPending || !hostTenant) return <StageLoader />;
+
+  const send = async () => {
     setBusy(true);
     /* A failure here is a network problem, not an answer about the address —
        so it is swallowed and the same screen is shown. */
     await api.requestPasswordReset(email.trim()).catch(() => undefined);
     setBusy(false);
     setSent(true);
+    setCooldown(RESEND_SECONDS);
   };
 
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!LOOKS_LIKE_EMAIL.test(email.trim())) {
+      setEmailError("Please enter a valid email address.");
+      return;
+    }
+    setEmailError(null);
+    await send();
+  };
+
+  if (sent) {
+    return (
+      <AuthSplit
+        title="Check your email"
+        subtitle="We’ve sent password reset instructions to your registered email address."
+        below={
+          <div className="mt-6 text-center">
+            <AuthLink muted href="/login">← Back to sign in</AuthLink>
+          </div>
+        }
+      >
+        <div className="mt-8 space-y-5">
+          <EnvelopeMark />
+          <p className="text-center text-caption leading-relaxed text-ink-3">
+            The link works once and expires in a couple of hours. Nothing has changed yet — your
+            current password still works until you use it.
+          </p>
+          <div className="text-center">
+            {cooldown > 0 ? (
+              <p className="text-caption text-ink-3">
+                Didn’t receive the email? You can resend in {cooldown}s.
+              </p>
+            ) : (
+              <p className="text-caption text-ink-3">
+                Didn’t receive the email?{" "}
+                <AuthLink onClick={send}>{busy ? "Sending…" : "Resend"}</AuthLink>
+              </p>
+            )}
+          </div>
+        </div>
+      </AuthSplit>
+    );
+  }
+
   return (
-    <LoginScene
-      tone="day"
-      background={background}
-      pitch={{
-        eyebrow: "Password reset. Private by design.",
-        headline: (
-          <>
-            Locked out? Get back in
-            <br />
-            with <LoginAccent>one secure link</LoginAccent>
-          </>
-        ),
-        lede: (
-          <>
-            A link comes by email and you choose the new
-            <br />
-            password — nobody at the clinic sees what you pick.
-          </>
-        ),
-        features: FEATURES,
-      }}
-      title={sent ? "Check your email" : "Forgot password"}
-      subtitle={sent ? undefined : "Enter the email you sign in with."}
+    <AuthSplit
+      title="Forgot your password?"
+      subtitle="Enter your email address and we’ll send you instructions to reset your password."
       below={
-        <div className="mt-3.5 text-center short:mt-4">
-          <LoginLink href="/login">Back to sign in</LoginLink>
+        <div className="mt-6 text-center">
+          <AuthLink muted href="/login">← Back to sign in</AuthLink>
         </div>
       }
     >
-      {sent ? (
-        <Sent email={email.trim()} clinic={hostTenant.name} />
-      ) : (
-        <form onSubmit={submit} className="mt-5.5 space-y-3 short:mt-5">
-          <EmailField
-            id="email"
-            label="Email address"
-            autoComplete="username"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Enter your email address"
-            required
-          />
-          <SubmitButton busy={busy} busyLabel="Sending…">Send reset link</SubmitButton>
-          <LoginNote>
-            This page answers the same way whatever you type, so it can’t be used to find out who
-            works here.
-          </LoginNote>
-        </form>
-      )}
-    </LoginScene>
+      <form onSubmit={submit} noValidate className="mt-8 space-y-5">
+        <EmailField
+          id="email"
+          label="Email address"
+          autoComplete="username"
+          value={email}
+          onChange={(e) => { setEmail(e.target.value); setEmailError(null); }}
+          placeholder="Enter your email address"
+          error={emailError}
+          required
+        />
+        <SubmitButton busy={busy} busyLabel="Sending…">Send reset link</SubmitButton>
+        <AuthNote>
+          This page answers the same way whatever you type, so it can’t be used to find out who
+          works here.
+        </AuthNote>
+      </form>
+    </AuthSplit>
   );
 }
 
-/** The one reply this page ever gives. */
-function Sent({ email, clinic }: { email: string; clinic: string }) {
-  const p = useLoginPalette();
+/** A sealed envelope — the one picture this screen needs. */
+function EnvelopeMark() {
   return (
-    <div className="mt-5.5 space-y-4">
-      <p className="flex items-start gap-3 text-[16px] leading-[1.55]">
-        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#10B866] text-white">
-          <IconCheck size={15} strokeWidth={2.6} />
-        </span>
-        <span>
-          If <span className="font-medium">{email}</span> has an account at {clinic}, a link is on
-          its way. It works once and expires in a couple of hours.
-        </span>
-      </p>
-      <p className={cn("text-[14px] leading-[1.5]", p.muted)}>
-        Nothing has changed yet — your current password still works until you use the link.
-      </p>
+    <div className="flex justify-center" aria-hidden>
+      <svg width={112} height={84} viewBox="0 0 112 84" fill="none" focusable="false">
+        <rect x={6} y={10} width={100} height={68} rx={12} className="fill-accent-soft" />
+        <rect x={6} y={10} width={100} height={68} rx={12} className="fill-none stroke-accent-border" strokeWidth={1.5} />
+        <path
+          d="M16 22 50 47a10 10 0 0 0 12 0l34-25"
+          className="stroke-accent" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round"
+        />
+        <circle cx={90} cy={64} r={14} className="fill-ok" />
+        <path d="m84 64 4 4 9-9" className="stroke-surface" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
     </div>
   );
 }

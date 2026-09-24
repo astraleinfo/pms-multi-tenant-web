@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
+import { useRouter } from "@/lib/navigation";
 import { useApp } from "@/lib/store/app-store";
 import { cn } from "@/lib/cn";
 import type { Id, Tenant } from "@/lib/types";

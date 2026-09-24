@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/navigation";
 import { useApp, useTenant } from "@/lib/store/app-store";
 import { useSchema } from "@/lib/query/hooks";
 import { PageHeader } from "@/components/ui/page-header";

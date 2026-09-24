@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
+import { useRouter } from "@/lib/navigation";
 import { cn } from "@/lib/cn";
 import { useApp, useTenant } from "@/lib/store/app-store";
 import { useSession } from "@/lib/store/session";

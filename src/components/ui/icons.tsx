@@ -77,10 +77,15 @@ export const IconShield = mk(<><path d="M12 3.2 19.5 6v6c0 4.6-3.2 7.4-7.5 8.8C7
 export const IconGrid = mk(<><rect x="3.5" y="3.5" width="7" height="7" rx="1.8" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.8" /><rect x="3.5" y="13.5" width="7" height="7" rx="1.8" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.8" /></>);
 export const IconList = mk(<><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" /></>);
 export const IconRefresh = mk(<><path d="M20 11.5a8 8 0 1 0-.7 4.3" /><path d="M20.5 5v5h-5" /></>);
+export const IconChevronCircleLeft = mk(<><circle cx="12" cy="12" r="8.5" /><path d="m13.5 8.5-3.5 3.5 3.5 3.5" /></>);
 export const IconSidebar = mk(<><rect x="3.5" y="4.5" width="17" height="15" rx="2.4" /><path d="M9.5 4.5v15" /></>);
 export const IconPlay = mk(<><path d="M8 5.5 18 12 8 18.5v-13Z" /></>);
 export const IconBookmark = mk(<><path d="M6 4.5h12v16l-6-4-6 4v-16Z" /></>);
 export const IconCard = mk(<><rect x="2.5" y="5" width="19" height="14" rx="2.6" /><path d="M2.5 9.8h19M6 15h4" /></>);
 export const IconDownload = mk(<><path d="M12 4v10.5M7.5 10.5 12 15l4.5-4.5" /><path d="M4.5 19.5h15" /></>);
 export const IconUpload = mk(<><path d="M12 15V4.5M7.5 9 12 4.5 16.5 9" /><path d="M4.5 19.5h15" /></>);
+/* a pair: the same open tray, the arrow going in or coming out */
+export const IconImport = mk(<><path d="M4.5 14v3.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V14" /><path d="M12 3.5v11M8 10.5l4 4 4-4" /></>);
+export const IconExport = mk(<><path d="M4.5 14v3.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V14" /><path d="M12 14.5v-11M8 7.5l4-4 4 4" /></>);
+export const IconSheet = mk(<><rect x="4" y="3.5" width="16" height="17" rx="2.2" /><path d="M4 9h16M4 14.5h16M10 9v11.5" /></>);
 export const IconExternal = mk(<><path d="M14 4.5h5.5V10" /><path d="m19.5 4.5-8 8" /><path d="M18.5 14v4.5a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2H10" /></>);

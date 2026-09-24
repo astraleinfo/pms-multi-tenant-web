@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/navigation";
 
 import type { BillingDepartment, Invoice } from "@/lib/types";
 import { useBillingStats, useInvoicePage } from "@/lib/query/hooks";
@@ -197,13 +197,25 @@ function Billing() {
         }
       />
 
+      {/* The totals are the practice admin's: for anyone else the server sends
+          the counts and not the money, and the counter works from those. */}
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label="Billed" value={currency(stats.billed)} icon={<IconReceipt size={16} />}
-              hint={`${pluralise(stats.count, "invoice")} excluding voids`} />
-        <Stat label="Collected" value={currency(stats.paid)} icon={<IconCheck size={16} />}
-              footer={<Meter value={stats.paid} max={Math.max(stats.billed, 1)} tone="ok" />} />
-        <Stat label="Outstanding" value={currency(stats.outstanding)} tone={stats.outstanding > 0 ? "warn" : "ink"}
-              icon={<IconAlert size={16} />} hint={`${pluralise(stats.unpaid, "invoice")} still owing`} />
+        {stats.billed !== undefined && stats.paid !== undefined && stats.outstanding !== undefined ? (
+          <>
+            <Stat label="Billed" value={currency(stats.billed)} icon={<IconReceipt size={16} />}
+                  hint={`${pluralise(stats.count, "invoice")} excluding voids`} />
+            <Stat label="Collected" value={currency(stats.paid)} icon={<IconCheck size={16} />}
+                  footer={<Meter value={stats.paid} max={Math.max(stats.billed, 1)} tone="ok" />} />
+            <Stat label="Outstanding" value={currency(stats.outstanding)} tone={stats.outstanding > 0 ? "warn" : "ink"}
+                  icon={<IconAlert size={16} />} hint={`${pluralise(stats.unpaid, "invoice")} still owing`} />
+          </>
+        ) : (
+          <>
+            <Stat label="Invoices" value={stats.count} icon={<IconReceipt size={16} />} hint="Excluding voids" />
+            <Stat label="Owing" value={stats.unpaid} tone={stats.unpaid > 0 ? "warn" : "ink"}
+                  icon={<IconAlert size={16} />} hint="Issued or part paid" />
+          </>
+        )}
         <Stat label="Drafts" value={stats.drafts} icon={<IconReceipt size={16} />} hint="Not yet issued" />
       </section>
 
@@ -281,7 +293,7 @@ function Billing() {
             />
           </Card>
 
-          {mix.length > 0 && <MoneyMix mix={mix} />}
+          {mix && mix.length > 0 && <MoneyMix mix={mix} />}
         </div>
       )}
 

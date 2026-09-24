@@ -78,6 +78,8 @@ function Reports() {
   const cohort = modules?.advanced_reports?.age_cohort ?? [];
   const sexSplit = (modules?.advanced_reports?.sex_split ?? []).filter((s) => s.value > 0);
   const clinicians = modules?.advanced_reports?.clinicians ?? [];
+  /* what each clinician brings in is the practice admin's to see */
+  const showInvoiced = analytics?.revenue_visible !== false;
 
   if (isPending || !core) {
     return <PageLoader label="Working out the figures…" />;
@@ -216,19 +218,30 @@ function Reports() {
               <Card>
                 <CardHeader tone="ok" icon={<IconReceipt size={16} />} title="Billing" hint="Non-void invoices only." />
                 <CardBody className="pt-1">
-                  <dl className="grid grid-cols-2 gap-x-4">
-                    <KV label="Billed" value={<span className="tnum font-mono">{currency(money.billed)}</span>} />
-                    <KV label="Collected" value={<span className="tnum font-mono text-ok-text">{currency(money.paid)}</span>} />
-                    <KV label="Outstanding" value={<span className="tnum font-mono text-warn-text">{currency(money.outstanding)}</span>} />
-                    <KV label="Invoices" value={money.count} />
-                  </dl>
-                  <div className="mt-4 border-t border-line-soft pt-4">
-                    {money.revenue_mix.length ? (
-                      <DonutChart slices={money.revenue_mix} size={130} thickness={18}
-                                  centreValue={currency(money.billed)} centreLabel="billed"
-                                  format={(n) => currency(n)} />
-                    ) : <EmptyState compact icon={<IconReceipt size={20} />} title="Nothing billed" />}
-                  </div>
+                  {/* the money is the practice admin's; anyone else sees the counts */}
+                  {money.billed !== undefined && money.revenue_mix ? (
+                    <>
+                      <dl className="grid grid-cols-2 gap-x-4">
+                        <KV label="Billed" value={<span className="tnum font-mono">{currency(money.billed)}</span>} />
+                        <KV label="Collected" value={<span className="tnum font-mono text-ok-text">{currency(money.paid ?? 0)}</span>} />
+                        <KV label="Outstanding" value={<span className="tnum font-mono text-warn-text">{currency(money.outstanding ?? 0)}</span>} />
+                        <KV label="Invoices" value={money.count} />
+                      </dl>
+                      <div className="mt-4 border-t border-line-soft pt-4">
+                        {money.revenue_mix.length ? (
+                          <DonutChart slices={money.revenue_mix} size={130} thickness={18}
+                                      centreValue={currency(money.billed)} centreLabel="billed"
+                                      format={(n) => currency(n)} />
+                        ) : <EmptyState compact icon={<IconReceipt size={20} />} title="Nothing billed" />}
+                      </div>
+                    </>
+                  ) : (
+                    <dl className="grid grid-cols-2 gap-x-4">
+                      <KV label="Invoices" value={money.count} />
+                      <KV label="Owing" value={money.unpaid} />
+                      <KV label="Drafts" value={money.drafts} />
+                    </dl>
+                  )}
                 </CardBody>
               </Card>
             )}
@@ -239,7 +252,9 @@ function Reports() {
                 <CardBody className="pt-1">
                   <dl className="grid grid-cols-2 gap-x-4">
                     <KV label="Units out" value={<span className="tnum font-mono">{pharm.dispensed_units}</span>} />
-                    <KV label="Value" value={<span className="tnum font-mono">{currency(pharm.dispensed_value)}</span>} />
+                    {pharm.dispensed_value !== undefined && (
+                      <KV label="Value" value={<span className="tnum font-mono">{currency(pharm.dispensed_value)}</span>} />
+                    )}
                     <KV label="At the counter" value={pharm.prescriptions_waiting} />
                     <KV label="Fully dispensed" value={pharm.fully_dispensed} />
                   </dl>
@@ -286,7 +301,8 @@ function Reports() {
               <THead>
                 <tr>
                   <TH>Clinician</TH><TH>Speciality</TH><TH align="right">Encounters</TH>
-                  <TH align="right">Prescriptions</TH><TH align="right">Invoiced</TH>
+                  <TH align="right">Prescriptions</TH>
+                  {showInvoiced && <TH align="right">Invoiced</TH>}
                 </tr>
               </THead>
               <TBody>
@@ -301,7 +317,7 @@ function Reports() {
                     <TD className="text-ink-2">{c.speciality ?? "—"}</TD>
                     <TD align="right" className="tnum font-mono">{c.encounters}</TD>
                     <TD align="right" className="tnum font-mono">{c.prescriptions}</TD>
-                    <TD align="right" className="tnum font-mono">{currency(c.revenue)}</TD>
+                    {showInvoiced && <TD align="right" className="tnum font-mono">{currency(c.revenue ?? 0)}</TD>}
                   </TR>
                 ))}
               </TBody>

@@ -1,50 +1,37 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/navigation";
 import { useApp } from "@/lib/store/app-store";
 import { StageLoader } from "@/components/ui/loader";
 import {
-  EmailField, GlyphBilling, GlyphCalendar, GlyphPatients, GlyphReports, LoginAccent, LoginError,
-  LoginLink, LoginNote, LoginScene, PasswordField, RememberRow, SubmitButton, type LoginFeature,
-} from "@/components/layout/login-scene";
-import background from "../../../public/images/tenant-login-bg.webp";
+  AuthError, AuthLink, AuthNote, AuthSplit, EmailField, PasswordField, RememberRow, SubmitButton,
+} from "@/components/layout/auth-split";
 
 /* ==========================================================================
-   Tenant sign-in — the clinic's own address, in the daytime scene.
-   The layout, palette and controls live in the shared login scene; this page
-   only brings the clinic's words and the clinic's sign-in.
-   ========================================================================== */
+   Tenant sign-in — the clinic's own address.
 
-const FEATURES: LoginFeature[] = [
-  {
-    title: "Appointments & Queue",
-    body: ["Book visits and see", "who is waiting now"],
-    icon: <GlyphCalendar />,
-    tile: "bg-[#E4ECFA] text-[#2F62C8]",
-  },
-  {
-    title: "Patient Records",
-    body: ["Complete medical history", "at your fingertips"],
-    icon: <GlyphPatients />,
-    tile: "bg-[#DDF6EC] text-[#10B866]",
-  },
-  {
-    title: "Billing & Payments",
-    body: ["Invoices built straight", "from each visit"],
-    icon: <GlyphBilling />,
-    tile: "bg-[#E6E6FD] text-[#7A4CF6]",
-  },
-  {
-    title: "Reports & Insights",
-    body: ["Track visits, revenue", "and patient trends"],
-    icon: <GlyphReports />,
-    tile: "bg-[#FDECE2] text-[#FB5A12]",
-  },
-];
+   The window is split: the module carousel on the left, this form on the
+   right. Layout, drawings and controls live in the shared shell; this page
+   brings the clinic's words and the clinic's sign-in.
+   ========================================================================== */
 
 /* the address is remembered only when asked, and only on this device */
 const REMEMBER_KEY = "astrale.login.email";
+
+/* Deliberately loose. The field's job is to catch a typo like a missing @,
+   not to adjudicate RFC 5322 — the server is the one that knows whether an
+   address exists, and a clever pattern here only ever rejects real people. */
+const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * The sentence shown when a sign-in is refused. The server's own wording is
+ * kept whenever it is saying something specific — an account locked, a clinic
+ * suspended — because that is information the person needs. Only the generic
+ * "those were the wrong details" case is replaced, where the server is terse
+ * by design and the screen can afford to be kind.
+ */
+const GENERIC = /invalid|incorrect|credential|do(es)? not match|not found|no account|unauthor/i;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -54,6 +41,7 @@ export default function LoginPage() {
   const [password, setPassword] = React.useState("");
   const [remember, setRemember] = React.useState(false);
   const [askAdmin, setAskAdmin] = React.useState(false);
+  const [emailError, setEmailError] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
@@ -76,14 +64,17 @@ export default function LoginPage() {
 
   /* the clinic behind this address is a public read — the one thing the API
      answers without a session */
-  if (!ready || hostTenantPending || !hostTenant) {
-    return <StageLoader className="!bg-stage" />;
-  }
+  if (!ready || hostTenantPending || !hostTenant) return <StageLoader />;
 
   const tenant = hostTenant;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!LOOKS_LIKE_EMAIL.test(email.trim())) {
+      setEmailError("Please enter a valid email address.");
+      return;
+    }
+    setEmailError(null);
     setBusy(true);
     const result = await signIn(email, password);
     setBusy(false);
@@ -98,57 +89,42 @@ export default function LoginPage() {
       notify({ tone: "ok", title: "Signed in", body: `Welcome back to ${tenant.name}.` });
       router.replace("/dashboard");
     } else {
-      setError(result.error);
+      setError(
+        GENERIC.test(result.error)
+          ? "We couldn’t sign you in with those credentials. Please check your email and password and try again."
+          : result.error,
+      );
       setPassword("");
     }
   };
 
   return (
-    <LoginScene
-      tone="day"
-      background={background}
-      pitch={{
-        eyebrow: "Better care. Healthier tomorrows.",
-        headline: (
-          <>
-            Everything you need
-            <br />
-            for <LoginAccent>better patient care</LoginAccent>
-          </>
-        ),
-        lede: (
-          <>
-            Every patient, every visit, every record —
-            <br />
-            from first appointment to follow-up.
-          </>
-        ),
-        features: FEATURES,
-      }}
-      title="Login"
+    <AuthSplit
+      title="Welcome back"
+      subtitle={<>Sign in to <span className="font-medium text-ink">{tenant.name}</span>.</>}
       below={
-        <div className="mt-3.5 text-center short:mt-4">
-          <LoginLink onClick={() => setAskAdmin((v) => !v)} aria-expanded={askAdmin}>
+        <div className="mt-6 text-center">
+          <AuthLink muted onClick={() => setAskAdmin((v) => !v)} aria-expanded={askAdmin}>
             Contact your administrator
-          </LoginLink>
+          </AuthLink>
           {askAdmin && (
-            <LoginNote>
+            <AuthNote>
               Accounts at {tenant.name} are created by your clinic admin — ask them to send you an
               invitation.
-            </LoginNote>
+            </AuthNote>
           )}
         </div>
       }
     >
-      <form onSubmit={submit} className="mt-5.5 space-y-3 short:mt-5">
+      <form onSubmit={submit} noValidate className="mt-8 space-y-5">
         <EmailField
           id="email"
           label="Email address"
           autoComplete="username"
           value={email}
-          onChange={(e) => { setEmail(e.target.value); setError(null); }}
+          onChange={(e) => { setEmail(e.target.value); setEmailError(null); setError(null); }}
           placeholder="Enter your email address"
-          invalid={!!error}
+          error={emailError}
           required
         />
         <PasswordField
@@ -164,11 +140,11 @@ export default function LoginPage() {
         <RememberRow
           checked={remember}
           onChange={setRemember}
-          trailing={<LoginLink href="/forgot-password">Forgot password?</LoginLink>}
+          trailing={<AuthLink href="/forgot-password">Forgot password?</AuthLink>}
         />
-        {error && <LoginError>{error}</LoginError>}
-        <SubmitButton busy={busy}>Sign In</SubmitButton>
+        {error && <AuthError>{error}</AuthError>}
+        <SubmitButton busy={busy}>Sign in</SubmitButton>
       </form>
-    </LoginScene>
+    </AuthSplit>
   );
 }

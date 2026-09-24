@@ -354,6 +354,12 @@ export function useAppointments() {
   return useClinicQuery(qk.appointments(t), api.listAppointments);
 }
 
+/** One booking, for its own screen. */
+export function useAppointment(id: Id) {
+  const t = useTenantId();
+  return useClinicQuery(qk.appointment(t, id), () => api.getAppointment(id), !!id);
+}
+
 export function useQueue() {
   const t = useTenantId();
   return useClinicQuery(qk.queue(t), api.listQueue);
@@ -374,6 +380,12 @@ export function usePrescriptions() {
   return useClinicQuery(qk.prescriptions(t), api.listPrescriptions);
 }
 
+/** One prescription, for its own screen. */
+export function usePrescription(id: Id) {
+  const t = useTenantId();
+  return useClinicQuery(qk.prescription(t, id), () => api.getPrescription(id), !!id);
+}
+
 /* The purchasable modules answer 403 when a clinic has not bought them, so
    these three only ask when the entitlement says they can. */
 function useFeatureEnabled(key: Parameters<typeof api.purchaseFeature>[0]) {
@@ -389,9 +401,9 @@ export function useLabOrders() {
 /**
  * One order, kept in step with what the bench does to it.
  *
- * The drawer used to read its order out of the list it was opened from, which
- * only worked while the list held everything: verifying an order takes it off
- * the Open page, and the drawer would have been left showing the row as it was.
+ * The order's popup reads it by id rather than out of the list it was opened
+ * from: verifying an order takes it off the Open page, and a copy from the list
+ * would be left showing the row as it was.
  */
 export function useLabOrder(id: Id) {
   const t = useTenantId();

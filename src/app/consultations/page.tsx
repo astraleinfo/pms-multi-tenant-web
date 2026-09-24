@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/navigation";
 import type { Encounter } from "@/lib/types";
 import { useTenant } from "@/lib/store/app-store";
 import { useEncounterPage, useQueue, useUsers } from "@/lib/query/hooks";

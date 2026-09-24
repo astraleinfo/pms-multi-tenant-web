@@ -209,9 +209,30 @@ export interface SubscriptionSummary {
   grace_days: number;
 }
 
+/** One module the clinic has switched on, and what it costs. */
+export interface SubscribedModule {
+  feature_key: FeatureKey;
+  name: string;
+  is_core: boolean;
+  /** a trial is on, but not billed */
+  status: "active" | "trial";
+  activated_at: string | null;
+  /** today's monthly price; 0 for a core module */
+  price_monthly: number;
+  /** whether next month's bill charges for it */
+  billed: boolean;
+}
+
+export interface SubscriptionPlan {
+  modules: SubscribedModule[];
+  /** what the next bill will come to, at today's prices */
+  monthly_total: number;
+}
+
 export interface Subscription {
   summary: SubscriptionSummary;
   invoices: SubscriptionInvoice[];
+  plan: SubscriptionPlan | null;
 }
 
 export type FieldScope = "common" | "clinical_type" | "tenant";

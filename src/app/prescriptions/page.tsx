@@ -1,26 +1,21 @@
 "use client";
 
 import * as React from "react";
-import * as api from "@/lib/api";
-import { useApp } from "@/lib/store/app-store";
-import { usePatient, usePrescriptionPage, useUsers } from "@/lib/query/hooks";
+import { usePrescriptionPage, useUsers } from "@/lib/query/hooks";
 import { useDebounced } from "@/lib/debounce";
 import { formatDate, pluralise } from "@/lib/format";
-import { openPdfBlob } from "@/lib/pdf";
 import type { Prescription } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/card";
 import { DataTable, columnHelperFor } from "@/components/ui/data-table";
-import { Button, ButtonLink } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { EmptyState, KV, Meter } from "@/components/ui/misc";
-import { Drawer } from "@/components/ui/modal";
+import { EmptyState, Meter } from "@/components/ui/misc";
 import { SearchInput } from "@/components/ui/field";
 import { Tabs } from "@/components/ui/tabs";
 import { FeatureGate } from "@/components/domain/gates";
 import { StatusPill } from "@/components/domain/status";
-import { AllergyFlag, PatientChip, PatientRef } from "@/components/domain/patient";
-import { IconArrowRight, IconPrint, IconRx } from "@/components/ui/icons";
+import { PatientRef } from "@/components/domain/patient";
+import { PrescriptionDetailModal } from "@/components/domain/prescription-detail";
+import { IconRx } from "@/components/ui/icons";
 
 type Tab = "all" | "pending" | "partially_dispensed" | "dispensed";
 
@@ -106,26 +101,12 @@ export default function PrescriptionsPage() {
 }
 
 function Prescriptions() {
-  const { hasFeature, notify } = useApp();
-  const { data: users } = useUsers();
+  const [opened, setOpened] = React.useState<Prescription | null>(null);
   const [tab, setTab] = React.useState<Tab>("all");
   const [q, setQ] = React.useState("");
   const term = useDebounced(q);
   const [page, setPage] = React.useState(0);
   const [sort, setSort] = React.useState({ id: "created_at", desc: true });
-  const [open, setOpen] = React.useState<Prescription | null>(null);
-  const [printing, setPrinting] = React.useState(false);
-
-  const printPrescription = async (encounterId: string) => {
-    setPrinting(true);
-    try {
-      openPdfBlob(await api.getConsultationPdf(encounterId));
-    } catch {
-      notify({ tone: "warn", title: "Could not generate the print PDF" });
-    } finally {
-      setPrinting(false);
-    }
-  };
 
   /* any change to what is being asked for starts again at the first page */
   React.useEffect(() => { setPage(0); }, [term, tab, sort]);
@@ -145,9 +126,6 @@ function Prescriptions() {
   const rows = result?.items ?? [];
   const total = result?.total ?? 0;
 
-  /* The drawer shows allergies, which a list row does not carry — so it asks
-     for the one patient it is about, rather than the whole register. */
-  const { data: patient } = usePatient(open?.patient_id ?? "");
 
   const byStatus = result?.counts ?? {};
   const counts = {
@@ -156,8 +134,6 @@ function Prescriptions() {
     partially_dispensed: byStatus.partially_dispensed ?? 0,
     dispensed: byStatus.dispensed ?? 0,
   };
-
-
 
   return (
     <>
@@ -193,7 +169,7 @@ function Prescriptions() {
           data={rows}
           getRowId={(rx) => rx.id}
           pageSize={PAGE_SIZE}
-          onRowClick={(rx) => setOpen(rx)}
+          onRowClick={(rx) => setOpened(rx)}
           minWidth="52rem"
           empty={<EmptyState icon={<IconRx size={20} />} title="Nothing here" body="No prescription matches this filter." />}
           server={{
@@ -209,77 +185,7 @@ function Prescriptions() {
         />
       </Card>
 
-      <Drawer
-        open={!!open}
-        onClose={() => setOpen(null)}
-        width="lg"
-        title={patient?.full_name ?? "Prescription"}
-        subtitle={open ? `${formatDate(open.created_at.slice(0, 10), "long")} · ${users.find((u) => u.id === open.doctor_id)?.name ?? "—"}` : ""}
-        footer={
-          open && (
-            <>
-              <Button variant="ghost" onClick={() => void printPrescription(open.encounter_id)} disabled={printing}>
-                <IconPrint size={14} /> {printing ? "Preparing…" : "Print"}
-              </Button>
-              {hasFeature("pharmacy") && open.status !== "dispensed" && (
-                <ButtonLink href="/pharmacy" variant="primary">
-                  Dispense at the counter <IconArrowRight size={14} />
-                </ButtonLink>
-              )}
-            </>
-          )
-        }
-      >
-        {open && patient && (
-          <div className="space-y-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <StatusPill kind="prescription" status={open.status} />
-              <AllergyFlag patient={patient} />
-            </div>
-
-            <dl className="grid grid-cols-2 gap-x-4">
-              <KV label="Record" value={<span className="tnum font-mono text-label">{patient.mrn}</span>} />
-              <KV label="Encounter" value={
-                <ButtonLink href={`/consultations/${open.encounter_id}`} variant="ghost" size="sm" className="h-6 px-1.5">
-                  Open encounter
-                </ButtonLink>
-              } />
-            </dl>
-
-            <div>
-              <p className="mb-2 text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">Medicines</p>
-              <ul className="space-y-2.5">
-                {open.items.map((it) => (
-                  <li key={it.id} className="rounded-[var(--r)] border border-line p-3">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <p className="text-body font-medium text-ink">
-                        {it.medicine} <span className="text-label font-normal text-ink-3">{it.strength}</span>
-                      </p>
-                      <StatusPill kind="prescription" status={it.status} size="sm" dot={false} />
-                    </div>
-                    <p className="mt-1 text-label text-ink-2">
-                      {it.dosage} · {it.frequency} · {it.duration}
-                    </p>
-                    {it.instructions && (
-                      <p className="mt-1 text-caption italic text-ink-3">{it.instructions}</p>
-                    )}
-                    <div className="mt-2.5 flex items-center gap-3">
-                      <Meter value={it.dispensed_qty} max={it.qty}
-                             tone={it.dispensed_qty >= it.qty ? "ok" : it.dispensed_qty > 0 ? "info" : "warn"} className="flex-1" />
-                      <span className="tnum shrink-0 font-mono text-caption text-ink-2">
-                        {it.dispensed_qty} of {it.qty}
-                      </span>
-                    </div>
-                    {!it.item_id && (
-                      <Badge tone="neutral" size="sm" className="mt-2">Not linked to stock</Badge>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        )}
-      </Drawer>
+      <PrescriptionDetailModal prescription={opened} onClose={() => setOpened(null)} />
     </>
   );
 }

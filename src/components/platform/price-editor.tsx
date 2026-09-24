@@ -29,13 +29,24 @@ export function FeaturePriceDialog({
   stat: ModuleStats | null;
   onClose: () => void;
 }) {
-  if (!stat) return null;
-  /* Keyed by module, so opening it on another module starts from that
-     module's own price rather than whatever was typed last time. */
-  return <PriceForm key={stat.feature.key} stat={stat} onClose={onClose} />;
+  /* The module last opened is kept after it closes, so the dialog is still
+     there to animate away. */
+  const last = React.useRef<ModuleStats | null>(null);
+  /* counted on the step from closed to open — the stats object itself is
+     rebuilt on every render of the page, so its identity says nothing */
+  const opening = React.useRef(0);
+  const wasOpen = React.useRef(false);
+  if (stat && !wasOpen.current) opening.current += 1;
+  wasOpen.current = !!stat;
+  if (stat) last.current = stat;
+  const shown = stat ?? last.current;
+  if (!shown) return null;
+  /* Keyed by opening, so each one starts from the module's own price rather
+     than whatever was typed last time. */
+  return <PriceForm key={opening.current} open={!!stat} stat={shown} onClose={onClose} />;
 }
 
-function PriceForm({ stat, onClose }: { stat: ModuleStats; onClose: () => void }) {
+function PriceForm({ open, stat, onClose }: { open: boolean; stat: ModuleStats; onClose: () => void }) {
   const { setFeaturePrice, notify } = useApp();
   const { feature } = stat;
   const current = feature.price_monthly;
@@ -80,7 +91,7 @@ function PriceForm({ stat, onClose }: { stat: ModuleStats; onClose: () => void }
 
   return (
     <Modal
-      open
+      open={open}
       onClose={close}
       width="sm"
       title={`Price of ${feature.name}`}

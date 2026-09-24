@@ -4,24 +4,22 @@ import * as React from "react";
 import { useApp } from "@/lib/store/app-store";
 import { useAppointmentPage, useClinicDb, useUsers } from "@/lib/query/hooks";
 import { useDebounced } from "@/lib/debounce";
-import { selectAppointments, selectDoctors, userName } from "@/lib/data/repository";
-import { addDays, daysBetween, formatDate, formatTime12, pluralise, relativeDay, toMinutes, weekdayShort } from "@/lib/format";
+import { selectAppointments, selectDoctors } from "@/lib/data/repository";
+import { addDays, formatDate, formatTime12, pluralise, relativeDay, toMinutes, weekdayShort } from "@/lib/format";
 import type { Appointment } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable, columnHelperFor } from "@/components/ui/data-table";
 import { Card, CardHeader } from "@/components/ui/card";
-import { Button, ButtonLink, Segmented } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { EmptyState, KV } from "@/components/ui/misc";
-import { Drawer } from "@/components/ui/modal";
+import { Button, Segmented } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/misc";
 import { Select } from "@/components/ui/field";
 import { FeatureGate, RoleGate } from "@/components/domain/gates";
 import { StatusPill } from "@/components/domain/status";
 import { PatientRef } from "@/components/domain/patient";
 import { AppointmentModal } from "@/components/domain/quick-actions";
+import { AppointmentDetailModal } from "@/components/domain/appointment-detail";
 import {
-  IconArrowRight, IconCalendar, IconCheck, IconChevronLeft, IconChevronRight,
-  IconClock, IconPlus, IconX,
+  IconCalendar, IconChevronLeft, IconChevronRight, IconPlus,
 } from "@/components/ui/icons";
 
 const PAGE_SIZE = 10;
@@ -101,7 +99,9 @@ export default function AppointmentsPage() {
 }
 
 function Appointments() {
-  const { session, today, config, setAppointmentStatus, checkIn, notify } = useApp();
+  const { session, today, config } = useApp();
+  /* the booking whose popup is open */
+  const [opened, setOpened] = React.useState<Appointment | null>(null);
   const db = useClinicDb();
   const t = session.tenantId;
   /* the grid spans the clinic's configured working day, rounded to the hour */
@@ -112,7 +112,6 @@ function Appointments() {
   const [view, setView] = React.useState<"day" | "week" | "list">("day");
   const [doctorFilter, setDoctorFilter] = React.useState<string>("all");
   const [booking, setBooking] = React.useState(false);
-  const [detail, setDetail] = React.useState<Appointment | null>(null);
 
   const [q, setQ] = React.useState("");
   const term = useDebounced(q);
@@ -159,12 +158,6 @@ function Appointments() {
   );
   const listRows = listPage?.items ?? [];
   const listTotal = listPage?.total ?? 0;
-
-  const act = (a: Appointment, status: Appointment["status"], msg: string) => {
-    setAppointmentStatus(a.id, status);
-    notify({ tone: status === "no_show" ? "warn" : "ok", title: msg, body: `${formatDate(a.date)} · ${formatTime12(a.time)}` });
-    setDetail(null);
-  };
 
   return (
     <>
@@ -286,7 +279,7 @@ function Appointments() {
                         return (
                           <button
                             key={a.id}
-                            onClick={() => setDetail(a)}
+                            onClick={() => setOpened(a)}
                             className={`absolute left-1.5 right-1.5 overflow-hidden rounded-[var(--r-sm)] border px-2 py-1 text-left transition-all duration-150 hover:-translate-y-px hover:shadow-e2 ${tone}`}
                             style={{ top, height: h }}
                           >
@@ -342,7 +335,7 @@ function Appointments() {
                     return (
                       <button
                         key={a.id}
-                        onClick={() => setDetail(a)}
+                        onClick={() => setOpened(a)}
                         className="w-full rounded-[var(--r-sm)] border border-line bg-surface-2 px-2 py-1.5 text-left transition-colors hover:bg-hover"
                       >
                         <p className="tnum font-mono text-micro text-ink-3">{formatTime12(a.time)}</p>
@@ -369,7 +362,7 @@ function Appointments() {
             getRowId={(a) => a.id}
             searchPlaceholder="Patient, reason or clinician"
             pageSize={PAGE_SIZE}
-            onRowClick={(a) => setDetail(a)}
+            onRowClick={(a) => setOpened(a)}
             minWidth="56rem"
             empty={
               <EmptyState
@@ -392,79 +385,7 @@ function Appointments() {
         </Card>
       )}
 
-      {/* detail drawer */}
-      <Drawer
-        open={!!detail}
-        onClose={() => setDetail(null)}
-        title={detail?.patient_name ?? "Appointment"}
-        subtitle={detail ? `${formatDate(detail.date, "day")} at ${formatTime12(detail.time)}` : ""}
-        footer={
-          detail && (
-            <>
-              {detail.status === "scheduled" && (
-                <>
-                  <Button variant="ghost" onClick={() => act(detail, "cancelled", "Appointment cancelled")}>
-                    <IconX size={14} /> Cancel
-                  </Button>
-                  <Button variant="secondary" onClick={() => act(detail, "no_show", "Marked as no show")}>
-                    No show
-                  </Button>
-                  <Button
-                    variant="primary"
-                    onClick={() => {
-                      checkIn(detail.id);
-                      notify({ tone: "ok", title: "Checked in", body: "Token issued and pushed to the waiting-room board." });
-                      setDetail(null);
-                    }}
-                  >
-                    <IconCheck size={14} /> Check in
-                  </Button>
-                </>
-              )}
-              {detail.status !== "scheduled" && (
-                <ButtonLink href={`/patients/${detail.patient_id}`} variant="secondary">
-                  Open patient record <IconArrowRight size={14} />
-                </ButtonLink>
-              )}
-            </>
-          )
-        }
-      >
-        {detail && (
-          <div className="space-y-5">
-            <div className="flex items-center justify-between gap-3">
-              <StatusPill kind="appointment" status={detail.status} />
-              <Badge tone="neutral" size="sm">{detail.duration_min} minutes</Badge>
-            </div>
-
-            <dl className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
-              <KV label="Clinician" value={userName(db, detail.doctor_id)} />
-              <KV label="Booked via" value={detail.created_via.replace("_", " ")} />
-              <KV label="Date" value={formatDate(detail.date, "long")} />
-              <KV label="Time" value={formatTime12(detail.time)} mono />
-            </dl>
-
-            <div>
-              <p className="text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">Reason</p>
-              <p className="mt-1 text-body leading-relaxed text-ink">{detail.reason}</p>
-            </div>
-
-            {detail.date === today && detail.status === "scheduled" && (
-              <p className="flex items-start gap-2 rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-caption leading-relaxed text-ink-2">
-                <IconClock size={14} className="mt-px shrink-0 text-ink-3" />
-                Checking in issues the next token in today's sequence and pushes the board update — the appointment row stays
-                where it is and only changes status.
-              </p>
-            )}
-            {daysBetween(today, detail.date) > 0 && (
-              <p className="text-caption text-ink-3">
-                This booking is {relativeDay(detail.date).toLowerCase()} — check-in opens on the day.
-              </p>
-            )}
-          </div>
-        )}
-      </Drawer>
-
+      <AppointmentDetailModal appointment={opened} onClose={() => setOpened(null)} />
       <AppointmentModal open={booking} onClose={() => setBooking(false)} defaultDate={date} />
     </>
   );

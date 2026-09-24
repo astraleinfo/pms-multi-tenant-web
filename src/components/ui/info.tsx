@@ -180,8 +180,9 @@ export function Tooltip({
   side?: "right" | "top";
   className?: string;
 }) {
-  const [pos, setPos] = React.useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = React.useState<{ top: number; left: number; anchor: DOMRect } | null>(null);
   const ref = React.useRef<HTMLSpanElement>(null);
+  const tip = React.useRef<HTMLDivElement>(null);
 
   const place = React.useCallback(() => {
     const el = ref.current?.firstElementChild ?? ref.current;
@@ -189,10 +190,30 @@ export function Tooltip({
     const r = el.getBoundingClientRect();
     setPos(
       side === "right"
-        ? { top: r.top + r.height / 2, left: r.right + 8 }
-        : { top: r.top - 8, left: r.left + r.width / 2 },
+        ? { top: r.top + r.height / 2, left: r.right + 8, anchor: r }
+        : { top: r.top - 8, left: r.left + r.width / 2, anchor: r },
     );
   }, [side]);
+
+  /* Kept inside the window. A tooltip on the last column of a table, or on a
+     button against the edge, would otherwise hang off the side and be cut in
+     half. Measured before paint, so it never shows in the wrong place first:
+     one on top slides along until it fits; one on the right that does not
+     fit there goes to the left of its anchor instead. */
+  React.useLayoutEffect(() => {
+    const el = tip.current;
+    if (!el || !pos) return;
+    const gap = 8;
+    const width = el.offsetWidth;
+    const room = window.innerWidth;
+    if (side === "right") {
+      if (pos.left + width > room - gap) el.style.left = `${Math.max(gap, pos.anchor.left - 8 - width)}px`;
+    } else {
+      const left = Math.min(Math.max(pos.left - width / 2, gap), room - gap - width);
+      el.style.left = `${left}px`;
+      el.style.transform = "translateY(-100%)";
+    }
+  }, [pos, side]);
 
   React.useEffect(() => {
     if (!pos) return;
@@ -219,6 +240,7 @@ export function Tooltip({
       </span>
       {pos && typeof document !== "undefined" && createPortal(
         <div
+          ref={tip}
           role="tooltip"
           style={{
             position: "fixed",

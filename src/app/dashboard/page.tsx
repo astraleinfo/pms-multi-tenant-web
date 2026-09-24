@@ -104,7 +104,9 @@ export default function DashboardPage() {
     }
     if (money && money.unpaid > 0) {
       rows.push({ id: "bill", tone: "info", title: `${pluralise(money.unpaid, "invoice")} unpaid`,
-        detail: `${currency(money.outstanding)} outstanding`, href: "/billing" });
+        /* the sum is the practice admin's; the count is everyone's work */
+        detail: money.outstanding !== undefined ? `${currency(money.outstanding)} outstanding` : "Waiting for payment",
+        href: "/billing" });
     }
     if (pharm && pharm.prescriptions_waiting > 0) {
       rows.push({ id: "rx", tone: "info", title: `${pluralise(pharm.prescriptions_waiting, "prescription")} at the counter`,
@@ -159,11 +161,13 @@ export default function DashboardPage() {
           tone={(m?.avg_wait_minutes ?? 0) > 25 ? "warn" : "ink"}
           icon={<IconClock size={16} />}
         />
-        {money ? (
+        {/* The takings, for the practice admin; everyone else is shown the
+            register instead — the server does not send them the money. */}
+        {money && money.paid !== undefined ? (
           <Stat
             label="Collected"
             value={compactCurrency(money.paid)}
-            hint={`${compactCurrency(money.outstanding)} outstanding`}
+            hint={`${compactCurrency(money.outstanding ?? 0)} outstanding`}
             icon={<IconReceipt size={16} />}
           />
         ) : (

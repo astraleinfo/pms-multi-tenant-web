@@ -152,9 +152,8 @@ function Notifications() {
  * a patient is what somebody at a front desk does forty times a day.
  */
 export function Topbar({
-  onToggleRail, onOpenSearch, onOpenMobileNav,
+  onOpenSearch, onOpenMobileNav,
 }: {
-  onToggleRail: () => void;
   onOpenSearch: () => void;
   onOpenMobileNav: () => void;
 }) {
@@ -166,15 +165,9 @@ export function Topbar({
 
   return (
     <header className="sticky top-0 z-30 flex h-[var(--topbar-h)] items-center gap-2 border-b border-line bg-surface px-3 sm:px-4">
-      {/* one control, two behaviours — a wrapper carries the breakpoint so the
+      {/* desktop collapses the rail from the rail itself; this is the phone's
+          only way to the drawer. The wrapper carries the breakpoint so the
           button's own display utility is never in a specificity race */}
-      <span className="hidden lg:block">
-        <Tooltip label={"Toggle sidebar"} side="top">
-          <Button variant="ghost" size="icon-sm" onClick={onToggleRail} aria-label="Toggle sidebar">
-            <IconSidebar size={17} />
-          </Button>
-        </Tooltip>
-      </span>
       <span className="lg:hidden">
         <Button variant="ghost" size="icon-sm" onClick={onOpenMobileNav} aria-label="Open menu">
           <IconSidebar size={17} />

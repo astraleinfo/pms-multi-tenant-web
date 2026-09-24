@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/navigation";
 import { useQueryClient } from "@tanstack/react-query";
+import * as api from "@/lib/api";
 import { useApp, useTenant } from "@/lib/store/app-store";
 import {
   useClinicDb, useFeatureCatalog, useSchema, useSubscription, useUsers,
@@ -19,12 +20,12 @@ import {
 } from "@/lib/appointment-types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader, Legend } from "@/components/ui/card";
-import { Button, ButtonLink } from "@/components/ui/button";
+import { Button, ButtonLink, Segmented } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, EmptyState } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import {
-  ChoiceGroup, Checkbox, Field, Input, NumberInput, Select, Switch,
+  ChoiceGroup, Checkbox, Field, Input, NumberInput, SearchInput, Select, Switch,
 } from "@/components/ui/field";
 import {
   SettingLinkRow, SettingRow, SettingToggleRow, SettingValueRow, SettingsActions, SettingsSection,
@@ -36,11 +37,12 @@ import { RoleGate } from "@/components/domain/gates";
 import { useTour } from "@/components/onboarding/tour";
 import { Monogram } from "@/components/layout/rail";
 import {
-  IconAlert, IconCheck, IconChevronRight, IconGrid, IconKey, IconLayers, IconList, IconLock, IconMail,
+  IconAlert, IconCheck, IconChevronRight, IconEdit, IconGrid, IconKey, IconLayers, IconList, IconLock, IconMail,
   IconPlus, IconReceipt, IconRefresh, IconSettings, IconShield, IconSpark, IconTrash, IconUnlock,
   IconUser, IconUsers
 } from "@/components/ui/icons";
-import { HowToPay, SubscriptionBills, rentMoney } from "@/components/domain/subscription";
+import { HowToPay, SubscriptionBills, SubscriptionPlan, rentMoney } from "@/components/domain/subscription";
+import { SheetExportButton, SheetImportButton, type SheetSource } from "@/components/domain/sheet-io";
 import { Stat } from "@/components/ui/stat";
 import { InfoHint, Tooltip } from "@/components/ui/info";
 
@@ -54,11 +56,12 @@ const teamColumns = userCol.columns([
     cell: ({ row }) => <TeamPerson user={row.original} />,
   }),
   userCol.accessor("role", {
-    header: "Role",
+    header: "Role", meta: { hideBelow: "sm" },
     cell: ({ getValue }) => <span className="text-ink-2">{ROLE_LABEL[getValue()]}</span>,
   }),
   userCol.accessor("email", {
-    header: "Sign-in",
+    /* on a narrower screen the address moves under the person's name */
+    header: "Sign-in", meta: { hideBelow: "lg" },
     cell: ({ row }) => (
       <>
         <span className="tnum block truncate font-mono text-caption text-ink-2">{row.original.email}</span>
@@ -72,7 +75,7 @@ const teamColumns = userCol.columns([
   }),
   userCol.accessor((u) => u.last_sign_in ?? "", {
     id: "last_sign_in",
-    header: "Last seen",
+    header: "Last seen", meta: { hideBelow: "xl" },
     cell: ({ row }) => (
       <span className="text-ink-2">{row.original.last_sign_in ? formatDate(row.original.last_sign_in) : "Never"}</span>
     ),
@@ -80,26 +83,176 @@ const teamColumns = userCol.columns([
   userCol.accessor("status", {
     header: "Account", meta: { align: "right" },
     /* an active account is the ordinary case; invited and locked are the ones to act on */
-    cell: ({ getValue }) => getValue() === "active"
+    cell: ({ row, getValue }) => getValue() === "active"
       ? <span className="text-caption text-ink-3">Active</span>
       : (
-        <Badge tone={getValue() === "invited" ? "warn" : "critical"} size="sm" dot>
-          {titleCase(getValue())}
-        </Badge>
+        <span className="inline-flex flex-col items-end gap-0.5">
+          <Badge tone={getValue() === "invited" ? "warn" : "critical"} size="sm" dot>
+            {titleCase(getValue())}
+          </Badge>
+          {/* a lock the sign-in put on reads differently from one an admin did */}
+          {getValue() === "locked" && row.original.failed_attempts > 0 && (
+            <span className="whitespace-nowrap text-micro text-critical-text">
+              after {pluralise(row.original.failed_attempts, "wrong password")}
+            </span>
+          )}
+        </span>
       ),
   }),
   userCol.display({
     id: "actions",
     header: "",
-    meta: { align: "right", width: 140 },
+    meta: { align: "right", width: 200 },
     cell: ({ row }) => (
-      <div className="flex items-center justify-end gap-1.5">
+      <div className="flex items-center justify-end gap-1">
         <PasswordControl user={row.original} />
+        <EditControl user={row.original} />
         <LockControl user={row.original} />
+        <DeleteControl user={row.original} />
       </div>
     ),
   }),
 ]);
+
+const STAFF_SHEET: SheetSource = {
+  noun: "staff",
+  title: "Import staff",
+  subtitle: "Each person is emailed an invitation. Nothing is saved unless every row passes.",
+  itemLabel: "Person",
+  icon: <IconUsers size={20} />,
+  template: api.staffImportTemplate,
+  exportSheet: api.exportStaff,
+  start: api.startStaffImport,
+  get: api.getStaffImport,
+  latest: api.latestStaffImport,
+  summary: ({ created, invited }) => ({
+    title: `${pluralise(created, "person", "people")} added`,
+    body: invited === created
+      ? "Each has been emailed an invitation to choose their password."
+      : `${invited} of ${created} invitations sent — resend the rest from their rows.`,
+  }),
+};
+
+type StatusFilter = "all" | User["status"];
+
+/**
+ * The clinic's staff: searched by name, email or speciality, narrowed by role
+ * and by account state, and taken in and out of a spreadsheet.
+ *
+ * The filters are over the list the page already holds — a clinic's staff is
+ * a few dozen people, not a register — so they answer as you type.
+ */
+function TeamTable({ staff, loading, canManage, onAdd }: {
+  staff: User[];
+  loading: boolean;
+  canManage: boolean;
+  onAdd: () => void;
+}) {
+  const { session } = useApp();
+  const [q, setQ] = React.useState("");
+  const [role, setRole] = React.useState<Role | "all">("all");
+  const [status, setStatus] = React.useState<StatusFilter>("all");
+
+  const counts = React.useMemo(() => ({
+    all: staff.length,
+    active: staff.filter((u) => u.status === "active").length,
+    invited: staff.filter((u) => u.status === "invited").length,
+    locked: staff.filter((u) => u.status === "locked").length,
+  }), [staff]);
+  /* only the roles somebody here actually has — an empty option is a dead end */
+  const roles = React.useMemo(
+    () => (Object.keys(ROLE_LABEL) as Role[]).filter((r) => staff.some((u) => u.role === r)),
+    [staff],
+  );
+
+  const term = q.trim().toLowerCase();
+  const rows = staff.filter((u) =>
+    (role === "all" || u.role === role)
+    && (status === "all" || u.status === status)
+    && (!term || [u.name, u.email, u.speciality ?? ""].some((v) => v.toLowerCase().includes(term))));
+  const filtering = !!term || role !== "all" || status !== "all";
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader
+        className="flex-wrap"
+        icon={<IconUsers size={16} />}
+        title="Team"
+        hint="Role decides which modules a person sees. Locking an account stops them signing in without deleting anything they recorded."
+        actions={
+          canManage && (
+            <div className="flex flex-wrap items-center gap-2">
+              <SheetImportButton source={STAFF_SHEET} size="sm" />
+              <SheetExportButton source={STAFF_SHEET} size="sm" />
+              <Button variant="primary" size="sm" onClick={onAdd}>
+                <IconPlus size={14} /> Add person
+              </Button>
+            </div>
+          )
+        }
+      />
+      <DataTable
+        columns={teamColumns}
+        data={rows}
+        getRowId={(u) => u.id}
+        loading={loading}
+        pageSize={12}
+        initialSorting={[{ id: "name", desc: false }]}
+        isRowActive={(u) => u.id === session.userId}
+        /* narrow screens drop columns rather than scroll — see each column's `hideBelow` */
+        minWidth="22rem"
+        toolbar={
+          <div className="flex w-full flex-wrap items-center gap-2.5">
+            <SearchInput
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Name, email or speciality"
+              aria-label="Search the team"
+              wrapperClassName="min-w-[190px] max-w-xs flex-1"
+              className="h-8 text-label"
+            />
+            <Select
+              value={role}
+              onChange={(e) => setRole(e.target.value as Role | "all")}
+              aria-label="Filter by role"
+              className="h-8 min-w-[10.5rem] text-label"
+            >
+              <option value="all">Every role</option>
+              {roles.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+            </Select>
+            <Segmented
+              size="sm"
+              value={status}
+              onChange={setStatus}
+              options={[
+                { value: "all", label: `All ${counts.all}` },
+                { value: "active", label: `Active ${counts.active}` },
+                { value: "invited", label: `Invited ${counts.invited}` },
+                { value: "locked", label: `Locked ${counts.locked}` },
+              ]}
+            />
+            {filtering && (
+              <Button variant="ghost" size="sm" onClick={() => { setQ(""); setRole("all"); setStatus("all"); }}>
+                Clear
+              </Button>
+            )}
+            <span className="ml-auto text-caption text-ink-3">
+              {filtering ? `${rows.length} of ${staff.length}` : pluralise(staff.length, "person", "people")}
+            </span>
+          </div>
+        }
+        empty={
+          <EmptyState
+            icon={<IconUsers size={20} />}
+            title={filtering ? "Nobody matches" : "No staff yet"}
+            body={filtering ? "Try another name, or clear the filters." : "Add a person, or import a sheet of them."}
+            compact
+          />
+        }
+      />
+    </Card>
+  );
+}
 
 /**
  * The account's own credential. An invited row has no password at all and the
@@ -131,6 +284,38 @@ function PasswordControl({ user }: { user: User }) {
   );
 }
 
+function EditControl({ user }: { user: User }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <>
+      <Tooltip label={`Edit ${user.name}`} side="top">
+        <Button size="icon-sm" variant="ghost" onClick={() => setOpen(true)} aria-label={`Edit ${user.name}`}>
+          <IconEdit size={14} />
+        </Button>
+      </Tooltip>
+      <EditPersonModal user={user} open={open} onClose={() => setOpen(false)} />
+    </>
+  );
+}
+
+function DeleteControl({ user }: { user: User }) {
+  const { session } = useApp();
+  const [open, setOpen] = React.useState(false);
+  /* nobody deletes the account they are signed in with */
+  if (user.id === session.userId) return <span className="inline-block w-7" aria-hidden />;
+  return (
+    <>
+      <Tooltip label={`Delete ${user.name}`} side="top">
+        <Button size="icon-sm" variant="ghost" onClick={() => setOpen(true)} aria-label={`Delete ${user.name}`}
+                className="hover:text-critical-text">
+          <IconTrash size={14} />
+        </Button>
+      </Tooltip>
+      <DeletePersonDialog user={user} open={open} onClose={() => setOpen(false)} />
+    </>
+  );
+}
+
 function TeamPerson({ user }: { user: User }) {
   const { session } = useApp();
   return (
@@ -141,7 +326,15 @@ function TeamPerson({ user }: { user: User }) {
           {user.name}
           {user.id === session.userId && <Badge tone="accent" size="sm" dot={false}>You</Badge>}
         </p>
-        <p className="truncate text-caption text-ink-3">{user.speciality ?? user.email}</p>
+        {user.speciality && <p className="truncate text-caption text-ink-3">{user.speciality}</p>}
+        {/* the Sign-in column's facts, for the screens that hide that column */}
+        <p className={cn("truncate text-caption text-ink-3", user.speciality && "lg:hidden")}>
+          {user.email}
+          <span className="sm:hidden"> · {ROLE_LABEL[user.role]}</span>
+        </p>
+        {user.failed_attempts > 0 && (
+          <p className="text-micro text-critical-text lg:hidden">{pluralise(user.failed_attempts, "failed attempt")}</p>
+        )}
       </div>
     </div>
   );
@@ -149,21 +342,25 @@ function TeamPerson({ user }: { user: User }) {
 
 function LockControl({ user }: { user: User }) {
   const { session, setUserStatus, notify } = useApp();
-  if (user.id === session.userId) return <span className="text-micro text-ink-3">—</span>;
+  if (user.id === session.userId) return <span className="inline-block w-7 text-center text-micro text-ink-3">—</span>;
+  /* A locked row keeps its words: releasing it — most often after too many
+     wrong passwords — is the thing that row is waiting for. */
   return user.status === "locked" ? (
-    <Tooltip label={`Unlock ${user.name}`} side="top">
-      <Button
-        size="icon-sm"
-        variant="secondary"
-        aria-label={`Unlock ${user.name}`}
-        onClick={() => {
-          setUserStatus(user.id, "active");
-          notify({ tone: "ok", title: `${user.name} unlocked`, body: "They can sign in again." });
-        }}
-      >
-        <IconUnlock size={14} />
-      </Button>
-    </Tooltip>
+    <Button
+      size="sm"
+      variant="secondary"
+      aria-label={`Unlock ${user.name}`}
+      onClick={() => {
+        setUserStatus(user.id, "active");
+        notify({
+          tone: "ok",
+          title: `${user.name} unlocked`,
+          body: "The wrong-password count is cleared — they can sign in again.",
+        });
+      }}
+    >
+      <IconUnlock size={14} /> Unlock
+    </Button>
   ) : (
     <Tooltip label={`Lock ${user.name} out`} side="top">
       <Button
@@ -450,31 +647,13 @@ function Settings({ initial }: { initial: Tab }) {
       )}
 
       {tab === "team" && (
-        <div className="grid grid-cols-1 gap-block lg:grid-cols-[minmax(0,1fr)_19rem]">
-          <Card className="overflow-hidden">
-            <CardHeader
-              icon={<IconUsers size={16} />}
-              title="Team"
-              hint="Role decides which modules a person sees. Locking an account stops them signing in without deleting anything they recorded."
-              actions={
-                can("user:manage") && (
-                  <Button variant="primary" size="sm" onClick={() => setAddPerson(true)}>
-                    <IconPlus size={14} /> Add person
-                  </Button>
-                )
-              }
-            />
-            <DataTable
-              columns={teamColumns}
-              data={staff}
-              getRowId={(u) => u.id}
-              loading={usersPending}
-              pageSize={12}
-              initialSorting={[{ id: "name", desc: false }]}
-              isRowActive={(u) => u.id === session.userId}
-              minWidth="48rem"
-            />
-          </Card>
+        <div className="space-y-block">
+          <TeamTable
+            staff={staff}
+            loading={usersPending}
+            canManage={can("user:manage")}
+            onAdd={() => setAddPerson(true)}
+          />
 
           <Card>
             <CardHeader
@@ -483,7 +662,8 @@ function Settings({ initial }: { initial: Tab }) {
               hint="Suspending a whole clinic is the platform's job, not a practice admin's — that switch lives in the console and takes the subdomain offline."
             />
             <CardBody className="pt-0">
-              <ul className="space-y-2.5 text-label leading-snug text-ink-2">
+              {/* full width under the table, so the four points sit side by side */}
+              <ul className="grid grid-cols-1 gap-x-6 gap-y-2.5 text-label leading-snug text-ink-2 sm:grid-cols-2 xl:grid-cols-4">
                 <li className="flex gap-2"><span className="text-ink-3">·</span> Five wrong passwords lock an account automatically.</li>
                 <li className="flex gap-2"><span className="text-ink-3">·</span> A locked person is signed out of this browser straight away.</li>
                 <li className="flex gap-2"><span className="text-ink-3">·</span> Unlocking clears the failed-attempt counter.</li>
@@ -524,10 +704,16 @@ function SubscriptionTab({ today }: { today: string }) {
     return <p className="py-10 text-center text-label text-ink-3">The bills could not be read. Try again in a moment.</p>;
   }
   const { summary } = data;
+  const paidModules = data.plan?.modules.filter((m) => m.billed).length ?? 0;
 
   return (
     <div className="space-y-block">
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat
+          label="Monthly" value={rentMoney(data.plan?.monthly_total ?? 0, summary.currency)}
+          icon={<IconLayers size={16} />}
+          hint={summary.exempt ? "Not billed by the platform" : pluralise(paidModules, "paid module")}
+        />
         <Stat
           label="Outstanding" value={rentMoney(summary.outstanding, summary.currency)}
           icon={<IconReceipt size={16} />}
@@ -550,6 +736,13 @@ function SubscriptionTab({ today }: { today: string }) {
           This clinic is not billed by the platform.
         </p>
       )}
+
+      <SettingsSection
+        title="Your plan"
+        hint="Every module switched on for this clinic, what each costs a month today, and whether the next bill charges for it. Core modules are included; a module on trial is not billed until the trial ends."
+      >
+        <SubscriptionPlan subscription={data} />
+      </SettingsSection>
 
       <SettingsSection
         title="Bills"
@@ -1220,6 +1413,198 @@ function AddPersonModal({ open, onClose }: { open: boolean; onClose: () => void 
        the resetting is spared only when you are resetting your own;
      · it is not an unlock. A locked account stays locked.
    ========================================================================== */
+
+/**
+ * A colleague's details, corrected. Only what changed is sent. The role is
+ * read-only on your own row — the server refuses that change, because an admin
+ * who demotes themselves cannot undo it — and a new email is a new username,
+ * so the form says what happens to a link already sent.
+ */
+function EditPersonModal({ user, open, onClose }: { user: User; open: boolean; onClose: () => void }) {
+  const { session, updateUser, notify } = useApp();
+  const { data: staff } = useUsers();
+  const own = user.id === session.userId;
+
+  const [name, setName] = React.useState(user.name);
+  const [email, setEmail] = React.useState(user.email);
+  const [role, setRole] = React.useState<Role>(user.role);
+  const [speciality, setSpeciality] = React.useState(user.speciality ?? "");
+  const [busy, setBusy] = React.useState(false);
+  const [refused, setRefused] = React.useState<string | null>(null);
+
+  /* each opening starts from the row as it is now */
+  React.useEffect(() => {
+    if (!open) return;
+    setName(user.name); setEmail(user.email); setRole(user.role); setSpeciality(user.speciality ?? "");
+    setBusy(false); setRefused(null);
+  }, [open, user]);
+
+  const trimmedName = name.trim();
+  const address = email.trim().toLowerCase();
+  const emailChanged = address !== user.email.toLowerCase();
+  const duplicate = emailChanged && staff.some((u) => u.id !== user.id && u.email.toLowerCase() === address);
+  const nameError = trimmedName.length < 2 ? "At least two characters." : null;
+  const emailError = !EMAIL_SHAPE.test(address)
+    ? "An address they can be reached at — it is also their username."
+    : duplicate ? "Someone here already signs in with that." : null;
+
+  const changes: api.UserChanges = {};
+  if (trimmedName !== user.name) changes.name = trimmedName;
+  if (emailChanged) changes.email = address;
+  if (role !== user.role) changes.role = role;
+  if (speciality.trim() !== (user.speciality ?? "")) changes.speciality = speciality.trim();
+  const dirty = Object.keys(changes).length > 0;
+
+  const save = async () => {
+    if (nameError || emailError || !dirty) return;
+    setBusy(true);
+    setRefused(null);
+    try {
+      const saved = await updateUser(user.id, changes);
+      notify({
+        tone: "ok",
+        title: `${saved.name} updated`,
+        body: changes.role
+          ? `Now ${ROLE_LABEL[saved.role].toLowerCase()} — it applies from their next click.`
+          : changes.email && saved.status === "invited"
+            ? `A fresh invitation has gone to ${saved.email}.`
+            : undefined,
+      });
+      onClose();
+    } catch (error) {
+      setRefused(error instanceof Error ? error.message : "That change was not saved.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Edit ${user.name}`}
+      subtitle="Their details in this clinic. What they recorded keeps the name it was recorded under."
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="primary" onClick={() => { void save(); }}
+                  disabled={busy || !dirty || !!nameError || !!emailError}>
+            <IconCheck size={15} /> {busy ? "Saving…" : "Save changes"}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {refused && (
+          <div role="alert" className="flex gap-2.5 rounded-[var(--r)] border border-critical-border bg-critical-soft p-3">
+            <IconAlert size={16} className="mt-px shrink-0 text-critical-text" />
+            <p className="text-label leading-snug text-critical-text">{refused}</p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Full name" required error={nameError}>
+            <Input value={name} onChange={(e) => setName(e.target.value)} invalid={!!nameError} />
+          </Field>
+          <Field label="Email" required error={emailError}
+                 help={!emailError && emailChanged
+                   ? user.status === "invited"
+                     ? "Their invitation moves to this address."
+                     : "They sign in with this from now on."
+                   : undefined}>
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} invalid={!!emailError} />
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Role" help={own ? "Another practice admin can change your role." : "Applies from their next click."}>
+            <Select value={role} onChange={(e) => setRole(e.target.value as Role)} disabled={own}>
+              {ROLE_CHOICES.map((r) => <option key={r.value} value={r.value}>{ROLE_LABEL[r.value]}</option>)}
+            </Select>
+          </Field>
+          <Field label="Speciality" help="Shown under their name, and on the diary for a clinician.">
+            <Input value={speciality} onChange={(e) => setSpeciality(e.target.value)} placeholder="Endodontics" />
+          </Field>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Removing someone. Only an account that never recorded anything can go —
+ * the server counts what their name is on and refuses otherwise, and this
+ * dialog turns that refusal into the thing to do instead: lock the account.
+ */
+function DeletePersonDialog({ user, open, onClose }: { user: User; open: boolean; onClose: () => void }) {
+  const { deleteUser, setUserStatus, notify } = useApp();
+  const [busy, setBusy] = React.useState(false);
+  const [refused, setRefused] = React.useState<string | null>(null);
+
+  React.useEffect(() => { if (open) { setBusy(false); setRefused(null); } }, [open]);
+
+  const remove = async () => {
+    setBusy(true);
+    try {
+      await deleteUser(user.id);
+      notify({ tone: "ok", title: `${user.name} removed`, body: "Their account is gone from this clinic." });
+      onClose();
+    } catch (error) {
+      setRefused(error instanceof Error ? error.message : "That account was not removed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const lockInstead = () => {
+    setUserStatus(user.id, "locked");
+    notify({ tone: "warn", title: `${user.name} locked`, body: "Their sign-in is refused; what they recorded stays." });
+    onClose();
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={busy ? () => undefined : onClose}
+      width="sm"
+      title={refused ? `${user.name} can't be deleted` : `Delete ${user.name}?`}
+      subtitle={refused ? undefined : "For an account that was added by mistake. This cannot be undone."}
+      footer={
+        refused ? (
+          <>
+            <Button variant="ghost" onClick={onClose}>Close</Button>
+            {user.status !== "locked" && (
+              <Button variant="primary" onClick={lockInstead}>
+                <IconLock size={15} /> Lock instead
+              </Button>
+            )}
+          </>
+        ) : (
+          <>
+            <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
+            <Button variant="danger" onClick={() => { void remove(); }} disabled={busy}>
+              <IconTrash size={15} /> {busy ? "Deleting…" : "Delete"}
+            </Button>
+          </>
+        )
+      }
+    >
+      {refused ? (
+        <p className="flex items-start gap-2 rounded-[var(--r)] border border-warn-border bg-warn-soft px-3 py-2.5 text-label leading-snug text-warn-text">
+          <IconAlert size={15} className="mt-px shrink-0" /> {refused}
+        </p>
+      ) : (
+        <div className="flex items-center gap-3 rounded-[var(--r)] border border-line bg-surface-2 p-3.5">
+          <Avatar name={user.name} initials={user.initials} tintKey={user.id} />
+          <div className="min-w-0">
+            <p className="truncate font-medium text-ink">{user.name}</p>
+            <p className="truncate text-caption text-ink-3">{ROLE_LABEL[user.role]} · {user.email}</p>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
 
 function SetPasswordModal({
   user, open, onClose,

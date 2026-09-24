@@ -9,7 +9,7 @@ import { useApp, useTenant } from "@/lib/store/app-store";
 import { useRailCounters } from "@/lib/query/hooks";
 import { SUPPORT, telHref } from "@/lib/support";
 import {
-  IconChevronDown, IconInfo, IconLock, IconLogout, IconMail, IconPhone, IconSidebar, IconSpark,
+  IconChevronCircleLeft, IconChevronDown, IconChevronRight, IconInfo, IconLock, IconLogout, IconMail, IconPhone, IconSpark,
 } from "@/components/ui/icons";
 import { Tooltip } from "@/components/ui/info";
 import { Menu, MenuItem, MenuLabel, MenuSep } from "@/components/ui/modal";
@@ -74,20 +74,29 @@ export function Rail({
       <div
         data-tour="rail-tenant"
         className={cn(
-          "flex h-[var(--topbar-h)] shrink-0 items-center gap-1.5 border-b border-rail-line",
+          "relative flex h-[var(--topbar-h)] shrink-0 items-center gap-1.5 border-b border-rail-line",
           collapsed ? "justify-center px-2" : "pl-2.5 pr-1.5",
         )}
       >
         {collapsed ? (
-          <Tooltip label={`${tenant.name} — expand`}>
-            <button
-              onClick={onToggle}
-              aria-label="Expand sidebar"
-              className="rounded-[var(--r-sm)] p-0.5 transition-colors hover:bg-hover"
-            >
-              <Monogram name={tenant.name} size={28} />
-            </button>
-          </Tooltip>
+          <>
+            <Tooltip label={tenant.name}>
+              <span className="block">
+                <Monogram name={tenant.name} size={28} />
+              </span>
+            </Tooltip>
+            {/* 56px holds the clinic and nothing else, so the way back out
+                sits on the rail's edge, half over the border */}
+            <Tooltip label="Expand sidebar">
+              <button
+                onClick={onToggle}
+                aria-label="Expand sidebar"
+                className="absolute -right-3 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-full border border-rail-line bg-rail text-rail-ink-dim shadow-e1 transition-colors hover:bg-rail-2 hover:text-rail-ink-strong"
+              >
+                <IconChevronRight size={14} />
+              </button>
+            </Tooltip>
+          </>
         ) : (
           <>
             <Menu
@@ -147,7 +156,7 @@ export function Rail({
                   aria-label="Collapse sidebar"
                   className="shrink-0 rounded-[var(--r-sm)] p-1.5 text-rail-ink-dim transition-colors hover:bg-rail-2 hover:text-rail-ink-strong"
                 >
-                  <IconSidebar size={16} />
+                  <IconChevronCircleLeft size={18} />
                 </button>
               </Tooltip>
             )}
