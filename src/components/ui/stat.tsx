@@ -42,9 +42,9 @@ export function Stat({
           <span
             className={cn(
               "flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--r-sm)]",
-              /* A tile keyed to the figure's own tone: a warning stat gets an
-                 amber glyph, an ordinary one the house blue. */
-              toneTile[tone === "ink" ? "accent" : tone],
+              /* A tile only when the figure carries state — an amber glyph on a
+                 warning stat. An ordinary figure's glyph sits bare and muted. */
+              tone === "ink" || tone === "accent" ? "text-ink-3" : toneTile[tone],
             )}
             aria-hidden
           >

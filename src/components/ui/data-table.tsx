@@ -185,8 +185,8 @@ export function DataTable<T extends RowData>({
         {busy && !firstLoad && <LoadingBar />}
         <div
           className="-mx-px overflow-x-auto overscroll-x-contain"
-          /* the previous page stays legible while the next one is in flight */
-          style={busy && !firstLoad ? { opacity: 0.55, transition: "opacity var(--d-2) var(--ease-out)" } : undefined}
+          /* the previous page stays fully legible while the next one is in
+             flight; the bar above says it is working, the text is not faded */
           aria-busy={busy || undefined}
         >
           <table className="w-full border-collapse text-left" style={{ minWidth }}>

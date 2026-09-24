@@ -111,7 +111,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
         )}
         style={{ animation: "drawerin var(--d-3) var(--ease-out) both" }}
       >
-        <style>{"@keyframes drawerin{from{transform:translateX(24px);opacity:.4}to{transform:none;opacity:1}}"}</style>
+        <style>{"@keyframes drawerin{from{transform:translateX(24px)}to{transform:none}}"}</style>
         <div className="flex items-start justify-between gap-4 border-b border-line-soft px-6 py-4">
           <div className="min-w-0">
             <h2 className="font-display text-title font-semibold leading-tight text-ink">{title}</h2>
@@ -203,7 +203,7 @@ export function MenuItem({
       className={cn(
         "flex w-full items-center gap-2.5 rounded-[var(--r-sm)] px-2.5 py-2 text-left text-label transition-colors duration-100",
         tone === "critical" ? "text-critical-text hover:bg-critical-soft" : "text-ink hover:bg-hover",
-        disabled && "pointer-events-none opacity-65",
+        disabled && "pointer-events-none !text-disabled-ink [&_*]:!text-disabled-ink",
       )}
     >
       {icon && <span className="text-ink-3">{icon}</span>}

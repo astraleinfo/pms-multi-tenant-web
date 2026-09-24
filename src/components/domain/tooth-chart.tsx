@@ -104,7 +104,7 @@ export function ToothChart({
         )}
       >
         {known ? <IconTooth size={15} /> : <span className="text-micro leading-none">?</span>}
-        <span className="tnum font-mono text-micro leading-none opacity-80">{n}</span>
+        <span className="tnum text-micro leading-none">{n}</span>
       </button>
     );
   };

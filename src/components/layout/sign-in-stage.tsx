@@ -22,7 +22,7 @@ export function UnknownTenantStage({ slug }: { slug: string | null }) {
         </p>
         <a
           href={consoleUrl()}
-          className="mt-6 inline-flex h-10 items-center gap-2 rounded-[var(--r)] bg-stage-ink px-4 text-body font-medium text-stage transition-opacity hover:opacity-90"
+          className="mt-6 inline-flex h-10 items-center gap-2 rounded-[var(--r)] bg-stage-ink px-4 text-body font-medium text-stage transition-[filter] hover:brightness-110"
         >
           Platform console <IconArrowRight size={15} />
         </a>
@@ -50,7 +50,7 @@ export function SuspendedTenantStage({ name }: { name: string }) {
           href={consoleUrl()}
           className={cn(
             "mt-6 inline-flex h-10 items-center gap-2 rounded-[var(--r)] bg-stage-ink px-4",
-            "text-body font-medium text-stage transition-opacity hover:opacity-90",
+            "text-body font-medium text-stage transition-[filter] hover:brightness-110",
           )}
         >
           Platform console <IconArrowRight size={15} />
@@ -95,7 +95,7 @@ export function ApexStage() {
         </p>
         <a
           href={consoleUrl()}
-          className="mt-6 inline-flex h-10 items-center gap-2 rounded-[var(--r)] bg-stage-ink px-4 text-body font-medium text-stage transition-opacity hover:opacity-90"
+          className="mt-6 inline-flex h-10 items-center gap-2 rounded-[var(--r)] bg-stage-ink px-4 text-body font-medium text-stage transition-[filter] hover:brightness-110"
         >
           Super-admin console <IconArrowRight size={15} />
         </a>

@@ -1,6 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/cn";
-import { InfoHint } from "./info";
+import { InfoHint, quietHint } from "./info";
 
 /**
  * Settings, as a list rather than as a wall of cards.
@@ -39,10 +39,10 @@ export function SettingsSection({
       className={cn("overflow-hidden rounded-[var(--r-lg)] border border-line bg-surface", className)}
     >
       {(title || actions) && (
-        <header className="flex items-center justify-between gap-3 border-b border-line bg-surface-2 px-4 py-2.5">
+        <header className="group/hint flex items-center justify-between gap-3 border-b border-line bg-surface-2 px-4 py-2.5">
           <div className="flex min-w-0 items-center gap-1.5">
             <h2 className="truncate text-label font-semibold text-ink">{title}</h2>
-            {hint && <InfoHint label={`About ${typeof title === "string" ? title : "this section"}`}>{hint}</InfoHint>}
+            {hint && <InfoHint className={quietHint} label={`About ${typeof title === "string" ? title : "this section"}`}>{hint}</InfoHint>}
           </div>
           {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
         </header>
@@ -93,7 +93,7 @@ export function SettingRow({
   return (
     <div
       className={cn(
-        "flex flex-col gap-2 px-4 py-row sm:flex-row sm:gap-6",
+        "group/hint flex flex-col gap-2 px-4 py-row sm:flex-row sm:gap-6",
         align === "center" ? "sm:items-center" : "sm:items-start",
         className,
       )}
@@ -107,7 +107,7 @@ export function SettingRow({
         )}
       >
         <span className="min-w-0">{label}</span>
-        {hint && <InfoHint label={`About ${typeof label === "string" ? label : "this setting"}`}>{hint}</InfoHint>}
+        {hint && <InfoHint className={quietHint} label={`About ${typeof label === "string" ? label : "this setting"}`}>{hint}</InfoHint>}
         {badge}
       </Tag>
       <div
@@ -140,10 +140,10 @@ export function SettingToggleRow({
   badge?: React.ReactNode;
 }) {
   return (
-    <div className={cn("flex items-center justify-between gap-6 px-4 py-row", className)}>
+    <div className={cn("group/hint flex items-center justify-between gap-6 px-4 py-row", className)}>
       <div className="flex min-w-0 items-center gap-1.5 text-label font-medium text-ink">
         <span className="min-w-0">{label}</span>
-        {hint && <InfoHint label={`About ${typeof label === "string" ? label : "this setting"}`}>{hint}</InfoHint>}
+        {hint && <InfoHint className={quietHint} label={`About ${typeof label === "string" ? label : "this setting"}`}>{hint}</InfoHint>}
         {badge}
       </div>
       <div className="shrink-0">{children}</div>
@@ -161,10 +161,10 @@ export function SettingLinkRow({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-wrap items-center justify-between gap-3 px-4 py-row", className)}>
+    <div className={cn("group/hint flex flex-wrap items-center justify-between gap-3 px-4 py-row", className)}>
       <div className="flex min-w-0 items-center gap-1.5 text-label font-medium text-ink">
         <span className="min-w-0">{label}</span>
-        {hint && <InfoHint>{hint}</InfoHint>}
+        {hint && <InfoHint className={quietHint}>{hint}</InfoHint>}
       </div>
       <div className="flex shrink-0 items-center gap-2">{children}</div>
     </div>
@@ -186,10 +186,10 @@ export function SettingValueRow({
   return (
     /* A tighter gap than the control rows: these often sit in a narrow
        sidebar, where `gap-6` is what makes a two-word label wrap. */
-    <div className={cn("flex items-baseline justify-between gap-3 px-4 py-row", className)}>
+    <div className={cn("group/hint flex items-baseline justify-between gap-3 px-4 py-row", className)}>
       <div className="flex min-w-0 shrink items-center gap-1.5 text-label text-ink-2">
         <span className="min-w-0">{label}</span>
-        {hint && <InfoHint>{hint}</InfoHint>}
+        {hint && <InfoHint className={quietHint}>{hint}</InfoHint>}
       </div>
       <div className="min-w-0 shrink-0 text-right text-label font-medium text-ink">{value}</div>
     </div>
@@ -233,10 +233,10 @@ export function DangerRow({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-wrap items-center justify-between gap-3 px-4 py-row", className)}>
+    <div className={cn("group/hint flex flex-wrap items-center justify-between gap-3 px-4 py-row", className)}>
       <div className="flex min-w-0 items-center gap-1.5 text-label font-medium text-ink">
         <span className="min-w-0">{label}</span>
-        {hint && <InfoHint>{hint}</InfoHint>}
+        {hint && <InfoHint className={quietHint}>{hint}</InfoHint>}
       </div>
       <div className="flex shrink-0 items-center gap-2">{children}</div>
     </div>

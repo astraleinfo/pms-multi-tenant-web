@@ -46,7 +46,6 @@ export default function PricingPage() {
 }
 
 function Pricing() {
-  const { config } = useApp();
   const { tenant } = useTenant();
   const { data: prices, isPending } = useServicePrices();
 
@@ -77,7 +76,7 @@ function Pricing() {
         eyebrow="Practice"
         title="Pricing"
         description="What this clinic charges for everything that is not stock: the consultation, each procedure, and every scan by its own code. Billing quotes these — nothing here is a number in the code, and no two clinics have to agree."
-        meta={<span className="text-label text-ink-2">Prices are in {config.currency}</span>}
+        meta={<span className="text-label text-ink-2">Prices are in Indian rupees (₹)</span>}
         actions={
           <>
             <Button variant="secondary" onClick={() => setImporting(true)}>
@@ -418,7 +417,7 @@ function PriceModal({
         </Field>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label={`Price (${config.currency})`} required>
+          <Field label="Price (₹)" required>
             <NumberInput min={0} step="0.01" value={amount} onChange={setAmount} />
           </Field>
           <Field label="Tax %" help="Applied to this line when it is billed.">
@@ -496,7 +495,7 @@ function ImportModal({ open, onClose }: { open: boolean; onClose: () => void }) 
     >
       <div className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label={`Starting price (${config.currency})`} required>
+          <Field label="Starting price (₹)" required>
             <NumberInput min={0} step="0.01" value={amount} onChange={setAmount} />
           </Field>
           <Field label="Tax %">

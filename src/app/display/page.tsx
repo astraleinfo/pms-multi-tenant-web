@@ -87,7 +87,8 @@ export default function DisplayPage() {
                   key={q.id}
                   className="rise rounded-[var(--r-xl)] border border-accent/40 bg-accent/[0.12] p-7"
                 >
-                  <p className="text-micro uppercase tracking-[0.18em] text-accent-hover">
+                  {/* the night-shift accent text: the house blue itself is too dark to read on this stage */}
+                  <p className="text-label font-medium uppercase tracking-[0.14em] text-[#A6C0F5]">
                     {q.status === "called" ? "Called" : "In consultation"}
                   </p>
                   <p className="tnum mt-3 font-mono text-[clamp(3.5rem,11vw,6rem)] font-semibold leading-none text-stage-ink">
@@ -118,7 +119,7 @@ export default function DisplayPage() {
                   </p>
                   <p className="mt-2 text-body text-stage-dim">{shortName(q.patient_name)}</p>
                   {q.priority === "urgent" && (
-                    <p className="mt-1 text-micro uppercase tracking-[0.12em] text-accent-hover">Priority</p>
+                    <p className="mt-1 text-caption font-medium uppercase tracking-[0.1em] text-[#A6C0F5]">Priority</p>
                   )}
                 </li>
               ))}

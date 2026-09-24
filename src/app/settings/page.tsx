@@ -5,14 +5,18 @@ import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useApp, useTenant } from "@/lib/store/app-store";
 import {
-  useClinicDb, useFeatureCatalog, useSchema, useAnalytics, useSubscription, useUsers,
+  useClinicDb, useFeatureCatalog, useSchema, useSubscription, useUsers,
 } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
+import { cn } from "@/lib/cn";
 import { CLINICAL_TYPES, FEATURES } from "@/lib/data/catalog";
 import { activeFeatureKeys, selectUsers } from "@/lib/data/repository";
 import { ROLE_LABEL, modulePath } from "@/lib/nav";
 import { currency, formatDate, formatTime12, pluralise, titleCase } from "@/lib/format";
-import type { FieldDefinition, FieldType, Role, User } from "@/lib/types";
+import type { AppointmentType, FieldDefinition, FieldType, Role, User } from "@/lib/types";
+import {
+  appointmentTypes, formatLength, newTypeId, slotTimes, TYPE_LENGTHS, typeListProblem,
+} from "@/lib/appointment-types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader, Legend } from "@/components/ui/card";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -40,7 +44,7 @@ import { HowToPay, SubscriptionBills, rentMoney } from "@/components/domain/subs
 import { Stat } from "@/components/ui/stat";
 import { InfoHint, Tooltip } from "@/components/ui/info";
 
-type Tab = "practice" | "config" | "features" | "subscription" | "fields" | "team" | "isolation";
+type Tab = "practice" | "config" | "features" | "subscription" | "fields" | "team";
 
 const userCol = columnHelperFor<User>();
 
@@ -75,11 +79,14 @@ const teamColumns = userCol.columns([
   }),
   userCol.accessor("status", {
     header: "Account", meta: { align: "right" },
-    cell: ({ getValue }) => (
-      <Badge tone={getValue() === "active" ? "ok" : getValue() === "invited" ? "warn" : "critical"} size="sm" dot>
-        {titleCase(getValue())}
-      </Badge>
-    ),
+    /* an active account is the ordinary case; invited and locked are the ones to act on */
+    cell: ({ getValue }) => getValue() === "active"
+      ? <span className="text-caption text-ink-3">Active</span>
+      : (
+        <Badge tone={getValue() === "invited" ? "warn" : "critical"} size="sm" dot>
+          {titleCase(getValue())}
+        </Badge>
+      ),
   }),
   userCol.display({
     id: "actions",
@@ -242,7 +249,6 @@ function Settings({ initial }: { initial: Tab }) {
           { value: "subscription", label: "Subscription", icon: <IconReceipt size={15} /> },
           { value: "fields", label: "Custom fields", icon: <IconList size={15} />, count: customFields.length },
           { value: "team", label: "Team", icon: <IconUsers size={15} />, count: staff.length },
-          { value: "isolation", label: "Isolation", icon: <IconShield size={15} /> },
         ]}
       />
 
@@ -251,7 +257,7 @@ function Settings({ initial }: { initial: Tab }) {
           <div className="min-w-0 space-y-block">
             <SettingsSection
               title="Practice profile"
-              hint="The identity of the tenant everything else hangs off. Profile edits are cosmetic in this demo — the two things that genuinely change the app, entitlements and custom fields, are on their own tabs and are wired end to end."
+              hint="Your clinic’s name and where it is."
             >
               {/* who this is, once, at the top — not repeated in the header */}
               <div className="flex items-center gap-3 px-4 py-3">
@@ -316,7 +322,7 @@ function Settings({ initial }: { initial: Tab }) {
               hint={`${clinical.blurb} A clinical type never gates a module: a dental clinic without a pharmacy still prescribes, and an eye clinic with a lab still uses the same encounter table.`}
             >
               <SettingValueRow label="Workflow" value={clinical.label} />
-              <SettingValueRow label="Exam payload" value={clinical.examLabel} />
+              <SettingValueRow label="Exam" value={clinical.examLabel} />
               <SettingValueRow
                 label="Patient fields added"
                 value={db.fieldDefinitions.filter((f) => f.scope === "clinical_type" && f.clinical_type === tenant.clinical_type && f.entity === "patient").length}
@@ -490,7 +496,6 @@ function Settings({ initial }: { initial: Tab }) {
 
       {tab === "subscription" && <SubscriptionTab today={tenant.today} />}
 
-      {tab === "isolation" && <IsolationTab />}
 
       <AddFieldModal open={addField} onClose={() => setAddField(false)} />
       <AddPersonModal open={addPerson} onClose={() => setAddPerson(false)} />
@@ -579,18 +584,18 @@ function ConfigurationTab() {
     setDraft((d) => ({ ...d, [key]: value }));
   const dirty = JSON.stringify(draft) !== JSON.stringify(config);
 
-  const slots = React.useMemo(() => {
-    const out: string[] = [];
-    const [sh, sm] = draft.day_start.split(":").map(Number);
-    const [eh, em] = draft.day_end.split(":").map(Number);
-    for (let m = sh * 60 + sm; m + draft.default_duration <= eh * 60 + em; m += draft.slot_minutes) {
-      out.push(`${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`);
-    }
-    return out;
-  }, [draft.day_start, draft.day_end, draft.slot_minutes, draft.default_duration]);
+  const types = appointmentTypes(draft);
+  const typeProblem = typeListProblem(types);
+  const setTypes = (next: AppointmentType[]) => set("appointment_types", next);
+  const editType = (id: string, patch: Partial<AppointmentType>) =>
+    setTypes(types.map((t) => (t.id === id ? { ...t, ...patch } : t)));
 
   const save = () => {
-    updateConfig(draft);
+    if (typeProblem) return;
+    /* the first type is what a new booking starts as, so the old single
+       "default length" follows it rather than drifting away from it */
+    const cleaned = types.map((t) => ({ ...t, name: t.name.trim() }));
+    updateConfig({ ...draft, appointment_types: cleaned, default_duration: cleaned[0].minutes });
     notify({ tone: "ok", title: "Configuration saved", body: "Numbering, the diary and billing follow it from now on." });
   };
 
@@ -648,18 +653,61 @@ function ConfigurationTab() {
             <Input id="cfg-end" type="time" value={draft.day_end}
                    onChange={(e) => set("day_end", e.target.value)} />
           </SettingRow>
-          <SettingRow label="Slot interval" htmlFor="cfg-slot" width="md" hint="How far apart the diary's bookable slots sit.">
-            <Select id="cfg-slot" value={String(draft.slot_minutes)}
-                    onChange={(e) => set("slot_minutes", Number(e.target.value) as 15 | 20 | 30)}>
-              {[15, 20, 30].map((m) => <option key={m} value={m}>{m} minutes</option>)}
-            </Select>
-          </SettingRow>
-          <SettingRow label="Default length" htmlFor="cfg-dur" width="md" hint="What a new booking is given unless it is changed.">
-            <Select id="cfg-dur" value={String(draft.default_duration)}
-                    onChange={(e) => set("default_duration", Number(e.target.value))}>
-              {[15, 20, 30, 45, 60].map((m) => <option key={m} value={m}>{m} minutes</option>)}
-            </Select>
-          </SettingRow>
+        </SettingsSection>
+
+        <SettingsSection
+          title="Appointment types"
+          hint="Each type's length is also its slot interval — a 45-minute visit is offered every 45 minutes. The first type is what a new booking starts as."
+          actions={
+            <Button size="sm" variant="secondary" disabled={types.length >= 20}
+                    onClick={() => setTypes([...types, { id: newTypeId(), name: "", minutes: 30 }])}>
+              <IconPlus size={14} /> Add type
+            </Button>
+          }
+        >
+          <div className="hidden grid-cols-[minmax(0,1fr)_10rem_5.5rem_2rem] gap-3 px-4 pt-2.5 text-caption font-medium text-ink-2 sm:grid">
+            <span>Name</span><span>Length and slot interval</span><span className="text-right">Slots a day</span><span />
+          </div>
+          {types.map((t, i) => {
+            const perDay = slotTimes(draft.day_start, draft.day_end, t.minutes).length;
+            return (
+              <div key={t.id} className="grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-3 px-4 py-2.5 sm:grid-cols-[minmax(0,1fr)_10rem_5.5rem_2rem]">
+                <Input
+                  aria-label={`Name of appointment type ${i + 1}`}
+                  value={t.name}
+                  placeholder="e.g. Root canal"
+                  maxLength={60}
+                  invalid={!t.name.trim()}
+                  onChange={(e) => editType(t.id, { name: e.target.value })}
+                />
+                <Select
+                  aria-label={`Length of ${t.name || "this type"}`}
+                  className="col-start-1 sm:col-start-auto"
+                  value={String(t.minutes)}
+                  onChange={(e) => editType(t.id, { minutes: Number(e.target.value) })}
+                >
+                  {Array.from(new Set([...TYPE_LENGTHS, t.minutes])).sort((a, b) => a - b).map((m) => (
+                    <option key={m} value={m}>{formatLength(m)}</option>
+                  ))}
+                </Select>
+                <span className={cn("tnum text-label sm:text-right", perDay ? "text-ink-2" : "text-critical-text")}>
+                  {perDay ? perDay : "Doesn’t fit"}
+                </span>
+                <Button
+                  size="icon-sm" variant="ghost"
+                  className="col-start-2 row-start-1 sm:col-start-auto sm:row-start-auto"
+                  disabled={types.length === 1}
+                  aria-label={`Remove ${t.name || "this type"}`}
+                  onClick={() => setTypes(types.filter((x) => x.id !== t.id))}
+                >
+                  <IconTrash size={15} />
+                </Button>
+              </div>
+            );
+          })}
+          {typeProblem && (
+            <p role="alert" className="px-4 py-2.5 text-label text-critical-text">{typeProblem}</p>
+          )}
         </SettingsSection>
 
         <SettingsSection title="Billing">
@@ -667,15 +715,8 @@ function ConfigurationTab() {
             <Input id="cfg-inv" value={draft.invoice_prefix} className="tnum font-mono"
                    onChange={(e) => set("invoice_prefix", e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ""))} />
           </SettingRow>
-          <SettingRow label="Currency" htmlFor="cfg-ccy" width="md" hint="Every figure in the app follows this.">
-            <Select id="cfg-ccy" value={draft.currency}
-                    onChange={(e) => set("currency", e.target.value as typeof draft.currency)}>
-              <option value="INR">Indian rupee (₹)</option>
-              <option value="GBP">Pound sterling (£)</option>
-              <option value="EUR">Euro (€)</option>
-              <option value="USD">US dollar ($)</option>
-            </Select>
-          </SettingRow>
+          {/* Astrale bills in rupees only, so this is a fact, not a choice */}
+          <SettingValueRow label="Currency" value="Indian rupee (₹)" />
           <SettingRow label="Tax rate" htmlFor="cfg-tax" hint="Applied to new invoice lines. Invoices already raised keep the rate they were raised at." suffix="%" width="sm">
             <NumberInput id="cfg-tax" min={0} max={40} step="0.5" value={draft.tax_pct}
                          onChange={(n) => set("tax_pct", n)} />
@@ -707,7 +748,7 @@ function ConfigurationTab() {
             last one — it commits all five, not Inventory. */}
         <SettingsActions note={dirty ? "Unsaved changes" : "Saved — every module reads these values."}>
           <Button variant="ghost" onClick={() => setDraft(config)} disabled={!dirty}>Discard</Button>
-          <Button variant="primary" disabled={!dirty} onClick={save}>
+          <Button variant="primary" disabled={!dirty || !!typeProblem} onClick={save}>
             <IconCheck size={15} /> Save changes
           </Button>
         </SettingsActions>
@@ -730,26 +771,33 @@ function ConfigurationTab() {
 
         <SettingsSection
           title="Diary shape"
-          hint={`${pluralise(slots.length, "bookable slot")} a day, from the times and the interval on the left.`}
+          hint="The start times the booking dialog offers for each type, from the day's opening and closing times."
         >
-          <div className="px-4 py-row">
-            {slots.length === 0 ? (
-              <p className="text-label text-critical-text">
-                The day ends before a {draft.default_duration}-minute appointment fits.
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {slots.slice(0, 14).map((t) => (
-                  <span key={t} className="tnum rounded-[var(--r-sm)] border border-line bg-surface-2 px-2 py-1 font-mono text-micro text-ink-2">
-                    {formatTime12(t)}
-                  </span>
-                ))}
-                {slots.length > 14 && (
-                  <span className="self-center text-caption text-ink-3">+{slots.length - 14} more</span>
+          {types.map((t) => {
+            const times = slotTimes(draft.day_start, draft.day_end, t.minutes);
+            return (
+              <div key={t.id} className="px-4 py-row">
+                <p className="flex items-baseline justify-between gap-2 text-label">
+                  <span className="truncate font-medium text-ink">{t.name.trim() || "Unnamed type"}</span>
+                  <span className="shrink-0 text-caption text-ink-2">every {formatLength(t.minutes)}</span>
+                </p>
+                {times.length === 0 ? (
+                  <p className="mt-1.5 text-caption text-critical-text">The day is shorter than one of these.</p>
+                ) : (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {times.slice(0, 6).map((time) => (
+                      <span key={time} className="tnum rounded-[var(--r-sm)] border border-line bg-surface-2 px-2 py-1 text-micro text-ink-2">
+                        {formatTime12(time)}
+                      </span>
+                    ))}
+                    {times.length > 6 && (
+                      <span className="self-center text-caption text-ink-2">+{times.length - 6} more</span>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
+            );
+          })}
         </SettingsSection>
 
         <SettingsSection title="Not configuration">
@@ -792,91 +840,14 @@ function SchemaPreview() {
   return (
     <Card>
       <CardHeader
-        icon={<IconLayers size={15} />} tone="violet" title="Resolved schema"
-        hint="What the dynamic forms will render right now. Order is common → clinical type → clinic, and a later scope wins on a key collision — nothing downstream knows which scope a field came from."
+        icon={<IconLayers size={15} />} title="Fields on your forms"
+        hint="What staff see on the patient and consultation forms right now, including the fields your clinic added."
       />
       <CardBody className="space-y-block pt-0">
         {row(`Patient · ${pluralise(patient.length, "field")}`, patient)}
         {row(`Encounter · ${pluralise(encounter.length, "field")}`, encounter)}
       </CardBody>
     </Card>
-  );
-}
-
-function IsolationTab() {
-  const { session } = useApp();
-  const db = useClinicDb();
-  const { tenant } = useTenant();
-
-  /* Every row this session holds belongs to this clinic — there is nothing to
-     compare against, because another clinic's rows never left the database. */
-  const { data: analytics } = useAnalytics(30);
-  const counts = [
-    { label: "Patients", n: analytics?.core.patients ?? 0, note: "counted in the database" },
-    { label: "Appointments", n: db.appointments.length, note: "loaded for this clinic" },
-    { label: "Queue entries", n: db.queue.length, note: "loaded for this clinic" },
-    { label: "Encounters", n: db.encounters.length, note: "loaded for this clinic" },
-    { label: "Prescriptions", n: db.prescriptions.length, note: "loaded for this clinic" },
-    { label: "Lab orders", n: db.labOrders.length, note: "loaded for this clinic" },
-    { label: "Stock movements", n: db.inventoryTx.length, note: "loaded for this clinic" },
-    { label: "Invoices", n: db.invoices.length, note: "loaded for this clinic" },
-  ];
-
-  return (
-    <div className="grid grid-cols-1 gap-block lg:grid-cols-[minmax(0,1fr)_20rem]">
-      <Card>
-        <CardHeader
-          tone="info" icon={<IconShield size={16} />}
-          title="What this session can see"
-          hint={`Signed in to ${tenant.name}. These are the rows this session holds — and they are all of the rows it could ever hold, because another clinic's never leave the database.`}
-        />
-        <CardBody className="pt-0">
-          <TableWrap>
-            <Table>
-              <THead>
-                <tr><TH>Collection</TH><TH align="right">Rows</TH><TH align="right">Where the filter runs</TH></tr>
-              </THead>
-              <TBody>
-                {counts.map((c) => (
-                  <TR key={c.label}>
-                    <TD>{c.label}</TD>
-                    <TD align="right" className="tnum font-mono font-medium text-ink">{c.n}</TD>
-                    <TD align="right" className="text-caption text-ink-3">{c.note}</TD>
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
-          </TableWrap>
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader
-          tone="neutral" icon={<IconLock size={16} />}
-          title="Where scoping happens"
-          hint="The tenant is never read from a body or query parameter. In this front end that is mirrored by the repository layer: no selector reads a collection without being handed the tenant it belongs to."
-        />
-        <CardBody className="pt-0">
-          <ol className="space-y-3">
-            {[
-              { n: 1, t: "Auth", d: "Resolves tenant, user and role from the token." },
-              { n: 2, t: "Isolation guard", d: "Injects the tenant filter into every query." },
-              { n: 3, t: "Feature guard", d: "Blocks gated routes when the entitlement is inactive." },
-              { n: 4, t: "RBAC guard", d: "Checks the role against the route." },
-              { n: 5, t: "Schema resolver", d: "Merges the three field scopes for dynamic forms." },
-            ].map((s) => (
-              <li key={s.n} className="flex items-start gap-3">
-                <span className="tnum mt-0.5 w-4 shrink-0 font-mono text-caption text-accent-text">{s.n}</span>
-                <div className="min-w-0">
-                  <p className="text-label font-medium text-ink">{s.t}</p>
-                  <p className="mt-0.5 text-caption leading-snug text-ink-2">{s.d}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </CardBody>
-      </Card>
-    </div>
   );
 }
 
@@ -903,7 +874,7 @@ function AddFieldModal({ open, onClose }: { open: boolean; onClose: () => void }
       open={open}
       onClose={onClose}
       title="Add a custom field"
-      subtitle="It joins the resolved schema immediately — registration, the record and the consultation all pick it up."
+      subtitle="It appears straight away on registration, the patient record and the consultation."
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
@@ -957,7 +928,7 @@ function AddFieldModal({ open, onClose }: { open: boolean; onClose: () => void }
           <Input value={help} onChange={(e) => setHelp(e.target.value)} placeholder="Shown under the input." />
         </Field>
         <Checkbox checked={required} onChange={setRequired} label="Required"
-                  description="Validation is generated from the schema, so this is enforced without touching the form." />
+                  description="Staff can’t save the form without filling it in." />
       </div>
     </Modal>
   );

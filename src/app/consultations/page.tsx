@@ -73,7 +73,10 @@ const encounterColumns = col.columns([
     header: "Status",
     meta: { align: "right" },
     cell: ({ getValue }) => (
-      <Badge tone={getValue() === "signed" ? "ok" : "warn"} size="sm" dot>{getValue()}</Badge>
+      /* nearly every encounter is signed; only the draft still needs someone */
+      getValue() === "signed"
+        ? <span className="text-caption text-ink-3">Signed</span>
+        : <Badge tone="warn" size="sm" dot>Draft</Badge>
     ),
   }),
 ]);
@@ -131,7 +134,7 @@ function Consultations() {
       <PageHeader
         eyebrow={clinical.label}
         title="Consultations"
-        description={`Every encounter is the same row in the same table. What changes with the clinical type is the payload — here that means ${clinical.examLabel.toLowerCase()}.`}
+        description={`Every visit this clinic has recorded, newest first. Each one includes the ${clinical.examLabel.toLowerCase()}.`}
         actions={
           <ButtonLink href="/consultations/new" variant="primary">
             <IconPlus size={15} /> New encounter

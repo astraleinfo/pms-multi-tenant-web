@@ -278,7 +278,7 @@ function Appointments() {
                         const tight = h < 44;
                         const tone =
                           a.status === "no_show" ? "border-critical-border bg-critical-soft"
-                          : a.status === "cancelled" ? "border-line bg-surface-2 opacity-70"
+                          : a.status === "cancelled" ? "border-line bg-surface-2 [&_*]:!text-ink-3"
                           : a.status === "completed" ? "border-ok-border bg-ok-soft"
                           : a.status === "checked_in" ? "border-accent-border bg-accent-soft"
                           : "border-info-border bg-info-soft";

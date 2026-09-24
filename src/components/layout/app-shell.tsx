@@ -146,7 +146,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="relative h-full w-[var(--rail-w)] max-w-[84vw] shadow-e4"
             style={{ animation: "railin var(--d-3) var(--ease-out) both" }}
           >
-            <style>{"@keyframes railin{from{transform:translateX(-18px);opacity:.5}to{transform:none;opacity:1}}"}</style>
+            <style>{"@keyframes railin{from{transform:translateX(-18px)}to{transform:none}}"}</style>
             <Rail collapsed={false} onNavigate={() => setMobileNav(false)} />
           </div>
         </div>

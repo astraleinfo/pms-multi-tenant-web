@@ -29,6 +29,13 @@ export interface PlatformUser {
   title: string;
 }
 
+/** A kind of visit, and how long it takes — which is also its slot interval. */
+export interface AppointmentType {
+  id: string;
+  name: string;
+  minutes: number;
+}
+
 /**
  * Per-tenant configuration (§3.3). Distinct from entitlements: this is how a
  * clinic has set the product up, not what it is allowed to use.
@@ -46,6 +53,8 @@ export interface TenantConfig {
   day_end: string;
   slot_minutes: 15 | 20 | 30;
   default_duration: number;
+  /** the kinds of visit the diary books, in the order it offers them */
+  appointment_types: AppointmentType[];
   /* queue */
   token_prefix: string;
   urgent_first: boolean;

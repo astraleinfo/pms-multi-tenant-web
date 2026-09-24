@@ -94,11 +94,13 @@ function Notifications() {
           className="relative flex h-8 w-8 items-center justify-center rounded-[var(--r-sm)] text-ink-2 transition-colors hover:bg-hover hover:text-ink"
         >
           <IconBell size={17} />
-          {/* A count, not a red dot with no number: "four people waiting" is
-              actionable and "something happened" is not. The ring is the
+          {/* A count, not a dot with no number: "four people waiting" is
+              actionable and "something happened" is not. It is the house blue,
+              not alarm red — work waiting is ordinary, and a red badge that is
+              never empty trains everyone to ignore red. The ring is the
               topbar's own ground, so the badge reads as sitting on the bell. */}
           {total > 0 && (
-            <span className="tnum absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-critical px-1 font-mono text-[10px] font-medium leading-none text-ink-on ring-2 ring-surface">
+            <span className="tnum absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-medium leading-none text-accent-ink ring-2 ring-surface">
               {total > 99 ? "99+" : total}
             </span>
           )}
@@ -163,7 +165,7 @@ export function Topbar({
   const tour = useTour();
 
   return (
-    <header className="sticky top-0 z-30 flex h-[var(--topbar-h)] items-center gap-2 border-b border-line bg-surface/85 px-3 backdrop-blur-md sm:px-4">
+    <header className="sticky top-0 z-30 flex h-[var(--topbar-h)] items-center gap-2 border-b border-line bg-surface px-3 sm:px-4">
       {/* one control, two behaviours — a wrapper carries the breakpoint so the
           button's own display utility is never in a specificity race */}
       <span className="hidden lg:block">

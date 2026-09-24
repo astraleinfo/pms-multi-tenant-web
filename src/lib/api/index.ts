@@ -499,9 +499,14 @@ export const setUserStatus = (userId: Id, status: AccountStatus) =>
 export const updateConfig = (changes: Partial<TenantConfig>) =>
   patch_<TenantConfig>("/v1/tenant/config", stripReadOnly(changes));
 
-/** `tenant_id` is the server's to decide; sending it back would be rejected. */
+/**
+ * `tenant_id` and `timezone` are the server's to decide — it sends them, and
+ * rejects them coming back (the patch refuses unknown keys), which used to
+ * fail every save from the configuration tab.
+ */
 function stripReadOnly(config: Partial<TenantConfig>) {
-  const { tenant_id: _tenantId, ...rest } = config as Partial<TenantConfig> & { tenant_id?: string };
+  const { tenant_id: _tenantId, timezone: _timezone, ...rest } =
+    config as Partial<TenantConfig> & { tenant_id?: string; timezone?: string };
   return rest;
 }
 

@@ -1,7 +1,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { cn } from "@/lib/cn";
-import { InfoHint } from "./info";
+import { InfoHint, quietHint } from "./info";
 import { toneTile, type Tone } from "./badge";
 
 /**
@@ -59,13 +59,16 @@ export function CardHeader({
   tone?: Tone;
 }) {
   return (
-    <div className={cn("flex items-center justify-between gap-3 px-card pb-2.5 pt-3.5", className)}>
+    <div className={cn("group/hint flex items-center justify-between gap-3 px-card pb-2.5 pt-3.5", className)}>
       <div className="flex min-w-0 items-center gap-2.5">
         {icon && (
+          /* An ordinary panel's glyph is a landmark, so it sits bare in the
+             muted ink; only a panel carrying state (warn, critical…) earns a
+             tinted tile. A page of coloured tiles is a page shouting. */
           <span
             className={cn(
               "flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--r-sm)]",
-              toneTile[tone],
+              tone === "accent" ? "text-ink-3" : toneTile[tone],
             )}
             aria-hidden
           >
@@ -76,7 +79,7 @@ export function CardHeader({
           <div className="flex min-w-0 items-center gap-1.5">
             <h2 className="min-w-0 truncate text-label font-semibold leading-tight text-ink">{title}</h2>
             {hint && (
-              <InfoHint label={`About ${typeof title === "string" ? title : "this panel"}`}>{hint}</InfoHint>
+              <InfoHint className={quietHint} label={`About ${typeof title === "string" ? title : "this panel"}`}>{hint}</InfoHint>
             )}
           </div>
           {subtitle && <p className="mt-0.5 truncate text-caption leading-snug text-ink-3">{subtitle}</p>}

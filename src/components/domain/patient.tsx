@@ -79,13 +79,18 @@ export function PatientRef({
   ) : body;
 }
 
-/** Allergy line — a clinical safety flag, so it wears the critical tone. */
+/**
+ * Allergy line — a clinical safety flag, so a real allergy wears the critical
+ * tone. "None known" is still said, because a blank would read as "not
+ * asked", but as quiet text rather than a pill: on a register where most rows
+ * have none, a pill on every row buries the three that matter.
+ */
 export function AllergyFlag({ patient, className }: { patient: Patient; className?: string }) {
   const none = !patient.allergies || patient.allergies.toLowerCase().startsWith("none");
   return (
     <span className={cn("inline-flex items-center gap-1.5 text-caption", className)}>
       {none ? (
-        <Badge tone="neutral" size="sm"><IconCheck size={11} /> No known allergies</Badge>
+        <span className="inline-flex items-center gap-1 text-ink-3"><IconCheck size={12} /> No known allergies</span>
       ) : (
         <Badge tone="critical" size="sm"><IconAlert size={11} /> {patient.allergies}</Badge>
       )}

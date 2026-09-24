@@ -83,7 +83,7 @@ export function Rail({
             <button
               onClick={onToggle}
               aria-label="Expand sidebar"
-              className="rounded-[var(--r-sm)] p-0.5 transition-opacity hover:opacity-80"
+              className="rounded-[var(--r-sm)] p-0.5 transition-colors hover:bg-hover"
             >
               <Monogram name={tenant.name} size={28} />
             </button>
@@ -186,7 +186,7 @@ export function Rail({
               >
                 <Icon size={17} className="shrink-0" />
                 {!collapsed && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
-                {!collapsed && locked && <IconLock size={13} className="shrink-0 opacity-70" />}
+                {!collapsed && locked && <IconLock size={13} className="shrink-0 text-ink-3" />}
                 {!collapsed && !locked && count > 0 && (
                   <span className="tnum shrink-0 rounded-[var(--r-pill)] bg-rail-3 px-1.5 py-px font-mono text-micro leading-[1.45] text-rail-ink">
                     {count}
@@ -195,7 +195,7 @@ export function Rail({
                 {/* collapsed: a padlock in the corner for a module this clinic
                     has not been given, a dot for one with something waiting */}
                 {collapsed && locked && (
-                  <IconLock size={10} className="absolute bottom-1 right-1 opacity-75" />
+                  <IconLock size={10} className="absolute bottom-1 right-1 text-ink-3" />
                 )}
                 {collapsed && !locked && count > 0 && (
                   <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" />

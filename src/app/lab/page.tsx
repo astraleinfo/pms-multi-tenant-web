@@ -157,9 +157,8 @@ function Lab() {
   return (
     <>
       <PageHeader
-        eyebrow="Feature module"
         title="Lab"
-        description="Orders are raised from an encounter and travel through one state machine. Results stay invisible to the patient record until a technician verifies them."
+        description="Tests ordered from a consultation. A result reaches the patient’s record only once it has been verified."
         meta={
           <>
             <span className="text-label text-ink-2">{pluralise(stats.total, "order")}</span>

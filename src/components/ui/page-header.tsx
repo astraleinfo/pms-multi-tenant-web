@@ -1,7 +1,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { cn } from "@/lib/cn";
-import { InfoHint } from "./info";
+import { InfoHint, quietHint } from "./info";
 import { IconChevronLeft } from "./icons";
 
 /**
@@ -74,11 +74,12 @@ export function PageHeader({
         {leading && <div className="shrink-0">{leading}</div>}
         <div className="min-w-0 flex-1">
           {eyebrow && <p className="text-micro font-medium text-ink-3">{eyebrow}</p>}
-          <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
+          <div className="group/hint flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
             <h1 className="min-w-0 truncate font-display text-h1 font-semibold text-ink">{title}</h1>
             {status}
             {description && (
               <InfoHint
+                className={quietHint}
                 size={15}
                 width={320}
                 label={`About ${typeof title === "string" ? title : "this page"}`}

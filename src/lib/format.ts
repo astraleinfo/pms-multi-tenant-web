@@ -63,6 +63,17 @@ export function formatDate(iso: string | null | undefined, style: "short" | "lon
   return `${day} ${mon} ${String(yr).slice(2)}`;
 }
 
+/**
+ * "2026-09-20 10:05" or "2026-09-20T10:05:00" → "20 Sep 26 · 10:05am".
+ * A ledger stamp read by a person, not a log line.
+ */
+export function formatStamp(stamp: string | null | undefined) {
+  if (!stamp) return "—";
+  const date = stamp.slice(0, 10);
+  const time = stamp.slice(11, 16);
+  return time ? `${formatDate(date)} · ${formatTime12(time)}` : formatDate(date);
+}
+
 export function weekdayShort(iso: string) {
   return DAYS[parseDate(iso).getUTCDay()].slice(0, 3);
 }

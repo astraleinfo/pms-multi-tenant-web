@@ -198,7 +198,9 @@ function AppFacade({ children }: { children: React.ReactNode }) {
   const connection = useQueueStream();
 
   /* every money figure follows the clinic's configured currency */
-  React.useEffect(() => { setActiveCurrency(config.currency); }, [config.currency]);
+  /* Rupees only. A clinic configured before that rule may still carry another
+     code in its settings; money is formatted as INR whatever it says. */
+  React.useEffect(() => { setActiveCurrency("INR"); }, []);
 
   /* "today" is the clinic's, not the browser's — a practice in Manchester and
      a screen in its waiting room must never disagree about the date */

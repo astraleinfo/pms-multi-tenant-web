@@ -162,15 +162,11 @@ function Prescriptions() {
   return (
     <>
       <PageHeader
-        eyebrow="Core module"
         title="Prescriptions"
         description="Written from the consultation and stored once. The pharmacy reads these rows directly rather than keeping a copy — which is why a clinic without a pharmacy still prescribes normally."
         meta={
           <>
             <span className="text-label text-ink-2">{pluralise(counts.all, "prescription")}</span>
-            <span className="text-label text-ink-2">
-              {pluralise(total, "match")} on this filter
-            </span>
           </>
         }
       />

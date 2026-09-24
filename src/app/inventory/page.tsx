@@ -6,7 +6,8 @@ import { useClinicDb, useInventoryItems, useInventoryTx } from "@/lib/query/hook
 import {
   batchesFor, lowStock, nearExpiry, selectInventoryItems, selectInventoryTx,
   stockLevel, } from "@/lib/data/repository";
-import { currency, formatDate } from "@/lib/format";
+import { currency, formatDate, formatStamp } from "@/lib/format";
+import { StockReference } from "@/components/domain/stock-reference";
 import type {
   InventoryCategory, InventoryItem, InventoryTransaction, InventoryTxType, PricingMode,
 } from "@/lib/types";
@@ -27,7 +28,7 @@ import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/tabl
 import { RankBar } from "@/components/charts/bar-chart";
 import { FeatureGate, RoleGate } from "@/components/domain/gates";
 import {
-  IconAlert, IconArrowDown, IconArrowUp, IconBox, IconCheck, IconClock, IconEdit, IconList,
+  IconAlert, IconArrowUp, IconBox, IconCheck, IconClock, IconEdit, IconList,
   IconPlus
 } from "@/components/ui/icons";
 
@@ -92,7 +93,7 @@ const ledgerColumns = txCol.columns([
   txCol.accessor("at", {
     header: "When",
     cell: ({ getValue }) => (
-      <span className="tnum whitespace-nowrap font-mono text-label text-ink-2">{getValue()}</span>
+      <span className="tnum whitespace-nowrap text-label text-ink-2">{formatStamp(getValue())}</span>
     ),
   }),
   txCol.accessor((x) => x.item_id, {
@@ -101,22 +102,26 @@ const ledgerColumns = txCol.columns([
   }),
   txCol.accessor("type", {
     header: "Type",
-    cell: ({ getValue }) => <Badge tone={TX_TONE[getValue()]} size="sm" dot={false}>{TX_LABEL[getValue()]}</Badge>,
+    /* the sign and colour of the quantity already say in or out; only a
+       write-off, which is stock lost, keeps a pill */
+    cell: ({ getValue }) => getValue() === "expiry"
+      ? <Badge tone={TX_TONE[getValue()]} size="sm" dot={false}>{TX_LABEL[getValue()]}</Badge>
+      : <span className="text-label text-ink-2">{TX_LABEL[getValue()]}</span>,
   }),
   txCol.accessor("batch_no", {
     header: "Batch",
     cell: ({ getValue }) => <span className="tnum font-mono text-label text-ink-2">{getValue()}</span>,
   }),
-  txCol.accessor((x) => (x.ref_type ? `${x.ref_type}:${x.ref_id ?? "—"}` : "—"), {
-    id: "reference", header: "Reference",
-    cell: ({ getValue }) => <span className="tnum font-mono text-caption text-ink-3">{getValue()}</span>,
+  txCol.accessor((x) => x.ref_type ?? "", {
+    id: "reference", header: "For", enableSorting: false,
+    cell: ({ row }) => <StockReference tx={row.original} />,
   }),
   txCol.accessor("qty", {
     header: "Quantity", meta: { align: "right" },
     cell: ({ getValue }) => (
-      <span className={`tnum inline-flex items-center gap-1 font-mono font-medium ${getValue() >= 0 ? "text-ok-text" : "text-critical-text"}`}>
-        {getValue() >= 0 ? <IconArrowUp size={12} /> : <IconArrowDown size={12} />}
-        {getValue() > 0 ? `+${getValue()}` : getValue()}
+      /* stock coming in is the notable direction; going out is the day's work */
+      <span className={`tnum font-medium ${getValue() >= 0 ? "text-ok-text" : "text-ink"}`}>
+        {getValue() > 0 ? `+${getValue()}` : `−${Math.abs(getValue())}`}
       </span>
     ),
   }),
@@ -211,7 +216,6 @@ function Inventory() {
   return (
     <>
       <PageHeader
-        eyebrow="Feature module"
         title="Inventory"
         description="One ledger, every movement. Stock on hand is the sum of the transactions for an item — purchases, dispenses, returns, adjustments, expiry write-offs and transfers — never a mutable counter."
         actions={

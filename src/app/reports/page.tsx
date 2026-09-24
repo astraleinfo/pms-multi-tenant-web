@@ -11,7 +11,6 @@ import { currency, duration, formatDate, pluralise, weekdayShort } from "@/lib/f
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button, ButtonLink, Segmented } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { EmptyState, KV, Meter } from "@/components/ui/misc";
 import { Stat } from "@/components/ui/stat";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
@@ -23,7 +22,6 @@ import { Avatar } from "@/components/ui/misc";
 import { PageLoader } from "@/components/ui/loader";
 import {
   IconArrowRight, IconChart, IconClock, IconDownload, IconFlask, IconLock, IconMortar, IconReceipt,
-  IconSpark,
   IconStethoscope, IconUsers
 } from "@/components/ui/icons";
 
@@ -88,9 +86,8 @@ function Reports() {
   return (
     <>
       <PageHeader
-        eyebrow="Analytics"
         title="Reports"
-        description="Everything here is read straight off the transactional collections. What gets computed depends on the modules this clinic runs and the shape of its clinical payloads — nothing is aggregated that the tenant does not own."
+        description="How the clinic is doing — visits, attendance, diagnoses and money, over the period you choose."
         actions={
           <>
             <Segmented
@@ -101,17 +98,6 @@ function Reports() {
             <Button variant="secondary" onClick={() => { void exportPdf(); }} disabled={exporting}>
               <IconDownload size={15} /> {exporting ? "Preparing…" : "Export PDF"}
             </Button>
-          </>
-        }
-        meta={
-          <>
-            <Badge tone="accent" size="sm">Always computed</Badge>
-            {hasFeature("pharmacy") && <Badge tone="neutral" size="sm">Pharmacy</Badge>}
-            {hasFeature("lab") && <Badge tone="neutral" size="sm">Lab</Badge>}
-            {hasFeature("billing") && <Badge tone="neutral" size="sm">Billing</Badge>}
-            {advanced
-              ? <Badge tone="accent" size="sm"><IconSpark size={11} /> Advanced reports</Badge>
-              : <Badge tone="neutral" size="sm"><IconLock size={11} /> Advanced reports locked</Badge>}
           </>
         }
       />
@@ -175,7 +161,7 @@ function Reports() {
             {clinicalRows.length
               ? <RankBar rows={clinicalRows} colorAt={() => "var(--series-2)"} />
               : <EmptyState compact icon={<IconChart size={20} />} title="Nothing recorded yet"
-                            body="Clinical analytics appear once encounters carry a payload." />}
+                            body="These appear once consultations have been recorded." />}
           </CardBody>
         </Card>
 
@@ -257,10 +243,6 @@ function Reports() {
                     <KV label="At the counter" value={pharm.prescriptions_waiting} />
                     <KV label="Fully dispensed" value={pharm.fully_dispensed} />
                   </dl>
-                  <p className="mt-4 border-t border-line-soft pt-3 text-caption leading-relaxed text-ink-3">
-                    Consumption is the sum of negative ledger rows — the same number the inventory page shows,
-                    because there is only one ledger.
-                  </p>
                 </CardBody>
               </Card>
             )}
@@ -276,8 +258,8 @@ function Reports() {
                   />
                   <p className="mt-3 text-label text-ink-2">
                     {lab.abnormal
-                      ? `${pluralise(lab.abnormal, "order")} carries a flagged analyte.`
-                      : "No flagged analytes in the current set."}
+                      ? `${pluralise(lab.abnormal, "order")} with a flagged result.`
+                      : "No flagged results in this period."}
                   </p>
                 </CardBody>
               </Card>
@@ -292,8 +274,8 @@ function Reports() {
       </h2>
       <p className="mb-4 max-w-2xl text-body text-ink-2">
         {advanced
-          ? "Cohort and clinician breakdowns, unlocked for this tenant."
-          : "These panels are part of a purchasable module. The data already exists — the entitlement decides whether it is computed."}
+          ? "Breakdowns by clinician."
+          : "Breakdowns by clinician come with the Advanced reports module. Contact Astrale support to add it."}
       </p>
 
       {advanced ? (
@@ -344,9 +326,7 @@ function Reports() {
       )}
 
       <p className="mt-6 text-caption leading-relaxed text-ink-3">
-        Figures cover {formatDate(analytics.range.to, "long")} and the {range} days before it, and every one of them
-        was counted in the database from the rows this clinic owns — nothing on this page is derived in the browser,
-        and nothing is estimated. A day with no visits is a day with no visits.
+        Figures cover {formatDate(analytics.range.to, "long")} and the {range} days before it.
       </p>
     </>
   );
