@@ -26,7 +26,7 @@ import {
 } from "@/components/platform/module-controls";
 import { FeaturePriceDialog } from "@/components/platform/price-editor";
 import {
-  IconBox, IconChart, IconEdit, IconFlask, IconGrid, IconLayers, IconPill, IconReceipt, IconUsers,
+  IconBox, IconChart, IconCheck, IconEdit, IconFlask, IconGrid, IconLayers, IconPill, IconReceipt, IconUsers,
 } from "@/components/ui/icons";
 
 /** Every paid module already has a real icon somewhere in the app (the
@@ -212,7 +212,17 @@ function ModuleCard({
       <CardHeader icon={Icon && <Icon size={16} />} title={feature.name} />
 
       <CardBody className="flex flex-1 flex-col justify-between gap-3">
-        <p className="text-label leading-snug text-ink-2">{feature.summary}</p>
+        <div>
+          <p className="text-label leading-snug text-ink-2">{feature.summary}</p>
+          <ul className="mt-2.5 space-y-1">
+            {feature.how_it_works.map((step) => (
+              <li key={step.title} className="flex items-start gap-1.5 text-caption leading-snug text-ink-2">
+                <IconCheck size={13} className="mt-0.5 shrink-0 text-ok" />
+                {step.title}
+              </li>
+            ))}
+          </ul>
+        </div>
         <div className="flex items-center justify-between gap-3">
           <ModulePrice feature={feature} size="lg" />
           {onPrice && (
