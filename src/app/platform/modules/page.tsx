@@ -10,6 +10,7 @@ import {
   type BillingState, type ConsoleRow, type ModuleStats, type Subscription,
 } from "@/lib/platform/subscriptions";
 import type { Feature, FeatureKey } from "@/lib/types";
+import { MODULE_DOCS } from "@/lib/data/module-docs";
 import { isSuperAdmin } from "@/lib/api";
 import { useApp } from "@/lib/store/app-store";
 import { cn } from "@/lib/cn";
@@ -206,6 +207,10 @@ function ModuleCard({
 }) {
   const { feature } = stat;
   const Icon = MODULE_ICON[feature.key];
+  /* The same concrete checklist /modules/[key] uses to explain the module to
+     a clinic that doesn't have it yet — three of its six points, picked for
+     the card's tighter space. Real capabilities, not a narrative summary. */
+  const highlights = MODULE_DOCS[feature.key]?.included.slice(0, 3) ?? [];
 
   return (
     <Card className="flex flex-col">
@@ -215,10 +220,10 @@ function ModuleCard({
         <div>
           <p className="text-label leading-snug text-ink-2">{feature.summary}</p>
           <ul className="mt-2.5 space-y-1">
-            {feature.how_it_works.map((step) => (
-              <li key={step.title} className="flex items-start gap-1.5 text-caption leading-snug text-ink-2">
+            {highlights.map((point) => (
+              <li key={point} className="flex items-start gap-1.5 text-caption leading-snug text-ink-2">
                 <IconCheck size={13} className="mt-0.5 shrink-0 text-ok" />
-                {step.title}
+                {point}
               </li>
             ))}
           </ul>
