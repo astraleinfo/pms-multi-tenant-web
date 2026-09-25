@@ -136,15 +136,15 @@ function SettingsForm({ settings }: { settings: PlatformSettings }) {
           <NumberInput id="cfg-reminder-lead" min={1} max={72} value={draft.reminder_lead_hours}
                        onChange={(n) => set("reminder_lead_hours", n)} />
         </SettingRow>
-        <SettingRow label="Bill due" htmlFor="cfg-rent-due" suffix="days after it's raised" width="sm">
+        <SettingRow label="Bill due" htmlFor="cfg-rent-due" suffix="days" width="sm">
           <NumberInput id="cfg-rent-due" min={1} max={60} value={draft.rent_due_days}
                        onChange={(n) => set("rent_due_days", n)} />
         </SettingRow>
-        <SettingRow label="Grace period" htmlFor="cfg-rent-grace" suffix="days after due" width="sm">
+        <SettingRow label="Grace period" htmlFor="cfg-rent-grace" suffix="days" width="sm">
           <NumberInput id="cfg-rent-grace" min={0} max={60} value={draft.rent_grace_days}
                        onChange={(n) => set("rent_grace_days", n)} />
         </SettingRow>
-        <SettingRow label="Due-soon reminder" htmlFor="cfg-rent-reminder" suffix="days before due" width="sm">
+        <SettingRow label="Due-soon reminder" htmlFor="cfg-rent-reminder" suffix="days" width="sm">
           <NumberInput id="cfg-rent-reminder" min={0} max={30} value={draft.rent_reminder_days_before_due}
                        onChange={(n) => set("rent_reminder_days_before_due", n)} />
         </SettingRow>
