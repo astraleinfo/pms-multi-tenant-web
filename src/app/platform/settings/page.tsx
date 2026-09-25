@@ -4,6 +4,7 @@ import * as React from "react";
 import { useApp } from "@/lib/store/app-store";
 import { usePlatformSettings } from "@/lib/query/hooks";
 import type { PlatformSettings } from "@/lib/api";
+import { daysToSeconds, hoursToSeconds, secondsToDays, secondsToHours } from "@/lib/platform/timings";
 import { ConsolePage } from "@/components/platform/chrome";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -111,6 +112,41 @@ function SettingsForm({ settings }: { settings: PlatformSettings }) {
                   onChange={(e) => set("default_currency", e.target.value as PlatformSettings["default_currency"])}>
             {(["INR", "GBP", "EUR", "USD"] as const).map((c) => <option key={c} value={c}>{c}</option>)}
           </Select>
+        </SettingRow>
+        <SettingsActions note={dirty ? "Unsaved changes." : "Everything here matches the server."}>
+          <Button variant="ghost" disabled={!dirty || saving} onClick={() => setDraft(settings)}>Discard</Button>
+          <Button variant="primary" disabled={!dirty || saving} onClick={() => void save()}>
+            {saving ? "Saving…" : "Save changes"}
+          </Button>
+        </SettingsActions>
+      </SettingsSection>
+
+      <SettingsSection title="Timing" hint="How long links stay live, how far ahead a reminder goes out, and the billing ladder's own clock.">
+        <SettingRow label="Invitation link expires after" htmlFor="cfg-invite-ttl" suffix="days" width="sm">
+          <NumberInput id="cfg-invite-ttl" min={1} max={30}
+                       value={secondsToDays(draft.invite_token_ttl_seconds)}
+                       onChange={(days) => set("invite_token_ttl_seconds", daysToSeconds(days))} />
+        </SettingRow>
+        <SettingRow label="Password reset link expires after" htmlFor="cfg-reset-ttl" suffix="hours" width="sm">
+          <NumberInput id="cfg-reset-ttl" min={1} max={72}
+                       value={secondsToHours(draft.reset_token_ttl_seconds)}
+                       onChange={(hours) => set("reset_token_ttl_seconds", hoursToSeconds(hours))} />
+        </SettingRow>
+        <SettingRow label="Appointment reminder, before the slot" htmlFor="cfg-reminder-lead" suffix="hours" width="sm">
+          <NumberInput id="cfg-reminder-lead" min={1} max={72} value={draft.reminder_lead_hours}
+                       onChange={(n) => set("reminder_lead_hours", n)} />
+        </SettingRow>
+        <SettingRow label="Bill due" htmlFor="cfg-rent-due" suffix="days after it's raised" width="sm">
+          <NumberInput id="cfg-rent-due" min={1} max={60} value={draft.rent_due_days}
+                       onChange={(n) => set("rent_due_days", n)} />
+        </SettingRow>
+        <SettingRow label="Grace period" htmlFor="cfg-rent-grace" suffix="days after due" width="sm">
+          <NumberInput id="cfg-rent-grace" min={0} max={60} value={draft.rent_grace_days}
+                       onChange={(n) => set("rent_grace_days", n)} />
+        </SettingRow>
+        <SettingRow label="Due-soon reminder" htmlFor="cfg-rent-reminder" suffix="days before due" width="sm">
+          <NumberInput id="cfg-rent-reminder" min={0} max={30} value={draft.rent_reminder_days_before_due}
+                       onChange={(n) => set("rent_reminder_days_before_due", n)} />
         </SettingRow>
         <SettingsActions note={dirty ? "Unsaved changes." : "Everything here matches the server."}>
           <Button variant="ghost" disabled={!dirty || saving} onClick={() => setDraft(settings)}>Discard</Button>

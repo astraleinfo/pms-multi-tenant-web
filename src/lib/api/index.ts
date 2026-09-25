@@ -1042,6 +1042,12 @@ export interface PlatformSettings {
   default_payment_terms_days: number;
   default_expiry_alert_days: number;
   default_currency: "GBP" | "EUR" | "USD" | "INR";
+  invite_token_ttl_seconds: number;
+  reset_token_ttl_seconds: number;
+  reminder_lead_hours: number;
+  rent_due_days: number;
+  rent_grace_days: number;
+  rent_reminder_days_before_due: number;
 }
 
 export const getPlatformSettings = () => get<PlatformSettings>("/v1/platform/settings");
