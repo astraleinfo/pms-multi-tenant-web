@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useRouter } from "@/lib/navigation";
 import { usePlatformCatalog, usePlatformEntitlements, usePlatformSnapshot } from "@/lib/query/hooks";
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
-import { currency, formatDate, pluralise, titleCase } from "@/lib/format";
+import { currency, pluralise, titleCase } from "@/lib/format";
 import {
   PAID_FEATURES, consoleRows, platformTotals,
   type AccountState, type ConsoleRow,
@@ -94,21 +94,9 @@ const tenantColumns = col.columns([
     id: "subscription",
     header: "Subscription",
     cell: ({ row }) => (
-      <div className="flex flex-col items-start gap-1">
+      <div className="flex items-center gap-2">
         <AccountBadge state={row.original.state} />
         <MonthlyCharge amount={row.original.mrr} />
-      </div>
-    ),
-  }),
-  col.accessor((r) => r.patients, {
-    id: "usage",
-    header: "Usage",
-    cell: ({ row }) => (
-      <div className="tnum font-mono text-label leading-snug text-ink-2">
-        <p>{row.original.patients} patients · {row.original.encounters} visits</p>
-        <p className="text-caption text-ink-3">
-          {row.original.last_activity ? `last seen ${formatDate(row.original.last_activity)}` : "no activity yet"}
-        </p>
       </div>
     ),
   }),

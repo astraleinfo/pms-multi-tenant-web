@@ -4,48 +4,59 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "@/lib/navigation";
 import { usePlatformCatalog, usePlatformEntitlements, usePlatformSnapshot } from "@/lib/query/hooks";
-import { TODAY, compactCurrency, currency, formatDate, pluralise } from "@/lib/format";
+import { currency, pluralise } from "@/lib/format";
 import {
-  PAID_FEATURES, activationLedger, consoleRows, moduleStats, mrrSeries, platformToday,
-  platformTotals,
-  type BillingState, type ConsoleRow, type LedgerEntry, type ModuleStats, type Subscription,
+  PAID_FEATURES, consoleRows, moduleStats, platformTotals,
+  type BillingState, type ConsoleRow, type ModuleStats, type Subscription,
 } from "@/lib/platform/subscriptions";
 import type { Feature, FeatureKey } from "@/lib/types";
+import { MODULE_DOCS } from "@/lib/data/module-docs";
 import { isSuperAdmin } from "@/lib/api";
 import { useApp } from "@/lib/store/app-store";
 import { cn } from "@/lib/cn";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Card, CardBody, CardFooter, CardHeader, CardLink } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { EmptyState, KV, Meter } from "@/components/ui/misc";
-import { Stat } from "@/components/ui/stat";
+import { EmptyState } from "@/components/ui/misc";
 import { Tabs } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/ui/page-header";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { Field, SearchInput, Select } from "@/components/ui/field";
-import { BarChart, RankBar } from "@/components/charts/bar-chart";
 import { ConsolePage } from "@/components/platform/chrome";
 import {
-  BILLING_LABEL, BillingBadge, ModulePrice, useModuleSwitch,
+  BILLING_LABEL, ModulePrice, useModuleSwitch,
 } from "@/components/platform/module-controls";
 import { FeaturePriceDialog } from "@/components/platform/price-editor";
 import {
-  IconChart, IconEdit, IconGrid, IconLayers, IconLock, IconReceipt, IconSpark, IconUsers
+  IconBox, IconChart, IconCheck, IconEdit, IconFlask, IconGrid, IconLayers, IconPill, IconReceipt, IconUsers,
 } from "@/components/ui/icons";
+
+/** Every paid module already has a real icon somewhere in the app (the
+ *  clinic rail's own nav); reused here rather than inventing new ones so
+ *  the catalogue card and the module it describes look like the same
+ *  product. */
+const MODULE_ICON: Partial<Record<FeatureKey, React.ComponentType<{ size?: number }>>> = {
+  pharmacy: IconPill,
+  lab: IconFlask,
+  inventory: IconBox,
+  billing: IconReceipt,
+  advanced_reports: IconChart,
+};
 
 /* ==========================================================================
    Modules, priced and sold.
 
-   One screen for the commercial side of the product: what the catalogue costs,
-   who is on what, what each module earns, and the switch for every clinic in
-   one grid rather than one dialog at a time. The switch here is the same call
-   the tenant page makes and asks the same question before it runs — there is
-   one way to grant a module, and this is a second door onto it.
+   One screen for the commercial side of the product: what the catalogue
+   costs, who is on what, and the switch for every clinic in one grid rather
+   than one dialog at a time. What each module earns lives under Billing &
+   revenue instead, read off raised invoices rather than the catalogue price.
+   The switch here is the same call the tenant page makes and asks the same
+   question before it runs — there is one way to grant a module, and this is
+   a second door onto it.
    ========================================================================== */
 
-type Tab = "catalogue" | "access" | "activity";
+type Tab = "catalogue" | "access";
 
-const TABS: Tab[] = ["catalogue", "access", "activity"];
+const TABS: Tab[] = ["catalogue", "access"];
 
 export default function ModulesPage(props: PageProps<"/platform/modules">) {
   const sp = React.use(props.searchParams);
@@ -89,8 +100,8 @@ function ModuleConsole({ opening }: { opening: Tab }) {
     <>
       <PageHeader
         eyebrow="Commercial"
-        title="Modules, pricing & subscriptions"
-        description="What the platform sells, what each module costs, which clinics hold it, and what that adds up to. Core modules are seeded with every clinic and are not sold separately."
+        title="Modules & pricing"
+        description="What the platform sells, what each module costs, and which clinics hold it. Core modules are seeded with every clinic and are not sold separately. Revenue lives under Billing & revenue."
         meta={
           <>
             <span className="text-label text-ink-2">
@@ -103,28 +114,6 @@ function ModuleConsole({ opening }: { opening: Tab }) {
         }
       />
 
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat
-          label="Monthly recurring" value={currency(totals.mrr)} unit="/mo"
-          icon={<IconReceipt size={16} />}
-          hint={`${currency(totals.arr)} annualised`}
-        />
-        <Stat
-          label="Live subscriptions" value={totals.billedSubscriptions}
-          icon={<IconLayers size={16} />}
-          hint={`${totals.trialSubscriptions} on trial · ${totals.heldSubscriptions} on hold`}
-        />
-        <Stat
-          label="Locked modules" value={totals.lockedModules} icon={<IconLock size={16} />}
-          hint={`${currency(pipelineValue(rows))}/mo if every one were sold`}
-        />
-        <Stat
-          label="Revenue per paying clinic" value={currency(totals.arpa)} unit="/mo"
-          icon={<IconSpark size={16} />}
-          hint={`${totals.payingTenants} of ${totals.tenants} clinics pay for something`}
-        />
-      </section>
-
       <Tabs
         value={tab}
         onChange={openTab}
@@ -132,7 +121,6 @@ function ModuleConsole({ opening }: { opening: Tab }) {
         tabs={[
           { value: "catalogue", label: "Catalogue & pricing", icon: <IconLayers size={15} />, count: PAID_FEATURES.length },
           { value: "access", label: "Tenant access", icon: <IconUsers size={15} />, count: totals.tenants },
-          { value: "activity", label: "Billing activity", icon: <IconReceipt size={15} />, count: totals.subscriptions },
         ]}
       />
 
@@ -142,16 +130,8 @@ function ModuleConsole({ opening }: { opening: Tab }) {
           rows={rows} paid={paidFeatures} focus={focus} onFocus={setFocus} loading={isPending}
         />
       )}
-      {tab === "activity" && <ActivityTab rows={rows} stats={paidStats} />}
     </>
   );
-}
-
-/** What the platform would earn if every locked module were sold tomorrow. */
-function pipelineValue(rows: readonly ConsoleRow[]) {
-  return rows
-    .filter((r) => r.tenant.status !== "suspended")
-    .reduce((sum, r) => sum + r.locked.reduce((t, s) => t + s.feature.price_monthly, 0), 0);
 }
 
 /* ---- catalogue -------------------------------------------------------------- */
@@ -169,7 +149,6 @@ function CatalogueTab({
   const canPrice = isSuperAdmin(platformUser);
   const [pricing, setPricing] = React.useState<FeatureKey | null>(null);
   const core = stats.filter((s) => s.feature.is_core);
-  const byRevenue = [...paid].sort((a, b) => b.mrr - a.mrr);
 
   return (
     <div className="space-y-5">
@@ -189,30 +168,7 @@ function CatalogueTab({
         onClose={() => setPricing(null)}
       />
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <Card>
-          <CardHeader
-            icon={<IconReceipt size={15} />} tone="ok" title="Revenue by module"
-            hint="What each one contributes to the monthly run rate."
-          />
-          <CardBody>
-            {byRevenue.some((s) => s.mrr > 0) ? (
-              <RankBar
-                rows={byRevenue.map((s) => ({
-                  label: s.feature.name,
-                  value: s.mrr,
-                  hint: `${s.billed} billed`,
-                }))}
-                format={currency}
-              />
-            ) : (
-              <p className="py-6 text-center text-label text-ink-3">
-                Nothing is being billed yet.
-              </p>
-            )}
-          </CardBody>
-        </Card>
-
+      <div>
         <Card>
           <CardHeader
             icon={<IconLayers size={15} />} tone="violet" title="Core modules"
@@ -250,71 +206,43 @@ function ModuleCard({
   onPrice?: (key: FeatureKey) => void;
 }) {
   const { feature } = stat;
+  const Icon = MODULE_ICON[feature.key];
+  /* The same concrete checklist /modules/[key] uses to explain the module to
+     a clinic that doesn't have it yet — three of its six points, picked for
+     the card's tighter space. Real capabilities, not a narrative summary. */
+  const highlights = MODULE_DOCS[feature.key]?.included.slice(0, 3) ?? [];
 
   return (
     <Card className="flex flex-col">
-      <div className="flex items-start justify-between gap-3 px-5 pt-4.5">
-        <div className="min-w-0">
-          <h3 className="text-body font-semibold leading-tight text-ink">
-            {feature.name}
-          </h3>
-          <p className="mt-1 text-label leading-snug text-ink-2">{feature.summary}</p>
-        </div>
-        <Badge tone="neutral" size="sm" dot={false}>
-          {stat.billed ? "Selling" : "Unsold"}
-        </Badge>
-      </div>
+      <CardHeader icon={Icon && <Icon size={16} />} title={feature.name} />
 
-      <div className="mt-3.5 border-y border-line-soft bg-surface-2 px-5 py-3">
+      <CardBody className="flex flex-1 flex-col justify-between gap-3">
+        <div>
+          <p className="text-label leading-snug text-ink-2">{feature.summary}</p>
+          <ul className="mt-2.5 space-y-1">
+            {highlights.map((point) => (
+              <li key={point} className="flex items-start gap-1.5 text-caption leading-snug text-ink-2">
+                <IconCheck size={13} className="mt-0.5 shrink-0 text-ok" />
+                {point}
+              </li>
+            ))}
+          </ul>
+        </div>
         <div className="flex items-center justify-between gap-3">
           <ModulePrice feature={feature} size="lg" />
           {onPrice && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onPrice(feature.key)}
-              aria-label={`Change the price of ${feature.name}`}
-            >
-              <IconEdit size={14} /> Edit price
-            </Button>
+            <CardLink onClick={() => onPrice(feature.key)} icon={<IconEdit size={13} />}>
+              Edit price
+            </CardLink>
           )}
         </div>
-        <p className="mt-1 text-caption text-ink-3">{feature.pricing_note}</p>
-      </div>
-
-      <CardBody className="flex-1 pt-4">
-        <div className="mb-1.5 flex items-baseline justify-between gap-3 text-caption">
-          <span className="text-ink-2">Adoption</span>
-          <span className="tnum font-mono text-ink-3">
-            {stat.subscribers} of {stat.lines.length} clinics · {Math.round(stat.adoption * 100)}%
-          </span>
-        </div>
-        <Meter value={stat.subscribers} max={Math.max(1, stat.lines.length)} tone="accent" />
-
-        <dl className="mt-4 grid grid-cols-2 gap-x-4">
-          <KV label="Billed" value={stat.billed} />
-          <KV label="On trial" value={stat.trial || "—"} />
-          <KV label="On hold" value={stat.held || "—"} />
-          <KV label="Locked" value={stat.locked} />
-          <KV
-            label="Contributes"
-            value={<span className="tnum font-mono">{currency(stat.mrr)}/mo</span>}
-            className="col-span-2"
-          />
-        </dl>
       </CardBody>
 
-      <div className="flex items-center justify-between gap-3 border-t border-line-soft px-5 py-3">
-        <Link
-          href={`/modules/${feature.key}`}
-          className="text-caption text-ink-3 underline-offset-4 hover:text-ink hover:underline"
-        >
-          What clinics are shown
-        </Link>
-        <Button variant="secondary" size="sm" onClick={() => onManage(feature.key)}>
+      <CardFooter>
+        <Button variant="secondary" size="sm" className="w-full" onClick={() => onManage(feature.key)}>
           <IconGrid size={14} /> Manage access
         </Button>
-      </div>
+      </CardFooter>
     </Card>
   );
 }
@@ -551,170 +479,3 @@ function AccessLegend() {
   );
 }
 
-/* ---- billing activity -------------------------------------------------------- */
-
-function ActivityTab({ rows, stats }: { rows: ConsoleRow[]; stats: ModuleStats[] }) {
-  const [module, setModule] = React.useState<FeatureKey | "any">("any");
-  const [state, setState] = React.useState<BillingState | "any">("any");
-
-  const today = React.useMemo(() => platformToday(rows, TODAY), [rows]);
-  const ledger = React.useMemo(() => activationLedger(rows), [rows]);
-  const series = React.useMemo(() => mrrSeries(rows, today, 6), [rows, today]);
-
-  const shown = React.useMemo(
-    () => ledger.filter(
-      (e) => (module === "any" || e.feature.key === module) && (state === "any" || e.state === state),
-    ),
-    [ledger, module, state],
-  );
-
-  const detailed = rows.filter((r) => r.detailed).length;
-  const missing = rows.length - detailed;
-
-  return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        <Card>
-          <CardHeader
-            icon={<IconChart size={15} />} tone="ok" title="Monthly run rate"
-            hint="Rebuilt from the day each live subscription was switched on."
-          />
-          <CardBody>
-            {series.some((p) => p.mrr > 0) ? (
-              <BarChart
-                labels={series.map((p) => p.label)}
-                series={[{ name: "Run rate", values: series.map((p) => p.mrr) }]}
-                format={compactCurrency}
-                highlight={series.length - 1}
-              />
-            ) : (
-              <p className="py-10 text-center text-label text-ink-3">
-                Nothing is being billed yet, so there is no run rate to plot.
-              </p>
-            )}
-            <p className="mt-3 text-caption leading-relaxed text-ink-3">
-              Reconstructed rather than recorded: only subscriptions that are still on carry a date,
-              so this traces the growth of what the platform bills today and never dips. A real
-              invoice table would replace it outright.
-            </p>
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardHeader icon={<IconReceipt size={15} />} tone="ok" title="Where the money is" hint="This month's run rate, split by module." />
-          <CardBody>
-            {stats.some((s) => s.mrr > 0) ? (
-              <RankBar
-                rows={stats
-                  .filter((s) => s.mrr > 0)
-                  .sort((a, b) => b.mrr - a.mrr)
-                  .map((s) => ({ label: s.feature.name, value: s.mrr, hint: `${s.billed} clinics` }))}
-                format={currency}
-              />
-            ) : (
-              <p className="py-10 text-center text-label text-ink-3">No billed modules yet.</p>
-            )}
-          </CardBody>
-        </Card>
-      </div>
-
-      <Card className="overflow-hidden">
-        <CardHeader
-          icon={<IconReceipt size={15} />} tone="ok" title="Subscription activity"
-          hint="Every paid module that is on, and the day the platform started charging for it."
-          actions={
-            <div className="flex items-center gap-2">
-              <Select
-                value={module}
-                onChange={(e) => setModule(e.target.value as FeatureKey | "any")}
-                className="h-8 text-label"
-              >
-                <option value="any">All modules</option>
-                {PAID_FEATURES.map((f) => <option key={f.key} value={f.key}>{f.name}</option>)}
-              </Select>
-              <Select
-                value={state}
-                onChange={(e) => setState(e.target.value as BillingState | "any")}
-                className="h-8 text-label"
-              >
-                <option value="any">Any status</option>
-                <option value="billed">Billed</option>
-                <option value="trial">Trial</option>
-                <option value="held">On hold</option>
-              </Select>
-            </div>
-          }
-        />
-
-        {shown.length === 0 ? (
-          <EmptyState
-            icon={<IconReceipt size={20} />}
-            title="Nothing to show"
-            body={
-              ledger.length
-                ? "No subscription matches those filters."
-                : "No paid module is switched on across the platform yet."
-            }
-            compact
-          />
-        ) : (
-          <TableWrap>
-            <Table>
-              <THead>
-                <TR>
-                  <TH>Started</TH>
-                  <TH>Clinic</TH>
-                  <TH>Module</TH>
-                  <TH>Status</TH>
-                  <TH align="right">Monthly</TH>
-                </TR>
-              </THead>
-              <TBody>
-                {shown.map((entry) => <LedgerRow key={entry.id} entry={entry} />)}
-              </TBody>
-            </Table>
-          </TableWrap>
-        )}
-
-        <div className="border-t border-line-soft px-5 py-3 text-caption leading-relaxed text-ink-3">
-          <p>
-            An activation ledger, not a payment history: it says when the platform started charging
-            for something, not that money moved. A module switched on and later off leaves nothing
-            behind, because the entitlement row carries one date and no trail.
-          </p>
-          {missing > 0 && (
-            <p className="mt-1.5">
-              {pluralise(missing, "clinic")} still loading — their subscriptions appear here once
-              their entitlement rows arrive.
-            </p>
-          )}
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-function LedgerRow({ entry }: { entry: LedgerEntry }) {
-  return (
-    <TR>
-      <TD>
-        <span className="tnum font-mono text-label text-ink-2">{formatDate(entry.date)}</span>
-      </TD>
-      <TD>
-        <Link href={`/platform/tenants/${entry.tenant.id}`} className="min-w-0 hover:underline">
-          <span className="block truncate font-medium text-ink">{entry.tenant.name}</span>
-          <span className="tnum block truncate font-mono text-caption text-ink-3">
-            {entry.tenant.slug}
-          </span>
-        </Link>
-      </TD>
-      <TD><span className="text-ink-2">{entry.feature.name}</span></TD>
-      <TD><BillingBadge state={entry.state} /></TD>
-      <TD align="right">
-        <span className={cn("tnum font-mono text-label", entry.state === "billed" ? "text-ink" : "text-ink-3")}>
-          {currency(entry.amount)}
-        </span>
-      </TD>
-    </TR>
-  );
-}

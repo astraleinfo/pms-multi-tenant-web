@@ -6,10 +6,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useApp, useTenant } from "@/lib/store/app-store";
 import * as api from "@/lib/api";
 import { qk } from "@/lib/query/keys";
-import { useFeatureCatalog, useSupportRequests } from "@/lib/query/hooks";
+import { useFeatureCatalog, useSupportInfo, useSupportRequests } from "@/lib/query/hooks";
 import { FEATURE_BY_KEY } from "@/lib/data/catalog";
 import { ALL_NAV_ITEMS } from "@/lib/nav";
-import { SUPPORT, moduleMailto, telHref } from "@/lib/support";
+import { moduleMailto, telHref } from "@/lib/support";
 import { currency } from "@/lib/format";
 import type { Feature, FeatureKey, SupportRequest, TenantFeature } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
@@ -65,6 +65,8 @@ function useModuleAsk(feature: Feature) {
   const { notify, session } = useApp();
   const qc = useQueryClient();
   const { data: requests } = useSupportRequests();
+  const { data: support } = useSupportInfo();
+  const supportEmail = support?.support_email ?? "";
   const [busy, setBusy] = React.useState<Ask | null>(null);
 
   /* Newest first from the API. A request whose email failed still counts as
@@ -86,7 +88,7 @@ function useModuleAsk(feature: Feature) {
       notify({
         tone: "warn",
         title: "Could not send the request",
-        body: `${error instanceof Error ? error.message : "Something went wrong."} You can also write to ${SUPPORT.email}.`,
+        body: `${error instanceof Error ? error.message : "Something went wrong."} You can also write to ${supportEmail}.`,
       });
     } finally {
       setBusy(null);
@@ -101,6 +103,7 @@ function ModuleDetail({ feature }: { feature: Feature }) {
   const { tenant, user } = useTenant();
   const active = hasFeature(feature.key);
   const { latest, ask, busy } = useModuleAsk(feature);
+  const { data: support } = useSupportInfo();
   const activation = latest("activation");
   const walkthrough = latest("walkthrough");
 
@@ -223,7 +226,7 @@ function ModuleDetail({ feature }: { feature: Feature }) {
             <ContactSupport
               feature={feature}
               active={active}
-              writeHref={moduleMailto("activation", { feature, tenant, user })}
+              writeHref={moduleMailto("activation", { feature, tenant, user, supportEmail: support?.support_email ?? "" })}
               activation={activation}
               activate={
                 <AskButton
@@ -440,12 +443,16 @@ function ContactSupport({
 }) {
   const { notify, session } = useApp();
   const qc = useQueryClient();
+  const { data: support } = useSupportInfo();
+  const supportEmail = support?.support_email ?? "";
+  const supportPhone = support?.support_phone ?? "";
+  const supportHours = support?.support_hours ?? "";
   const [checking, setChecking] = React.useState(false);
 
   const copyEmail = () => {
-    navigator.clipboard?.writeText(SUPPORT.email).then(
-      () => notify({ tone: "ok", title: "Address copied", body: SUPPORT.email }),
-      () => notify({ tone: "warn", title: "Could not copy", body: `Write to ${SUPPORT.email}.` }),
+    navigator.clipboard?.writeText(supportEmail).then(
+      () => notify({ tone: "ok", title: "Address copied", body: supportEmail }),
+      () => notify({ tone: "warn", title: "Could not copy", body: `Write to ${supportEmail}.` }),
     );
   };
 
@@ -473,7 +480,7 @@ function ContactSupport({
       <CardHeader
         icon={<IconMail size={16} />}
         title={active ? "Talk to support" : `Ask for ${feature.name}`}
-        subtitle={SUPPORT.hours}
+        subtitle={supportHours}
       />
       <CardBody className="space-y-3 pt-0">
         {!active && (
@@ -492,13 +499,13 @@ function ContactSupport({
           ) : (
             activate
           )}
-          <a className={buttonClass({ variant: "secondary" })} href={telHref(SUPPORT.phone)}>
-            <IconPhone size={15} /> {SUPPORT.phone}
+          <a className={buttonClass({ variant: "secondary" })} href={telHref(supportPhone)}>
+            <IconPhone size={15} /> {supportPhone}
           </a>
         </div>
 
         <div className="flex items-center justify-between gap-2 border-t border-line-soft pt-3">
-          <span className="min-w-0 truncate font-mono text-caption text-ink-2">{SUPPORT.email}</span>
+          <span className="min-w-0 truncate font-mono text-caption text-ink-2">{supportEmail}</span>
           <Button size="sm" variant="ghost" onClick={copyEmail}>Copy</Button>
         </div>
 

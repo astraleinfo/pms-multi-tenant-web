@@ -21,6 +21,8 @@ export const qk = {
   platformUsers: (t: Id) => ["platform", "tenants", t, "users"] as const,
   /** The module catalogue and its prices, as the console sells it. */
   platformCatalog: () => ["platform", "catalog", "features"] as const,
+  platformSettings: () => ["platform", "settings"] as const,
+  publicSettings: () => ["public", "settings"] as const,
   /** Every clinic's subscription bills, and one clinic's. */
   platformBilling: () => ["platform", "billing"] as const,
   platformSubscription: (t: Id) => ["platform", "tenants", t, "subscription"] as const,
@@ -34,6 +36,7 @@ export const qk = {
   features: (t: Id) => ["tenant", t, "features"] as const,
   supportRequests: (t: Id) => ["tenant", t, "support-requests"] as const,
   config: (t: Id) => ["tenant", t, "config"] as const,
+  logo: (t: Id) => ["tenant", t, "config", "logo"] as const,
   fields: (t: Id) => ["tenant", t, "fields"] as const,
   schema: (t: Id, entity: FieldDefinition["entity"], clinicalType: string) =>
     ["tenant", t, "fields", "schema", entity, clinicalType] as const,

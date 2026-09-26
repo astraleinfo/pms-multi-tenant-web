@@ -20,8 +20,8 @@ import { StatusPill } from "@/components/domain/status";
 import { PatientRef } from "@/components/domain/patient";
 import { AppointmentModal, WalkInModal } from "@/components/domain/quick-actions";
 import {
-  IconAlert, IconArrowRight, IconCalendar, IconChart, IconClock, IconPlus, IconQueue, IconReceipt,
-  IconSpark, IconUsers,
+  IconAlert, IconArrowRight, IconBox, IconCalendar, IconChart, IconClock, IconFlask, IconPill,
+  IconPlus, IconQueue, IconReceipt, IconSpark, IconStethoscope, IconUsers
 } from "@/components/ui/icons";
 
 /* ==========================================================================

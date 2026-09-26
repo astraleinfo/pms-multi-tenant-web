@@ -6,18 +6,30 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
 import { NAV, ROLE_LABEL, modulePath, roleAllows } from "@/lib/nav";
 import { useApp, useTenant } from "@/lib/store/app-store";
-import { useRailCounters } from "@/lib/query/hooks";
-import { SUPPORT, telHref } from "@/lib/support";
+import { useClinicLogoUrl, useRailCounters, useSupportInfo } from "@/lib/query/hooks";
+import { telHref } from "@/lib/support";
 import {
-  IconChevronCircleLeft, IconChevronDown, IconChevronRight, IconInfo, IconLock, IconLogout, IconMail, IconPhone, IconSpark,
+  IconChevronCircleLeft, IconChevronDown, IconInfo, IconLock, IconLogout, IconMail, IconPhone, IconSidebar, IconSpark,
 } from "@/components/ui/icons";
 import { Tooltip } from "@/components/ui/info";
 import { Menu, MenuItem, MenuLabel, MenuSep } from "@/components/ui/modal";
 import { useTour } from "@/components/onboarding/tour";
 import { Avatar } from "@/components/ui/misc";
 
-/** The clinic monogram — two initials on an accent tile. */
-export function Monogram({ name, size = 28 }: { name: string; size?: number }) {
+/** The clinic's mark: its own logo once it has uploaded one, otherwise two
+ *  initials on an accent tile. */
+export function Monogram({ name, size = 28, logoUrl }: { name: string; size?: number; logoUrl?: string | null }) {
+  if (logoUrl) {
+    return (
+      <img
+        src={logoUrl}
+        alt=""
+        aria-hidden
+        className="shrink-0 rounded-[var(--r-sm)] object-contain"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
   const letters = name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
   return (
     <span
@@ -56,6 +68,7 @@ export function Rail({
   const { hasFeature, signOut, host, consoleUrl } = useApp();
   const { tenant, user, role } = useTenant();
   const counters = useRailCounters();
+  const logoUrl = useClinicLogoUrl();
 
   /* one flat list, with a note of where a group used to start */
   const items = React.useMemo(
@@ -79,24 +92,16 @@ export function Rail({
         )}
       >
         {collapsed ? (
-          <>
-            <Tooltip label={tenant.name}>
-              <span className="block">
-                <Monogram name={tenant.name} size={28} />
-              </span>
-            </Tooltip>
-            {/* 56px holds the clinic and nothing else, so the way back out
-                sits on the rail's edge, half over the border */}
-            <Tooltip label="Expand sidebar">
-              <button
-                onClick={onToggle}
-                aria-label="Expand sidebar"
-                className="absolute -right-3 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-full border border-rail-line bg-rail text-rail-ink-dim shadow-e1 transition-colors hover:bg-rail-2 hover:text-rail-ink-strong"
-              >
-                <IconChevronRight size={14} />
-              </button>
-            </Tooltip>
-          </>
+          <Tooltip label="Expand sidebar">
+            <button
+              onClick={onToggle}
+              aria-label="Expand sidebar"
+              aria-expanded={false}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--r-sm)] text-rail-ink-dim transition-colors hover:bg-rail-2 hover:text-rail-ink-strong"
+            >
+              <IconSidebar size={17} />
+            </button>
+          </Tooltip>
         ) : (
           <>
             <Menu
@@ -109,7 +114,7 @@ export function Rail({
                   aria-expanded={open}
                   className="flex w-full min-w-0 items-center gap-2 rounded-[var(--r-sm)] px-1.5 py-1.5 text-left transition-colors hover:bg-rail-2"
                 >
-                  <Monogram name={tenant.name} size={26} />
+                  <Monogram name={tenant.name} size={26} logoUrl={logoUrl} />
                   <span className="min-w-0 flex-1 truncate text-label font-semibold text-rail-ink-strong">
                     {tenant.name}
                   </span>
@@ -154,6 +159,7 @@ export function Rail({
                 <button
                   onClick={onToggle}
                   aria-label="Collapse sidebar"
+                  aria-expanded={true}
                   className="shrink-0 rounded-[var(--r-sm)] p-1.5 text-rail-ink-dim transition-colors hover:bg-rail-2 hover:text-rail-ink-strong"
                 >
                   <IconChevronCircleLeft size={18} />
@@ -277,9 +283,13 @@ export function Rail({
 function SupportMenu({ collapsed }: { collapsed: boolean }) {
   const tour = useTour();
   const { tenant, user } = useTenant();
+  const { data: support } = useSupportInfo();
+  const supportEmail = support?.support_email ?? "";
+  const supportPhone = support?.support_phone ?? "";
+  const supportHours = support?.support_hours ?? "";
 
   const mailto =
-    `mailto:${SUPPORT.email}` +
+    `mailto:${supportEmail}` +
     `?subject=${encodeURIComponent(`Help with ${tenant.name}`)}` +
     `&body=${encodeURIComponent(
       [`Hello Astrale support,`, "", "", `Clinic:  ${tenant.name}${tenant.slug ? ` (${tenant.slug})` : ""}`,
@@ -322,18 +332,18 @@ function SupportMenu({ collapsed }: { collapsed: boolean }) {
             className="flex w-full items-center gap-2.5 rounded-[var(--r-sm)] px-2.5 py-2 text-label text-ink transition-colors hover:bg-hover"
           >
             <IconMail size={15} className="shrink-0 text-ink-3" />
-            <span className="min-w-0 flex-1 truncate">{SUPPORT.email}</span>
+            <span className="min-w-0 flex-1 truncate">{supportEmail}</span>
           </a>
           <a
             role="menuitem"
-            href={telHref(SUPPORT.phone)}
+            href={telHref(supportPhone)}
             onClick={close}
             className="flex w-full items-center gap-2.5 rounded-[var(--r-sm)] px-2.5 py-2 text-label text-ink transition-colors hover:bg-hover"
           >
             <IconPhone size={15} className="shrink-0 text-ink-3" />
-            <span className="tnum min-w-0 flex-1 truncate font-mono">{SUPPORT.phone}</span>
+            <span className="tnum min-w-0 flex-1 truncate font-mono">{supportPhone}</span>
           </a>
-          <p className="px-2.5 pb-1.5 pt-1 text-caption leading-snug text-ink-3">{SUPPORT.hours}</p>
+          <p className="px-2.5 pb-1.5 pt-1 text-caption leading-snug text-ink-3">{supportHours}</p>
           <MenuSep />
           <MenuItem icon={<IconSpark size={15} />} onClick={() => { close(); tour.start(); }}>
             Take the tour

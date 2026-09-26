@@ -164,6 +164,35 @@ export function usePlatformCatalog(): FeatureCatalog {
   return useMemo(() => catalogOf(query.data, query.isPending), [query.data, query.isPending]);
 }
 
+export function usePlatformSettings() {
+  const { platformSession } = useSession();
+  return useQuery({
+    queryKey: qk.platformSettings(),
+    queryFn: api.getPlatformSettings,
+    enabled: platformSession.signedIn,
+  });
+}
+
+/** Astrale's own desk — shown until the live answer arrives, so the help
+ *  menu and the on-hold screen never render a blank phone number or a
+ *  `mailto:` with nobody in it. */
+const SUPPORT_FALLBACK: api.PublicSettings = {
+  support_email: "support@astrale.health",
+  support_phone: "+91 80 4718 2200",
+  support_hours: "Monday to Saturday, 9am – 7pm IST",
+};
+
+/** No session gate — anyone on a clinic's own address may read who to ask
+ *  for help, signed in or not. */
+export function useSupportInfo() {
+  return useQuery({
+    queryKey: qk.publicSettings(),
+    queryFn: api.getPublicSettings,
+    staleTime: 5 * 60_000,
+    placeholderData: SUPPORT_FALLBACK,
+  });
+}
+
 /**
  * What this clinic owes the platform — the practice admin's view. Only asked
  * for by someone who may see it; the API refuses everyone else with a 403.
@@ -205,6 +234,17 @@ export function useConfig() {
   const query = useClinicQuery(qk.config(t), api.getConfig);
   const fallback = useMemo(() => defaultConfig(t), [t]);
   return { ...query, data: useResolved<TenantConfig>(query, fallback) };
+}
+
+/** The clinic's own logo, as an object URL — `null` until it has one. Reads
+ *  the flag off `useConfig()` first, so a clinic without a logo never
+ *  fires the request that would 404. */
+export function useClinicLogoUrl(): string | null {
+  const t = useTenantId();
+  const { data: config } = useConfig();
+  const query = useClinicQuery(qk.logo(t), api.getClinicLogoFile, config.has_logo);
+  const blob = config.has_logo ? query.data : undefined;
+  return useMemo(() => (blob ? URL.createObjectURL(blob) : null), [blob]);
 }
 
 export function useFieldDefinitions() {

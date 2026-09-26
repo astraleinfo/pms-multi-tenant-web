@@ -4,10 +4,9 @@ import * as React from "react";
 import Link from "next/link";
 import * as api from "@/lib/api";
 import { useApp, useTenant } from "@/lib/store/app-store";
-import { useSubscription } from "@/lib/query/hooks";
+import { useSubscription, useSupportInfo } from "@/lib/query/hooks";
 import { formatDate } from "@/lib/format";
 import { openPdfBlob } from "@/lib/pdf";
-import { SUPPORT } from "@/lib/support";
 import { cn } from "@/lib/cn";
 import type { Subscription, SubscriptionInvoice } from "@/lib/types";
 import { Badge, type Tone } from "@/components/ui/badge";
@@ -32,6 +31,20 @@ export const rentMoney = (amount: number, code: string) =>
   new Intl.NumberFormat(code === "INR" ? "en-IN" : "en-GB", {
     style: "currency", currency: code || "INR", maximumFractionDigits: 2,
   }).format(amount);
+
+/**
+ * Same currency, shortened — for a chart axis or any other spot with a
+ * fixed, narrow gutter that a full figure like "₹21,592.00" would overflow.
+ * Below a thousand the full figure is already short, so it's left whole.
+ */
+export const rentMoneyCompact = (amount: number, code: string) =>
+  Math.abs(amount) < 1000
+    ? new Intl.NumberFormat(code === "INR" ? "en-IN" : "en-GB", {
+        style: "currency", currency: code || "INR", maximumFractionDigits: 0,
+      }).format(amount)
+    : new Intl.NumberFormat(code === "INR" ? "en-IN" : "en-GB", {
+        style: "currency", currency: code || "INR", notation: "compact", maximumFractionDigits: 1,
+      }).format(amount);
 
 const STATUS: Record<SubscriptionInvoice["status"], { label: string; tone: Tone }> = {
   open: { label: "Open", tone: "warn" },
@@ -231,15 +244,19 @@ export function SubscriptionBills({
 
 /** How to pay — there is no gateway, so this is the honest answer. */
 export function HowToPay({ className }: { className?: string }) {
+  const { data: support } = useSupportInfo();
+  const supportEmail = support?.support_email ?? "";
+  const supportPhone = support?.support_phone ?? "";
+
   return (
     <div className={cn("rounded-[var(--r)] border border-line bg-surface-2 px-4 py-3", className)}>
       <p className="text-label font-medium text-ink">How to pay</p>
       <p className="mt-1 text-caption leading-relaxed text-ink-2">
         Pay by bank transfer or UPI quoting the bill number, then send the payment reference to{" "}
-        <a href={`mailto:${SUPPORT.email}`} className="font-medium text-accent-text underline-offset-4 hover:underline">
-          {SUPPORT.email}
+        <a href={`mailto:${supportEmail}`} className="font-medium text-accent-text underline-offset-4 hover:underline">
+          {supportEmail}
         </a>{" "}
-        or call {SUPPORT.phone}. The bill is marked paid as soon as the payment is matched, and any hold
+        or call {supportPhone}. The bill is marked paid as soon as the payment is matched, and any hold
         lifts at the same moment.
       </p>
     </div>
@@ -309,6 +326,8 @@ export function OnHoldStage() {
   const { tenant, user, role } = useTenant();
   const isAdmin = role === "tenant_admin";
   const { data, isPending } = useSubscription(isAdmin);
+  const { data: support } = useSupportInfo();
+  const supportEmail = support?.support_email ?? "";
 
   return (
     <div className="relative min-h-dvh bg-ground px-4 py-10 sm:px-6">
@@ -357,8 +376,8 @@ export function OnHoldStage() {
                 <IconMail size={16} className="mt-0.5 shrink-0 text-ink-3" />
                 <p className="text-label leading-relaxed text-ink-2">
                   Signed in as {user.name}. Ask your practice admin to settle the bill, or contact{" "}
-                  <a href={`mailto:${SUPPORT.email}`} className="font-medium text-accent-text underline-offset-4 hover:underline">
-                    {SUPPORT.email}
+                  <a href={`mailto:${supportEmail}`} className="font-medium text-accent-text underline-offset-4 hover:underline">
+                    {supportEmail}
                   </a>.
                 </p>
               </div>

@@ -76,6 +76,9 @@ interface AppContextValue {
   deleteUser: (userId: Id) => Promise<void>;
 
   updateConfig: (patch: Partial<TenantConfig>) => void;
+  /** awaited: the settings page shows the new mark as soon as this resolves */
+  uploadClinicLogo: (file: File) => Promise<TenantConfig>;
+  removeClinicLogo: () => void;
   /** Unused by the UI — a module is granted by a super admin, not bought from
       inside the clinic. See the note in `lib/api`. */
   purchaseFeature: (key: FeatureKey) => void;
@@ -169,6 +172,7 @@ interface AppContextValue {
   ) => Promise<TenantFeature>;
   /** Set a module's monthly price for every clinic. Super admin only. */
   setFeaturePrice: (featureKey: FeatureKey, priceMonthly: number) => Promise<CatalogFeature>;
+  updatePlatformSettings: (changes: Partial<api.PlatformSettings>) => Promise<api.PlatformSettings>;
   resendTenantInvitation: (tenantId: Id, userId: Id) => Promise<api.TenantCreated>;
   openSupportSession: (tenantId: Id) => Promise<api.SupportSession>;
   /** Send this colleague their "set your password" link again. */
@@ -287,6 +291,8 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     (a: { patientId: Id; input: Parameters<typeof api.takeCounterPayment>[1] }) =>
       api.takeCounterPayment(a.patientId, a.input));
   const mUpdateConfig = useTenantMutation((p: Partial<TenantConfig>) => api.updateConfig(p));
+  const mUploadLogo = useTenantMutation((file: File) => api.uploadClinicLogo(file));
+  const mRemoveLogo = useTenantMutation<void, TenantConfig>(() => api.deleteClinicLogo());
   const mPurchase = useTenantMutation((k: FeatureKey) => api.purchaseFeature(k));
   const mDeactivate = useTenantMutation((k: FeatureKey) => api.deactivateFeature(k));
   const mAddField = useTenantMutation((d: Omit<FieldDefinition, "id" | "tenant_id" | "scope" | "clinical_type">) => api.addFieldDefinition(d));
@@ -334,6 +340,10 @@ function AppFacade({ children }: { children: React.ReactNode }) {
   const mFeaturePrice = useMutation({
     mutationFn: (a: { key: FeatureKey; price: number }) => api.setFeaturePrice(a.key, a.price),
     onSuccess: invalidatePlatform,
+  });
+  const mPlatformSettings = useMutation({
+    mutationFn: (changes: Partial<api.PlatformSettings>) => api.updatePlatformSettings(changes),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.platformSettings() }),
   });
   const mResendTenantInvite = useMutation({
     mutationFn: (a: { id: Id; userId: Id }) => api.resendTenantInvitation(a.id, a.userId),
@@ -383,6 +393,8 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     deleteUser: (id) => mDeleteUser.mutateAsync(id),
 
     updateConfig: (patch) => mUpdateConfig.mutate(patch),
+    uploadClinicLogo: (file) => mUploadLogo.mutateAsync(file),
+    removeClinicLogo: () => mRemoveLogo.mutate(),
     purchaseFeature: (key) => mPurchase.mutate(key),
     deactivateFeature: (key) => mDeactivate.mutate(key),
     addFieldDefinition: (d) => mAddField.mutate(d),
@@ -442,6 +454,7 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     updateTenant: (id, changes) => mUpdateTenant.mutateAsync({ id, changes }),
     setTenantFeature: (id, key, status) => mTenantFeature.mutateAsync({ id, key, status }),
     setFeaturePrice: (key, price) => mFeaturePrice.mutateAsync({ key, price }),
+    updatePlatformSettings: (changes) => mPlatformSettings.mutateAsync(changes),
     resendTenantInvitation: (id, userId) => mResendTenantInvite.mutateAsync({ id, userId }),
     openSupportSession: (id) => api.openSupportSession(id),
     resendInvitation: (userId) => mResendInvite.mutateAsync(userId),

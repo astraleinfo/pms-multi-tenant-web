@@ -63,7 +63,7 @@ export function defaultConfig(tenantId: Id, prefix = "AS"): TenantConfig {
     ],
     token_prefix: prefix.slice(0, 1), urgent_first: true,
     invoice_prefix: `${prefix}-INV`, tax_pct: 0, payment_terms_days: 14, currency: "INR",
-    expiry_alert_days: 90,
+    expiry_alert_days: 90, has_logo: false,
   };
 }
 

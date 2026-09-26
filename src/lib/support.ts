@@ -5,20 +5,11 @@ import type { Feature, Tenant, User } from "@/lib/types";
 /* ==========================================================================
    The support desk.
 
-   A clinic cannot switch a module on for itself — the entitlement is the
-   platform's to grant (§3.2), and the console is where a super admin grants
-   it. What a clinic *can* do is ask, so the details of who to ask live here
-   rather than being typed into whichever page needed them.
-
-   The three values are read from the environment so a deployment can point at
-   its own desk; the defaults are Astrale's.
+   Read live from the platform's own settings (`GET /v1/public/settings`)
+   rather than a build-time constant, so a super admin can change the desk's
+   email, phone or hours from the console and every clinic sees it on its
+   next load — no rebuild.
    ========================================================================== */
-
-export const SUPPORT = {
-  email: process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "support@astrale.health",
-  phone: process.env.NEXT_PUBLIC_SUPPORT_PHONE || "+91 80 4718 2200",
-  hours: process.env.NEXT_PUBLIC_SUPPORT_HOURS || "Monday to Saturday, 9am – 7pm IST",
-};
 
 /** `+91 80 4718 2200` → `+918047182200`, which is what a phone will dial. */
 export const telHref = (phone: string) => `tel:${phone.replace(/[^\d+]/g, "")}`;
@@ -34,7 +25,7 @@ type Ask = "activation" | "walkthrough";
  */
 export function moduleMailto(
   ask: Ask,
-  { feature, tenant, user }: { feature: Feature; tenant: Tenant; user: User },
+  { feature, tenant, user, supportEmail }: { feature: Feature; tenant: Tenant; user: User; supportEmail: string },
 ) {
   const subject =
     ask === "activation"
@@ -60,5 +51,5 @@ export function moduleMailto(
     user.name,
   ].join("\n");
 
-  return `mailto:${SUPPORT.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  return `mailto:${supportEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }

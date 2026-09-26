@@ -525,14 +525,28 @@ export const deleteUser = (userId: Id) => del<void>(`/v1/users/${userId}`);
 export const updateConfig = (changes: Partial<TenantConfig>) =>
   patch_<TenantConfig>("/v1/tenant/config", stripReadOnly(changes));
 
+/** The clinic's own mark. A second upload replaces the first — there is only
+ *  ever one, so there is nothing here to list or address by id. */
+export const uploadClinicLogo = (file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  return upload<TenantConfig>("/v1/tenant/config/logo", form);
+};
+
+export const deleteClinicLogo = () => del<TenantConfig>("/v1/tenant/config/logo");
+
+/** The logo's own bytes, as a blob the caller turns into an object URL. Only
+ *  called once `has_logo` says there is one, or this 404s. */
+export const getClinicLogoFile = () => requestBlob("/v1/tenant/config/logo");
+
 /**
  * `tenant_id` and `timezone` are the server's to decide — it sends them, and
  * rejects them coming back (the patch refuses unknown keys), which used to
  * fail every save from the configuration tab.
  */
 function stripReadOnly(config: Partial<TenantConfig>) {
-  const { tenant_id: _tenantId, timezone: _timezone, ...rest } =
-    config as Partial<TenantConfig> & { tenant_id?: string; timezone?: string };
+  const { tenant_id: _tenantId, timezone: _timezone, has_logo: _hasLogo, ...rest } =
+    config as Partial<TenantConfig> & { tenant_id?: string; timezone?: string; has_logo?: boolean };
   return rest;
 }
 
@@ -1147,6 +1161,43 @@ export const setFeaturePrice = (featureKey: FeatureKey, priceMonthly: number) =>
   patch_<CatalogFeature>(`/v1/platform/catalog/features/${featureKey}`, {
     price_monthly: priceMonthly,
   });
+
+/* ---- platform settings (§ platform settings) --------------------------------- */
+
+export interface PlatformSettings {
+  support_email: string;
+  support_phone: string;
+  support_hours: string;
+  default_day_start: string;
+  default_day_end: string;
+  default_slot_minutes: 15 | 20 | 30;
+  default_duration: number;
+  default_tax_pct: number;
+  default_payment_terms_days: number;
+  default_expiry_alert_days: number;
+  default_currency: "GBP" | "EUR" | "USD" | "INR";
+  invite_token_ttl_seconds: number;
+  reset_token_ttl_seconds: number;
+  reminder_lead_hours: number;
+  rent_due_days: number;
+  rent_grace_days: number;
+  rent_reminder_days_before_due: number;
+}
+
+export const getPlatformSettings = () => get<PlatformSettings>("/v1/platform/settings");
+
+export const updatePlatformSettings = (changes: Partial<PlatformSettings>) =>
+  patch_<PlatformSettings>("/v1/platform/settings", changes);
+
+export interface PublicSettings {
+  support_email: string;
+  support_phone: string;
+  support_hours: string;
+}
+
+/** No session needed — this is what a clinic that can't self-serve reads to
+ *  know who to ask. */
+export const getPublicSettings = () => get<PublicSettings>("/v1/public/settings");
 
 /* ---- subscription billing, from the console ---------------------------------- */
 

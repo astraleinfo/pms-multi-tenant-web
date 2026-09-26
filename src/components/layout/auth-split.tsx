@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { FEATURES } from "@/lib/data/catalog";
-import { SUPPORT } from "@/lib/support";
+import { useSupportInfo } from "@/lib/query/hooks";
 import { cn } from "@/lib/cn";
 import { Spinner } from "@/components/ui/loader";
 import {
@@ -320,6 +320,8 @@ export function AuthSplit({
   badge?: string;
   tone?: Tone;
 }) {
+  const { data: support } = useSupportInfo();
+
   return (
     <div className="flex min-h-dvh w-full flex-col bg-surface lg:h-dvh lg:flex-row lg:overflow-hidden">
       <ModuleShowcase slides={slides} badge={badge} tone={tone} />
@@ -327,7 +329,7 @@ export function AuthSplit({
       <main className="flex min-w-0 flex-1 flex-col lg:overflow-y-auto">
         <div className="flex justify-end px-6 pt-6 sm:px-10 lg:px-12 lg:pt-10 xl:px-14">
           <a
-            href={`mailto:${SUPPORT.email}`}
+            href={`mailto:${support?.support_email ?? ""}`}
             className={cn(
               "inline-flex shrink-0 items-center gap-2 rounded-[var(--r-sm)] text-label font-medium text-accent",
               "underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4",

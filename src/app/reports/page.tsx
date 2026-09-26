@@ -21,7 +21,8 @@ import { RoleGate } from "@/components/domain/gates";
 import { Avatar } from "@/components/ui/misc";
 import { PageLoader } from "@/components/ui/loader";
 import {
-  IconArrowRight, IconChart, IconClock, IconDownload, IconFlask, IconLock, IconMortar, IconReceipt,
+  IconArrowRight, IconChart, IconClock, IconDownload, IconFlask, IconLock, IconPill, IconReceipt,
+  IconSpark,
   IconStethoscope, IconUsers
 } from "@/components/ui/icons";
 
@@ -248,7 +249,7 @@ function Reports() {
 
             {pharm && (
               <Card>
-                <CardHeader tone="ok" icon={<IconMortar size={16} />} title="Pharmacy" hint="From dispense transactions." />
+                <CardHeader tone="ok" icon={<IconPill size={16} />} title="Pharmacy" hint="From dispense transactions." />
                 <CardBody className="pt-1">
                   <dl className="grid grid-cols-2 gap-x-4">
                     <KV label="Units out" value={<span className="tnum font-mono">{pharm.dispensed_units}</span>} />

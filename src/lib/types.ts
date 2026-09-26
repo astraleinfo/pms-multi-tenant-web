@@ -65,6 +65,9 @@ export interface TenantConfig {
   currency: "GBP" | "EUR" | "USD" | "INR";
   /* inventory */
   expiry_alert_days: number;
+  /** whether the clinic has uploaded its own logo — the image itself is a
+   *  separate request, so this page's data never carries the bytes. */
+  has_logo: boolean;
 }
 
 export interface ClinicalType {

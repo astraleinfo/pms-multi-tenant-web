@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import * as api from "@/lib/api";
 import { useApp, useTenant } from "@/lib/store/app-store";
 import {
-  useClinicDb, useFeatureCatalog, useSchema, useSubscription, useUsers,
+  useClinicDb, useClinicLogoUrl, useFeatureCatalog, useSchema, useSubscription, useUsers,
 } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { cn } from "@/lib/cn";
@@ -393,10 +393,33 @@ function Settings({ initial }: { initial: Tab }) {
   const {
     session, can, hasFeature,
     removeFieldDefinition, notify,
+    uploadClinicLogo, removeClinicLogo,
   } = useApp();
   const db = useClinicDb();
   const catalog = useFeatureCatalog();
   const { tenant } = useTenant();
+  const logoUrl = useClinicLogoUrl();
+  const logoInput = React.useRef<HTMLInputElement>(null);
+  const [logoBusy, setLogoBusy] = React.useState(false);
+
+  const chooseLogo = async (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    setLogoBusy(true);
+    try {
+      await uploadClinicLogo(file);
+      notify({ tone: "ok", title: "Logo updated", body: file.name });
+    } catch (e) {
+      notify({
+        tone: "critical",
+        title: "That logo was not saved",
+        body: e instanceof Error ? e.message : "That did not go through.",
+      });
+    } finally {
+      setLogoBusy(false);
+      if (logoInput.current) logoInput.current.value = "";
+    }
+  };
   const t = session.tenantId;
   const queryClient = useQueryClient();
   const tour = useTour();
@@ -458,12 +481,36 @@ function Settings({ initial }: { initial: Tab }) {
             >
               {/* who this is, once, at the top — not repeated in the header */}
               <div className="flex items-center gap-3 px-4 py-3">
-                <Monogram name={tenant.name} size={38} />
-                <div className="min-w-0">
+                <Monogram name={tenant.name} size={38} logoUrl={logoUrl} />
+                <div className="min-w-0 flex-1">
                   <p className="truncate text-body font-semibold text-ink">{tenant.name}</p>
                   <p className="truncate text-caption text-ink-3">{tenant.city} · {tenant.plan}</p>
                 </div>
+                <input
+                  ref={logoInput}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="sr-only"
+                  onChange={(e) => void chooseLogo(e.target.files)}
+                />
+                <Button variant="secondary" size="sm" disabled={logoBusy} onClick={() => logoInput.current?.click()}>
+                  <IconPlus size={14} /> {logoBusy ? "Uploading…" : logoUrl ? "Replace logo" : "Upload logo"}
+                </Button>
+                {logoUrl && (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Remove logo"
+                    disabled={logoBusy}
+                    onClick={() => removeClinicLogo()}
+                  >
+                    <IconTrash size={14} />
+                  </Button>
+                )}
               </div>
+              <p className="px-4 pb-3 -mt-1 text-caption text-ink-3">
+                PNG, JPEG or WebP, up to 2 MB. Shown in the sidebar here and printed on this clinic's PDFs.
+              </p>
 
               <SettingRow label="Clinic name" htmlFor="pr-name">
                 <Input id="pr-name" defaultValue={tenant.name} />

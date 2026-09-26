@@ -1,21 +1,17 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useRouter } from "@/lib/navigation";
 import { useApp } from "@/lib/store/app-store";
 import { cn } from "@/lib/cn";
 import type { Id, Tenant } from "@/lib/types";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Avatar, EmptyState } from "@/components/ui/misc";
-import { Menu, MenuItem, MenuSep } from "@/components/ui/modal";
+import { EmptyState } from "@/components/ui/misc";
 import { StageLoader } from "@/components/ui/loader";
-import {
-  IconExternal, IconLayers, IconLock, IconLogout, IconPulse, IconReceipt, IconShield, IconUsers,
-} from "@/components/ui/icons";
+import { IconExternal, IconLock, IconSidebar } from "@/components/ui/icons";
+import { PlatformMark } from "./rail";
 import { isSuperAdmin } from "@/lib/api";
+import { ConsoleRail } from "./rail";
 
 /* ==========================================================================
    The console's own chrome.
@@ -24,54 +20,17 @@ import { isSuperAdmin } from "@/lib/api";
    address it is served on printed under the name. Platform staff move between
    two products in one browser, and the one thing worse than an ugly console is
    one that looks enough like a clinic to be mistaken for it.
+
+   The shape underneath is the clinic app's own, though — a collapsible desktop
+   rail, a mobile drawer, the same layout constants — because a platform
+   operator who knows one should recognise the other instead of relearning it.
    ========================================================================== */
 
-/**
- * Where the console goes, in the order it is worked.
- *
- * `superAdmin` on a section means it is not shown to the support desk. Read
- * that as housekeeping rather than as security: the API refuses those routes
- * to anybody but a super admin whatever this array says, and it answers 403
- * rather than 401 so a hand-typed URL is refused on who is asking, not on
- * whether they are signed in.
- */
-const SECTIONS = [
-  {
-    href: "/platform" as const,
-    label: "Overview",
-    icon: <IconLayers size={15} />,
-    blurb: "Everything at once",
-  },
-  {
-    href: "/platform/tenants" as const,
-    label: "Tenants",
-    icon: <IconUsers size={15} />,
-    blurb: "Every clinic, filtered",
-  },
-  {
-    href: "/platform/modules" as const,
-    label: "Modules & pricing",
-    icon: <IconLayers size={15} />,
-    blurb: "Pricing, subscriptions, access",
-  },
-  {
-    href: "/platform/billing" as const,
-    label: "Bills",
-    icon: <IconReceipt size={15} />,
-    blurb: "Monthly bills, reminders and holds",
-  },
-  {
-    href: "/platform/jobs" as const,
-    label: "Background jobs",
-    icon: <IconPulse size={15} />,
-    blurb: "Celery queues, workers and failures",
-    superAdmin: true,
-  },
-];
+const RAIL_KEY = "astrale-pms.console-rail";
 
 /**
- * A console page: signed in, wrapped in the platform bar, inside the container
- * every section shares.
+ * A console page: signed in, wrapped in the rail, inside the container every
+ * section shares.
  *
  * The guard is here rather than in a layout because the layout is a server
  * component and the session lives in the browser — and because a console page
@@ -87,6 +46,22 @@ export function ConsolePage({
 }) {
   const router = useRouter();
   const { platformSession, platformUser, ready } = useApp();
+  /* Five destinations is nothing to hide behind icons, where the clinic
+     rail's twelve was — so, unlike that one, this rail rests open. */
+  const [collapsed, setCollapsed] = React.useState(false);
+  const [mobileNav, setMobileNav] = React.useState(false);
+
+  React.useEffect(() => {
+    try { setCollapsed(localStorage.getItem(RAIL_KEY) === "1"); } catch { /* ignore */ }
+  }, []);
+
+  const toggleRail = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try { localStorage.setItem(RAIL_KEY, next ? "1" : "0"); } catch { /* ignore */ }
+      return next;
+    });
+  };
 
   React.useEffect(() => {
     if (ready && !platformSession.signedIn) router.replace("/platform/login");
@@ -101,11 +76,52 @@ export function ConsolePage({
   const refused = superAdmin && !isSuperAdmin(platformUser);
 
   return (
-    <div className="min-h-dvh bg-ground">
-      <ConsoleBar />
-      <main className="mx-auto w-full max-w-[1440px] px-4 py-7 sm:px-6">
-        {refused ? <NotYourSection /> : children}
-      </main>
+    <div className="flex min-h-dvh bg-ground">
+      {/* desktop rail */}
+      <aside
+        className="sticky top-0 hidden h-dvh shrink-0 transition-[width] duration-300 ease-[var(--ease-brand)] lg:block"
+        style={{ width: collapsed ? "var(--rail-w-collapsed)" : "var(--rail-w)" }}
+      >
+        <ConsoleRail collapsed={collapsed} onToggle={toggleRail} />
+      </aside>
+
+      {/* mobile drawer rail */}
+      {mobileNav && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div
+            className="fixed inset-0 bg-[hsl(var(--sh)/.4)] fade"
+            onClick={() => setMobileNav(false)}
+            aria-hidden
+          />
+          <div
+            className="relative h-full w-[var(--rail-w)] max-w-[84vw] shadow-e4"
+            style={{ animation: "railin var(--d-3) var(--ease-out) both" }}
+          >
+            <style>{"@keyframes railin{from{transform:translateX(-18px);opacity:.5}to{transform:none;opacity:1}}"}</style>
+            <ConsoleRail collapsed={false} onNavigate={() => setMobileNav(false)} />
+          </div>
+        </div>
+      )}
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* the mobile-only strip: the rail is a drawer below `lg`, so this is
+            the one thing worth keeping on screen at all times instead — a
+            way back into it. */}
+        <header className="sticky top-0 z-30 flex h-[var(--topbar-h)] shrink-0 items-center gap-3 border-b border-line-soft bg-surface px-4 lg:hidden">
+          <Button variant="ghost" size="icon-sm" onClick={() => setMobileNav(true)} aria-label="Open menu">
+            <IconSidebar size={17} />
+          </Button>
+          <span className="flex h-7 shrink-0 items-center rounded-[9px] bg-stage px-2" aria-hidden>
+            <PlatformMark height={13} />
+          </span>
+        </header>
+
+        <main className="min-w-0 flex-1">
+          <div className="mx-auto w-full max-w-[1440px] px-4 py-7 sm:px-6">
+            {refused ? <NotYourSection /> : children}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
@@ -122,100 +138,6 @@ function NotYourSection() {
         }
       />
     </div>
-  );
-}
-
-function ConsoleBar() {
-  const { host, platformUser, platformSignOut } = useApp();
-  const pathname = usePathname();
-
-  return (
-    <header className="sticky top-0 z-30 border-b border-white/10 bg-stage text-stage-ink">
-      <div className="mx-auto flex h-[var(--topbar-h)] w-full max-w-[1440px] items-center gap-3 px-4 sm:px-6">
-        <Link href="/platform" className="flex min-w-0 items-center gap-3">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-accent text-accent-ink" aria-hidden>
-            <IconShield size={17} />
-          </span>
-          <div className="min-w-0">
-            <p className="truncate font-display text-body font-semibold leading-tight">
-              Astrale Platform
-            </p>
-            <p className="tnum truncate font-mono text-micro text-stage-dim">
-              admin.{host.root}{host.port ? `:${host.port}` : ""}
-            </p>
-          </div>
-        </Link>
-
-        <div className="flex-1" />
-
-        <Badge
-          tone={isSuperAdmin(platformUser) ? "accent" : "neutral"}
-          size="sm"
-          className="hidden sm:inline-flex"
-        >
-          {isSuperAdmin(platformUser) ? "Super admin" : "Support desk"}
-        </Badge>
-
-        {platformUser && (
-          <Menu
-            width={230}
-            trigger={({ toggle }) => (
-              <button
-                onClick={toggle}
-                className="flex items-center gap-2 rounded-[var(--r)] px-1.5 py-1 transition-colors hover:bg-white/10"
-              >
-                <Avatar name={platformUser.name} initials={platformUser.initials} size="xs" tintKey={platformUser.id} />
-                <span className="hidden text-label font-medium sm:block">{platformUser.name}</span>
-              </button>
-            )}
-          >
-            {() => (
-              <>
-                <div className="px-2.5 py-2">
-                  <p className="text-label font-semibold text-ink">{platformUser.name}</p>
-                  <p className="mt-0.5 text-caption text-ink-3">{platformUser.email}</p>
-                  <p className="mt-1.5 text-micro text-ink-3">{platformUser.title}</p>
-                </div>
-                <MenuSep />
-                <MenuItem icon={<IconLogout size={15} />} onClick={platformSignOut}>Sign out</MenuItem>
-              </>
-            )}
-          </Menu>
-        )}
-      </div>
-
-      {/* The sections, as a rail under the bar rather than inside it — three
-          destinations with room for their names beats three crowded words. */}
-      <nav className="mx-auto flex w-full max-w-[1440px] items-center gap-0.5 overflow-x-auto px-4 sm:px-6" aria-label="Console sections">
-        {SECTIONS.filter((s) => !s.superAdmin || isSuperAdmin(platformUser)).map((section) => {
-          /* `/platform` is a prefix of everything, so only its own path lights it */
-          const on = section.href === "/platform"
-            ? pathname === "/platform"
-            : pathname.startsWith(section.href);
-          return (
-            <Link
-              key={section.href}
-              href={section.href}
-              aria-current={on ? "page" : undefined}
-              title={section.blurb}
-              /* The same three-way active state as `Tabs` — rule, colour and
-                 weight — restated for a dark ground, where the app's accent
-                 text token would be too dark to read. */
-              className={cn(
-                "-mb-px flex shrink-0 items-center gap-2 rounded-t-[var(--r-sm)] border-b-2 px-3 py-2",
-                "text-label transition-colors duration-150 ease-[var(--ease-brand)]",
-                on
-                  ? "border-accent font-semibold text-stage-ink"
-                  : "border-transparent font-medium text-stage-dim hover:bg-white/[0.06] hover:text-stage-ink",
-              )}
-            >
-              {section.icon}
-              {section.label}
-            </Link>
-          );
-        })}
-      </nav>
-    </header>
   );
 }
 
