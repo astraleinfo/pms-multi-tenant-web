@@ -1,97 +1,153 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/navigation";
 import { useApp } from "@/lib/store/app-store";
-import { DEMO_PLATFORM_ACCOUNTS } from "@/lib/demo-accounts";
-import { Button } from "@/components/ui/button";
-import { Field, Input } from "@/components/ui/field";
-import { AuthStage, DemoCredentials } from "@/components/layout/auth-stage";
-import { IconAlert, IconArrowRight, IconShield } from "@/components/ui/icons";
+import { StageLoader } from "@/components/ui/loader";
+import {
+  AuthError, AuthNote, AuthSplit, EmailField, PasswordField, RememberRow, SubmitButton,
+  type ShowcaseSlide,
+} from "@/components/layout/auth-split";
 
-const POINTS = [
-  { title: "Create clinics", body: "Each one gets its own subdomain the moment it exists." },
-  { title: "Hand over the keys", body: "The first admin account is created with the tenant." },
-  { title: "Lock and release", body: "Suspending a clinic takes its subdomain offline immediately." },
-  { title: "Stay outside", body: "Platform staff have no tenant and never appear inside one." },
+/* ==========================================================================
+   Platform sign-in — the console's own address.
+
+   The same window as a clinic's sign-in, because it is the same product, and
+   marked at the wordmark as the console, because it is not the same job: the
+   people here work above every clinic rather than inside one. The showcase
+   opposite is the console's own work, not the clinical modules — a super
+   admin never opens a queue or writes a prescription.
+
+   There is no password reset for platform staff from this page, so no link
+   offers one.
+   ========================================================================== */
+
+const CONSOLE: ShowcaseSlide[] = [
+  {
+    key: "console.onboard",
+    name: "Onboard clinics",
+    blurb: "A subdomain, an admin invite and a staff import — a clinic live in one sitting.",
+  },
+  {
+    key: "console.modules",
+    name: "Modules & pricing",
+    blurb: "Set what each module costs and choose which of them a clinic runs.",
+  },
+  {
+    key: "console.billing",
+    name: "Billing & reminders",
+    blurb: "Monthly bills, reminders before they fall due, and holds when they go unpaid.",
+  },
+  {
+    key: "console.apart",
+    name: "Kept outside",
+    blurb: "Platform staff never appear inside a clinic, and patient data never passes through here.",
+  },
 ];
+
+/* kept apart from the clinic sign-in's key: one browser may hold both */
+const REMEMBER_KEY = "astrale.platform-login.email";
+
+const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const GENERIC = /invalid|incorrect|credential|do(es)? not match|not found|no account|unauthor/i;
 
 export default function PlatformLoginPage() {
   const router = useRouter();
-  const { host, platformSession, ready, platformSignIn } = useApp();
+  const { platformSession, ready, platformSignIn } = useApp();
+
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
+  const [remember, setRemember] = React.useState(false);
+  const [emailError, setEmailError] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
 
   React.useEffect(() => {
     if (ready && platformSession.signedIn) router.replace("/platform");
   }, [ready, platformSession.signedIn, router]);
 
-  const [busy, setBusy] = React.useState(false);
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem(REMEMBER_KEY);
+      if (saved) {
+        setEmail(saved);
+        setRemember(true);
+      }
+    } catch {
+      /* storage blocked — nothing to restore */
+    }
+  }, []);
+
+  if (!ready) return <StageLoader />;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!LOOKS_LIKE_EMAIL.test(email.trim())) {
+      setEmailError("Please enter a valid email address.");
+      return;
+    }
+    setEmailError(null);
     setBusy(true);
     const result = await platformSignIn(email, password);
     setBusy(false);
     if (result.ok) {
+      try {
+        if (remember) localStorage.setItem(REMEMBER_KEY, email);
+        else localStorage.removeItem(REMEMBER_KEY);
+      } catch {
+        /* storage blocked — sign-in still stands */
+      }
       setError(null);
       router.replace("/platform");
     } else {
-      setError(result.error);
+      setError(
+        GENERIC.test(result.error)
+          ? "We couldn’t sign you in with those credentials. Please check your email and password and try again."
+          : result.error,
+      );
       setPassword("");
     }
   };
 
   return (
-    <AuthStage
-      eyebrow="Platform"
-      title="Super admin console"
-      address={`${host.root}${host.port ? `:${host.port}` : ""}`}
-      points={POINTS}
-      blurb="Above every clinic: create tenants, hand them a subdomain, and switch them on or off. This host never serves patient data."
+    <AuthSplit
+      slides={CONSOLE}
+      badge="Console"
+      tone="console"
+      title="Platform sign-in"
+      subtitle="Astrale staff only. This is the console that runs every clinic."
+      below={
+        <AuthNote>
+          Platform accounts are issued by Astrale, and there is no self-service reset for them —
+          ask another super admin.
+        </AuthNote>
+      }
     >
-      <div className="flex items-center gap-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-accent text-accent-ink">
-          <IconShield size={19} />
-        </span>
-        <div className="min-w-0">
-          <h2 className="truncate font-display text-[1.125rem] font-semibold tracking-[-0.015em] text-ink">
-            Platform sign-in
-          </h2>
-          <p className="truncate text-[0.75rem] text-ink-3">Astrale staff only</p>
-        </div>
-      </div>
-
-      <form onSubmit={submit} className="mt-5 space-y-4">
-        <Field label="Email" required htmlFor="pemail">
-          <Input id="pemail" type="email" autoComplete="username" value={email} required
-                 onChange={(e) => { setEmail(e.target.value); setError(null); }}
-                 placeholder="you@astrale.health" invalid={!!error} />
-        </Field>
-        <Field label="Password" required htmlFor="ppassword">
-          <Input id="ppassword" type="password" autoComplete="current-password" value={password} required
-                 onChange={(e) => { setPassword(e.target.value); setError(null); }}
-                 placeholder="••••••••" invalid={!!error} />
-        </Field>
-
-        {error && (
-          <p role="alert" className="flex items-start gap-2 rounded-[var(--r)] border border-critical-border bg-critical-soft px-3 py-2.5 text-[0.8125rem] leading-snug text-critical-text">
-            <IconAlert size={15} className="mt-px shrink-0" />
-            {error}
-          </p>
-        )}
-
-        <Button type="submit" variant="primary" size="lg" className="w-full" disabled={busy}>
-          Sign in <IconArrowRight size={16} />
-        </Button>
+      <form onSubmit={submit} noValidate className="mt-8 space-y-5">
+        <EmailField
+          id="pemail"
+          label="Email address"
+          autoComplete="username"
+          value={email}
+          onChange={(e) => { setEmail(e.target.value); setEmailError(null); setError(null); }}
+          placeholder="you@astrale.health"
+          error={emailError}
+          required
+        />
+        <PasswordField
+          id="ppassword"
+          label="Password"
+          autoComplete="current-password"
+          value={password}
+          onChange={(e) => { setPassword(e.target.value); setError(null); }}
+          placeholder="Enter your password"
+          invalid={!!error}
+          required
+        />
+        <RememberRow checked={remember} onChange={setRemember} />
+        {error && <AuthError>{error}</AuthError>}
+        <SubmitButton busy={busy}>Sign in</SubmitButton>
       </form>
-
-      <DemoCredentials
-        className="mt-4"
-        accounts={DEMO_PLATFORM_ACCOUNTS}
-        onPick={(e, p) => { setEmail(e); setPassword(p); setError(null); }}
-      />
-    </AuthStage>
+    </AuthSplit>
   );
 }

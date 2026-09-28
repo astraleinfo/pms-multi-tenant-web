@@ -23,11 +23,11 @@ export function Avatar({
   tintKey?: string;
 }) {
   const sizes = {
-    xs: "h-6 w-6 text-[0.625rem]",
-    sm: "h-7.5 w-7.5 text-[0.6875rem]",
-    md: "h-9 w-9 text-[0.75rem]",
-    lg: "h-11 w-11 text-[0.875rem]",
-    xl: "h-14 w-14 text-[1.0625rem]",
+    xs: "h-6 w-6 text-micro",
+    sm: "h-7.5 w-7.5 text-micro",
+    md: "h-9 w-9 text-caption",
+    lg: "h-11 w-11 text-body",
+    xl: "h-14 w-14 text-title-sm",
   };
   const key = tintKey ?? name;
   let hash = 0;
@@ -89,6 +89,15 @@ export function ScrollArea({
 
 /* ---- empty state ---------------------------------------------------------- */
 
+/**
+ * Nothing here — said once, properly.
+ *
+ * The glyph sits in a large soft disc rather than a small tinted square: this
+ * is the only thing in a panel that is otherwise blank, so it is allowed to be
+ * the shape the eye lands on. The disc is neutral on purpose — an empty diary
+ * is not a warning, and a tinted tile would be claiming a state the panel does
+ * not have. What the reader can do about it, if anything, goes in `action`.
+ */
 export function EmptyState({
   icon, title, body, action, className, compact,
 }: {
@@ -100,14 +109,20 @@ export function EmptyState({
   compact?: boolean;
 }) {
   return (
-    <div className={cn("flex flex-col items-center justify-center text-center", compact ? "py-8 px-5" : "py-16 px-6", className)}>
+    <div className={cn("flex flex-col items-center justify-center text-center", compact ? "px-5 py-7" : "px-6 py-11", className)}>
       {icon && (
-        <span className="mb-3.5 flex h-12 w-12 items-center justify-center rounded-[var(--r-lg)] bg-surface-3 text-ink-3">
+        <span
+          className={cn(
+            "mb-3.5 flex shrink-0 items-center justify-center rounded-full bg-surface-3 text-ink-3",
+            compact ? "h-11 w-11" : "h-[4.25rem] w-[4.25rem]",
+          )}
+          aria-hidden
+        >
           {icon}
         </span>
       )}
-      <p className="text-[0.9375rem] font-semibold text-ink">{title}</p>
-      {body && <p className="mt-1.5 max-w-sm text-[0.8438rem] leading-relaxed text-ink-2">{body}</p>}
+      <p className="text-label font-semibold text-ink">{title}</p>
+      {body && <p className="mt-1 max-w-[22rem] text-caption leading-relaxed text-ink-2">{body}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>
   );
@@ -156,10 +171,21 @@ export function KV({
   className?: string;
   mono?: boolean;
 }) {
+  /* A ruled row, not a stacked pair. Stacked, fifteen of these are a drift of
+     grey-over-dark with nothing lining up; ruled, the labels form a column you
+     can run down and the values form another. The hairline belongs to the row
+     so a grid of them reads as one list however the parent lays them out. */
   return (
-    <div className={cn("min-w-0", className)}>
-      <dt className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-3">{label}</dt>
-      <dd className={cn("mt-1 text-[0.875rem] text-ink", mono && "font-mono tnum text-[0.8125rem]")}>{value}</dd>
+    <div
+      className={cn(
+        "flex min-w-0 flex-wrap items-baseline justify-between gap-x-4 border-b border-row-line py-2",
+        className,
+      )}
+    >
+      <dt className="min-w-0 shrink text-label text-ink-3">{label}</dt>
+      <dd className={cn("min-w-0 grow text-right text-label font-medium text-ink", mono && "tnum font-mono")}>
+        {value}
+      </dd>
     </div>
   );
 }
@@ -168,7 +194,7 @@ export function KV({
 
 export function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="rounded-[5px] border border-line-strong bg-surface-2 px-1.5 py-px font-mono text-[0.6875rem] leading-[1.4] text-ink-2 shadow-[0_1px_0_var(--line-strong)]">
+    <kbd className="rounded-[5px] border border-line-strong bg-surface-2 px-1.5 py-px font-mono text-micro leading-[1.4] text-ink-2 shadow-[0_1px_0_var(--line-strong)]">
       {children}
     </kbd>
   );

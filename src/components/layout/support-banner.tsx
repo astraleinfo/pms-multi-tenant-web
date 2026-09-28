@@ -27,7 +27,7 @@ export function SupportBanner() {
   return (
     <div
       role="status"
-      className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-b border-warn-border bg-warn-soft px-4 py-2 text-[0.8125rem] text-warn-text sm:px-6"
+      className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-b border-warn-border bg-warn-soft px-4 py-2 text-label text-warn-text sm:px-6"
     >
       <span className="flex min-w-0 items-center gap-2">
         <IconShield size={15} className="shrink-0" />

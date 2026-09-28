@@ -1,10 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
+import { useRouter } from "@/lib/navigation";
 import { cn } from "@/lib/cn";
 import { useApp } from "@/lib/store/app-store";
-import { useShellReady } from "@/lib/query/hooks";
+import { useQueryClient } from "@tanstack/react-query";
+import { useShellReady, useTenantRecord } from "@/lib/query/hooks";
+import { qk } from "@/lib/query/keys";
+import { onAccountHold } from "@/lib/api/client";
+import { BillingBanner, OnHoldStage } from "@/components/domain/subscription";
 import { Rail } from "./rail";
 import { Topbar } from "./topbar";
 import { CommandPalette } from "./command-palette";
@@ -13,20 +18,29 @@ import { PasswordGate } from "./password-gate";
 import { SupportBanner } from "./support-banner";
 import { TourProvider } from "@/components/onboarding/tour";
 import { StageLoader } from "@/components/ui/loader";
+import { usePresence } from "@/components/ui/modal";
 
 const RAIL_KEY = "astrale-pms.rail";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { session, ready, host, hostTenant, hostTenantPending } = useApp();
   const shellReady = useShellReady();
+  const { data: tenantRecord } = useTenantRecord();
+  const queryClient = useQueryClient();
   const pathname = usePathname();
   const router = useRouter();
-  const [collapsed, setCollapsed] = React.useState(false);
+  /* Collapsed is the resting state. A clinic screen earns its keep in the
+     content, not in a permanently open list of twelve destinations, and the
+     rail is one click — or one hover away from a tooltip — either way. */
+  const [collapsed, setCollapsed] = React.useState(true);
   const [mobileNav, setMobileNav] = React.useState(false);
+  const mobileSheet = usePresence(mobileNav);
   const [search, setSearch] = React.useState(false);
 
   React.useEffect(() => {
-    try { setCollapsed(localStorage.getItem(RAIL_KEY) === "1"); } catch { /* ignore */ }
+    /* Only an explicit "0" reopens it: an unset key is somebody's first visit,
+       and that starts collapsed like everybody else's. */
+    try { setCollapsed(localStorage.getItem(RAIL_KEY) !== "0"); } catch { /* ignore */ }
   }, []);
 
   const toggleRail = () => setCollapsed((c) => {
@@ -35,6 +49,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   });
 
   React.useEffect(() => { setMobileNav(false); }, [pathname]);
+
+  /* A clinic can be put on hold while somebody is working in it — the
+     billing run lands overnight, a tab stays open. The first request the API
+     refuses with a 402 re-reads the clinic, and the record says why. */
+  const tenantId = session.tenantId;
+  React.useEffect(() => {
+    onAccountHold(() => {
+      if (tenantId) void queryClient.invalidateQueries({ queryKey: qk.tenant(tenantId), exact: true });
+    });
+    return () => onAccountHold(null);
+  }, [queryClient, tenantId]);
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -89,6 +114,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
      agrees — this is not a courtesy a hand-written request could step around. */
   if (session.mustChangePassword) return <PasswordGate>{children}</PasswordGate>;
 
+  /* On hold for an unpaid bill: the server answers nothing but the bill, so
+     the bill is the screen. A support session is never held — it is how the
+     platform looks into a clinic in exactly this state. */
+  if (tenantRecord?.billing_hold && !session.impersonated) return <OnHoldStage />;
+
   /* the shell decides what to render from what this clinic bought and how it is
      configured — hold the chrome until those have arrived rather than flashing
      a nav that is about to change */
@@ -104,22 +134,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* desktop rail */}
       <aside
         className={cn(
-          "sticky top-0 hidden h-dvh shrink-0 transition-[width] duration-300 ease-[var(--ease-brand)] lg:block",
+          "sticky top-0 z-[45] hidden h-dvh shrink-0 transition-[width] duration-300 ease-[var(--ease-brand)] lg:block",
         )}
         style={{ width: collapsed ? "var(--rail-w-collapsed)" : "var(--rail-w)" }}
       >
-        <Rail collapsed={collapsed} />
+        <Rail collapsed={collapsed} onToggle={toggleRail} />
       </aside>
 
-      {/* mobile drawer rail */}
-      {mobileNav && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="fixed inset-0 bg-[hsl(var(--sh)/.4)] fade" onClick={() => setMobileNav(false)} aria-hidden />
+      {/* mobile drawer rail — slides in from its edge, and back out */}
+      {mobileSheet.present && (
+        <div className={cn("fixed inset-0 z-50 lg:hidden", mobileSheet.leaving && "pointer-events-none")}>
           <div
-            className="relative h-full w-[var(--rail-w)] max-w-[84vw] shadow-e4"
-            style={{ animation: "railin var(--d-3) var(--ease-out) both" }}
+            className={cn("fixed inset-0 bg-[hsl(var(--sh)/.4)]", mobileSheet.leaving ? "scrim-out" : "scrim")}
+            onClick={() => setMobileNav(false)}
+            aria-hidden
+          />
+          <div
+            className={cn(
+              "relative h-full w-[var(--rail-w)] max-w-[84vw] shadow-e4",
+              mobileSheet.leaving ? "sheet-out" : "sheet-in",
+            )}
           >
-            <style>{"@keyframes railin{from{transform:translateX(-18px);opacity:.5}to{transform:none;opacity:1}}"}</style>
             <Rail collapsed={false} onNavigate={() => setMobileNav(false)} />
           </div>
         </div>
@@ -127,8 +162,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <SupportBanner />
+        <BillingBanner />
         <Topbar
-          onToggleRail={toggleRail}
           onOpenSearch={() => setSearch(true)}
           onOpenMobileNav={() => setMobileNav(true)}
         />

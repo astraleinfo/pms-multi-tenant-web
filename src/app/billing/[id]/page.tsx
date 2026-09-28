@@ -3,11 +3,13 @@
 import * as React from "react";
 import { useApp, useTenant } from "@/lib/store/app-store";
 import { useClinicDb, usePatient } from "@/lib/query/hooks";
+import * as api from "@/lib/api";
+import { openPdfBlob } from "@/lib/pdf";
 import { findInvoice, invoiceTotals } from "@/lib/data/repository";
-import { currency, formatDate, pluralise, relativeDay } from "@/lib/format";
+import { currency, formatDate, formatTime12, pluralise, relativeDay, sentenceCase } from "@/lib/format";
 import type { Payment } from "@/lib/types";
 import { PAYMENT_METHODS } from "@/lib/payment-methods";
-import { PageHeader } from "@/components/ui/page-header";
+import { MetaItem, PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +21,7 @@ import { FeatureGate, RoleGate } from "@/components/domain/gates";
 import { DEPARTMENT_LABEL, StatusPill } from "@/components/domain/status";
 import { PatientChip } from "@/components/domain/patient";
 import {
-  IconArrowRight, IconCard, IconCheck, IconChevronLeft, IconPrint, IconReceipt, IconX,
+  IconArrowRight, IconCalendar, IconCard, IconCheck, IconChevronLeft, IconPrint, IconReceipt, IconX,
 } from "@/components/ui/icons";
 
 export default function InvoicePage(props: PageProps<"/billing/[id]">) {
@@ -40,6 +42,7 @@ function Invoice({ id }: { id: string }) {
   const t = session.tenantId;
   const invoice = findInvoice(db, t, id);
   const [paying, setPaying] = React.useState(false);
+  const [pdfBusy, setPdfBusy] = React.useState(false);
   /* Above the bail-out below, not next to where it is read. The invoice is not
      there on the first render and is a moment later, so a hook underneath that
      `return` is a hook this component calls sometimes — which React counts. */
@@ -49,13 +52,25 @@ function Invoice({ id }: { id: string }) {
     return (
       <Card className="mx-auto max-w-lg">
         <EmptyState
+          icon={<IconReceipt size={26} />}
           title="No such invoice in this clinic"
-          body="Invoices are tenant-scoped; this one belongs elsewhere or has been removed."
+          body="This invoice doesn’t exist, or it has been removed."
           action={<ButtonLink href="/billing" variant="secondary" size="sm"><IconChevronLeft size={14} /> Back to billing</ButtonLink>}
         />
       </Card>
     );
   }
+
+  const downloadPdf = async () => {
+    setPdfBusy(true);
+    try {
+      openPdfBlob(await api.getInvoicePdf(invoice.id));
+    } catch {
+      notify({ tone: "warn", title: "Could not generate the invoice PDF", body: "Try again in a moment." });
+    } finally {
+      setPdfBusy(false);
+    }
+  };
 
   const totals = invoiceTotals(invoice);
   const overdue = totals.balance > 0.005 && invoice.due_at < today && invoice.status !== "draft";
@@ -63,12 +78,15 @@ function Invoice({ id }: { id: string }) {
   return (
     <>
       <PageHeader
+        back={{ href: "/billing", label: "Billing" }}
         eyebrow={<span className="tnum font-mono">{invoice.number}</span>}
         title={patient?.full_name ?? "Invoice"}
-        description={`Issued ${formatDate(invoice.issued_at, "long")} · due ${formatDate(invoice.due_at, "long")}`}
+        status={<StatusPill kind="invoice" status={invoice.status} size="sm" />}
         actions={
           <>
-            <Button variant="ghost" onClick={() => window.print()}><IconPrint size={15} /> Print</Button>
+            <Button variant="ghost" onClick={() => { void downloadPdf(); }} disabled={pdfBusy}>
+              <IconPrint size={15} /> {pdfBusy ? "Preparing…" : "Print / PDF"}
+            </Button>
             {invoice.status === "draft" && (
               <Button variant="secondary" onClick={() => {
                 issueInvoice(invoice.id);
@@ -94,7 +112,9 @@ function Invoice({ id }: { id: string }) {
         }
         meta={
           <>
-            <StatusPill kind="invoice" status={invoice.status} />
+            <MetaItem icon={<IconCalendar size={13} />}>
+              Issued {formatDate(invoice.issued_at, "long")} · due {formatDate(invoice.due_at, "long")}
+            </MetaItem>
             {/* Which counter raised it — the lab and the pharmacy bill on
                 their own invoices, and chase their own money. */}
             <Badge tone={invoice.department === "clinic" ? "neutral" : "accent"} size="sm" dot={false}>
@@ -113,7 +133,7 @@ function Invoice({ id }: { id: string }) {
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="min-w-0 space-y-5">
           <Card className="overflow-hidden">
-            <CardHeader title="Line items" subtitle={pluralise(invoice.line_items.length, "line")} />
+            <CardHeader icon={<IconReceipt size={15} />} tone="ok" title="Line items" subtitle={pluralise(invoice.line_items.length, "line")} />
             <TableWrap>
               <Table>
                 <THead>
@@ -127,12 +147,7 @@ function Invoice({ id }: { id: string }) {
                     <TR key={li.id}>
                       <TD className="font-medium">{li.description}</TD>
                       <TD>
-                        <Badge
-                          tone={li.source === "pharmacy" ? "accent" : li.source === "lab" ? "warn" : li.source === "procedure" ? "info" : "neutral"}
-                          size="sm" dot={false}
-                        >
-                          {li.source}
-                        </Badge>
+                        <span className="text-caption text-ink-2">{sentenceCase(li.source)}</span>
                       </TD>
                       <TD align="right" className="tnum font-mono">{li.qty}</TD>
                       <TD align="right" className="tnum font-mono">{currency(li.unit_price)}</TD>
@@ -144,23 +159,23 @@ function Invoice({ id }: { id: string }) {
             </TableWrap>
             <CardBody className="pt-4">
               <dl className="ml-auto max-w-xs space-y-1.5">
-                <div className="flex justify-between text-[0.875rem]">
+                <div className="flex justify-between text-body">
                   <dt className="text-ink-2">Subtotal</dt>
                   <dd className="tnum font-mono text-ink">{currency(totals.subtotal)}</dd>
                 </div>
-                <div className="flex justify-between text-[0.875rem]">
+                <div className="flex justify-between text-body">
                   <dt className="text-ink-2">Tax</dt>
                   <dd className="tnum font-mono text-ink">{currency(totals.tax)}</dd>
                 </div>
-                <div className="flex justify-between border-t border-line pt-1.5 text-[1rem] font-semibold">
+                <div className="flex justify-between border-t border-line pt-1.5 text-lead font-semibold">
                   <dt className="text-ink">Total</dt>
                   <dd className="tnum font-mono text-ink">{currency(totals.total)}</dd>
                 </div>
-                <div className="flex justify-between text-[0.875rem]">
+                <div className="flex justify-between text-body">
                   <dt className="text-ink-2">Paid</dt>
                   <dd className="tnum font-mono text-ok-text">−{currency(totals.paid)}</dd>
                 </div>
-                <div className="flex justify-between border-t border-line pt-1.5 text-[0.9375rem] font-semibold">
+                <div className="flex justify-between border-t border-line pt-1.5 text-body font-semibold">
                   <dt className="text-ink">Balance</dt>
                   <dd className={`tnum font-mono ${totals.balance > 0.005 ? "text-warn-text" : "text-ok-text"}`}>
                     {currency(totals.balance)}
@@ -171,25 +186,32 @@ function Invoice({ id }: { id: string }) {
           </Card>
 
           <Card>
-            <CardHeader icon={<IconCard size={16} />} title="Payments"
-                        subtitle="Part payments are normal — the status follows the balance." />
+            <CardHeader tone="ok" icon={<IconCard size={16} />} title="Payments"
+                        hint="Part payments are normal — the status follows the balance." />
             <CardBody className="pt-0">
               {invoice.payments.length === 0 ? (
-                <EmptyState compact title="No payments recorded"
-                            action={invoice.status !== "void"
-                              ? <Button size="sm" variant="primary" onClick={() => setPaying(true)}>Take payment</Button>
-                              : undefined} />
+                /* No button: "Take payment" is the header's primary, a few
+                   inches up and on screen the whole time this panel is. */
+                <EmptyState
+                  compact icon={<IconCard size={20} />} title="No payments recorded"
+                  body={invoice.status === "void"
+                    ? "This invoice was voided before anything was received."
+                    : `Nothing has been received against this invoice — ${currency(totals.balance)} outstanding.`}
+                />
               ) : (
                 <ul className="divide-y divide-line-soft">
                   {invoice.payments.map((p) => (
                     <li key={p.id} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
                       <div className="min-w-0">
-                        <p className="text-[0.875rem] font-medium text-ink">{currency(p.amount)}</p>
-                        <p className="text-[0.75rem] text-ink-3">
-                          {p.method.toUpperCase()}{p.reference ? ` · ${p.reference}` : ""}
+                        <p className="text-body font-medium text-ink">{currency(p.amount)}</p>
+                        <p className="text-caption text-ink-3">
+                          {PAYMENT_METHODS.find((m) => m.value === p.method)?.label ?? sentenceCase(p.method)}
+                          {p.reference ? ` · ${p.reference}` : ""}
                         </p>
                       </div>
-                      <span className="tnum font-mono text-[0.75rem] text-ink-3">{p.at}</span>
+                      <span className="tnum text-caption text-ink-3">
+                        {formatDate(p.at.slice(0, 10))} · {formatTime12(p.at.slice(11, 16))}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -200,54 +222,52 @@ function Invoice({ id }: { id: string }) {
 
         <aside className="space-y-5">
           <Card>
-            <CardHeader title="Bill to" />
+            <CardHeader icon={<IconReceipt size={15} />} tone="ok" title="Bill to" />
             <CardBody className="pt-0">
               {patient ? (
                 <>
                   <PatientChip patient={patient} size="lg" href={`/patients/${patient.id}`} />
-                  <dl className="mt-4 space-y-3 border-t border-line-soft pt-4">
-                    <KV label="Record" value={<span className="tnum font-mono text-[0.8125rem]">{patient.mrn}</span>} />
-                    <KV label="Phone" value={<span className="tnum font-mono text-[0.8125rem]">{patient.phone}</span>} />
+                  <dl className="mt-4 border-t border-line-soft pt-4">
+                    <KV label="Record" value={<span className="tnum font-mono text-label">{patient.mrn}</span>} />
+                    <KV label="Phone" value={<span className="tnum font-mono text-label">{patient.phone}</span>} />
                     {patient.clinical_ext.insurance_number != null && (
-                      <KV label="Insurance" value={<span className="tnum font-mono text-[0.8125rem]">{String(patient.clinical_ext.insurance_number)}</span>} />
+                      <KV label="Insurance" value={<span className="tnum font-mono text-label">{String(patient.clinical_ext.insurance_number)}</span>} />
                     )}
                   </dl>
                 </>
-              ) : <p className="text-[0.8125rem] text-ink-3">Patient not found.</p>}
+              ) : <p className="text-label text-ink-3">Patient not found.</p>}
             </CardBody>
           </Card>
 
           <Card>
-            <CardHeader title="Settlement" />
+            <CardHeader icon={<IconCard size={15} />} tone="ok" title="Settlement" />
             <CardBody className="pt-1">
               <Meter value={totals.paid} max={Math.max(totals.total, 0.01)}
                      tone={totals.balance <= 0.005 ? "ok" : "warn"} height={8} />
-              <p className="mt-2 text-[0.8125rem] text-ink-2">
+              <p className="mt-2 text-label text-ink-2">
                 {totals.balance <= 0.005
                   ? "Settled in full."
                   : `${currency(totals.balance)} still owed — due ${relativeDay(invoice.due_at).toLowerCase()}.`}
               </p>
-              <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-line-soft pt-4">
-                <KV label="Issued" value={formatDate(invoice.issued_at, "long")} />
-                <KV label="Due" value={formatDate(invoice.due_at, "long")} />
-              </dl>
+              {/* Nothing else here. Issued and due are in the header, the
+                  figures are in the totals block beside this card, and a
+                  third copy of either helped nobody. What this panel is for
+                  is the one thing neither of them shows: how far through
+                  settlement this invoice is, and whether it is late. */}
             </CardBody>
           </Card>
 
           <Card>
-            <CardHeader title="Issued by" />
+            <CardHeader icon={<IconReceipt size={15} />} tone="ok" title="Issued by" />
             <CardBody className="pt-0">
-              <p className="text-[0.875rem] font-medium text-ink">{tenant.name}</p>
-              {config.address && <p className="mt-0.5 text-[0.8125rem] leading-snug text-ink-2">{config.address}</p>}
+              <p className="text-body font-medium text-ink">{tenant.name}</p>
+              {config.address && <p className="mt-0.5 text-label leading-snug text-ink-2">{config.address}</p>}
               {config.contact_phone && (
-                <p className="tnum mt-1 font-mono text-[0.75rem] text-ink-2">{config.contact_phone}</p>
+                <p className="tnum mt-1 font-mono text-caption text-ink-2">{config.contact_phone}</p>
               )}
               {config.contact_email && (
-                <p className="break-all text-[0.75rem] text-ink-2">{config.contact_email}</p>
+                <p className="break-all text-caption text-ink-2">{config.contact_email}</p>
               )}
-              <p className="mt-2 text-[0.75rem] text-ink-3">
-                Every invoice carries the tenant that raised it — this record can never appear in another clinic's ledger.
-              </p>
             </CardBody>
           </Card>
         </aside>
@@ -318,7 +338,7 @@ function PaymentModal({
               key={i}
               type="button"
               onClick={() => setAmount(Math.round(v * 100) / 100)}
-              className="tnum rounded-[var(--r-pill)] border border-line-strong bg-surface px-2.5 py-1 font-mono text-[0.75rem] text-ink-2 transition-colors hover:border-accent hover:text-accent-text"
+              className="tnum rounded-[var(--r-pill)] border border-line-strong bg-surface px-2.5 py-1 font-mono text-caption text-ink-2 transition-colors hover:border-accent hover:text-accent-text"
             >
               {currency(Math.round(v * 100) / 100)}
             </button>

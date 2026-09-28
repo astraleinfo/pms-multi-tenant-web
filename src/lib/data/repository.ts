@@ -57,9 +57,13 @@ export function defaultConfig(tenantId: Id, prefix = "AS"): TenantConfig {
     contact_phone: "", contact_email: "", address: "",
     mrn_prefix: prefix, day_start: "09:00", day_end: "17:30",
     slot_minutes: 30, default_duration: 30,
+    appointment_types: [
+      { id: "consultation", name: "Consultation", minutes: 30 },
+      { id: "follow-up", name: "Follow-up", minutes: 15 },
+    ],
     token_prefix: prefix.slice(0, 1), urgent_first: true,
     invoice_prefix: `${prefix}-INV`, tax_pct: 0, payment_terms_days: 14, currency: "INR",
-    expiry_alert_days: 90,
+    expiry_alert_days: 90, has_logo: false,
   };
 }
 

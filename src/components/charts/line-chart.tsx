@@ -113,7 +113,7 @@ export function LineChart({
         {series.length > 1
           ? <ChartLegend items={series.map((s, si) => ({ label: s.name, color: seriesColor(si) }))} />
           : <span />}
-        {yLabel && <span className="text-[0.6875rem] uppercase tracking-[0.08em] text-ink-3">{yLabel}</span>}
+        {yLabel && <span className="text-micro uppercase tracking-[0.08em] text-ink-3">{yLabel}</span>}
       </div>
     </div>
   );

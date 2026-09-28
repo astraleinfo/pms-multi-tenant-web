@@ -29,6 +29,13 @@ export interface PlatformUser {
   title: string;
 }
 
+/** A kind of visit, and how long it takes — which is also its slot interval. */
+export interface AppointmentType {
+  id: string;
+  name: string;
+  minutes: number;
+}
+
 /**
  * Per-tenant configuration (§3.3). Distinct from entitlements: this is how a
  * clinic has set the product up, not what it is allowed to use.
@@ -46,6 +53,8 @@ export interface TenantConfig {
   day_end: string;
   slot_minutes: 15 | 20 | 30;
   default_duration: number;
+  /** the kinds of visit the diary books, in the order it offers them */
+  appointment_types: AppointmentType[];
   /* queue */
   token_prefix: string;
   urgent_first: boolean;
@@ -56,6 +65,9 @@ export interface TenantConfig {
   currency: "GBP" | "EUR" | "USD" | "INR";
   /* inventory */
   expiry_alert_days: number;
+  /** whether the clinic has uploaded its own logo — the image itself is a
+   *  separate request, so this page's data never carries the bytes. */
+  has_logo: boolean;
 }
 
 export interface ClinicalType {
@@ -68,17 +80,70 @@ export interface ClinicalType {
   complaintExample: string;
 }
 
-export interface Feature {
+/**
+ * What a module *is* — the copy the product ships with. It carries no price:
+ * prices are set in the console by a super admin and change without a
+ * release, so they are read from the API (`useFeatureCatalog`,
+ * `usePlatformCatalog`) and joined on here as `Feature`.
+ */
+export interface FeatureCopy {
+  key: FeatureKey;
+  name: string;
+  is_core: boolean;
+  summary: string;
+  /** modules this one lights up in the nav */
+  unlocks: string[];
+  /**
+   * What somebody who does not have this module is told about it — the module
+   * page a padlock leads to. It is sales copy in the same sense a menu is:
+   * what the thing does, in the clinic's own terms, so the decision to ask for
+   * it is an informed one.
+   */
+  overview: string;
+  /** the working loop, in the order a clinic would live it */
+  how_it_works: { title: string; body: string }[];
+  /** what a walkthrough covers, chapter by chapter */
+  demo_chapters: string[];
+  /** the one thing about the price that is not the number itself */
+  pricing_note: string;
+}
+
+/** A module with its live price, as the catalogue endpoint serves it. */
+export interface Feature extends FeatureCopy {
+  price_monthly: number;
+}
+
+/** The module catalogue row as the API sends it. */
+export interface CatalogFeature {
   key: FeatureKey;
   name: string;
   is_core: boolean;
   summary: string;
   price_monthly: number;
-  /** modules this one lights up in the nav */
   unlocks: string[];
 }
 
 export type TenantFeatureStatus = "active" | "inactive" | "trial";
+
+/* ---- support desk ----------------------------------------------------------- */
+
+export type SupportRequestKind = "activation" | "walkthrough" | "general";
+/** Whether the desk has been emailed. The request stands either way. */
+export type SupportRequestStatus = "queued" | "sent" | "failed";
+
+export interface SupportRequest {
+  id: Id;
+  tenant_id: Id;
+  kind: SupportRequestKind;
+  feature_key: FeatureKey | null;
+  message: string;
+  /** "Name <email>" of whoever asked */
+  requested_by: string;
+  status: SupportRequestStatus;
+  /** `YYYY-MM-DD HH:mm`, clinic time */
+  created_at: string | null;
+  sent_at: string | null;
+}
 
 export interface TenantFeature {
   tenant_id: Id;
@@ -100,6 +165,77 @@ export interface Tenant {
   /** the clinic's own zone, and its own date — never the browser's */
   timezone: string;
   today: string;
+  /** on hold for an unpaid subscription bill: staff see the bill and nothing else */
+  billing_hold?: boolean;
+  billing_hold_since?: string | null;
+  /** never billed by the platform */
+  billing_exempt?: boolean;
+}
+
+/* ---- the platform's monthly bill to a clinic ---------------------------------- */
+
+export type SubscriptionInvoiceStatus = "open" | "paid" | "void";
+
+export interface SubscriptionInvoice {
+  id: Id;
+  tenant_id: Id;
+  number: string;
+  period_start: string;
+  period_end: string;
+  currency: string;
+  amount: number;
+  lines: { feature_key: FeatureKey; name: string; amount: number }[];
+  issued_on: string;
+  due_on: string;
+  /** the first day the clinic is held if this is still open */
+  hold_on: string;
+  status: SubscriptionInvoiceStatus;
+  /** the furthest reminder emailed so far */
+  reminder_stage: "none" | "issued" | "due_soon" | "due" | "overdue" | "final" | "blocked";
+  reminders_sent: number;
+  paid_at: string | null;
+  payment_reference: string;
+  settled_by: string;
+}
+
+export interface SubscriptionSummary {
+  on_hold: boolean;
+  hold_since: string | null;
+  exempt: boolean;
+  currency: string;
+  outstanding: number;
+  open_count: number;
+  next_due_on: string | null;
+  next_hold_on: string | null;
+  overdue: boolean;
+  due_days: number;
+  grace_days: number;
+}
+
+/** One module the clinic has switched on, and what it costs. */
+export interface SubscribedModule {
+  feature_key: FeatureKey;
+  name: string;
+  is_core: boolean;
+  /** a trial is on, but not billed */
+  status: "active" | "trial";
+  activated_at: string | null;
+  /** today's monthly price; 0 for a core module */
+  price_monthly: number;
+  /** whether next month's bill charges for it */
+  billed: boolean;
+}
+
+export interface SubscriptionPlan {
+  modules: SubscribedModule[];
+  /** what the next bill will come to, at today's prices */
+  monthly_total: number;
+}
+
+export interface Subscription {
+  summary: SubscriptionSummary;
+  invoices: SubscriptionInvoice[];
+  plan: SubscriptionPlan | null;
 }
 
 export type FieldScope = "common" | "clinical_type" | "tenant";

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/cn";
 
-export type Tone = "accent" | "ok" | "warn" | "critical" | "info" | "neutral";
+export type Tone = "accent" | "ok" | "warn" | "critical" | "info" | "violet" | "neutral";
 
 const toneClass: Record<Tone, string> = {
   accent:   "bg-accent-soft   text-accent-text   border-accent-border",
@@ -9,12 +9,34 @@ const toneClass: Record<Tone, string> = {
   warn:     "bg-warn-soft     text-warn-text     border-warn-border",
   critical: "bg-critical-soft text-critical-text border-critical-border",
   info:     "bg-info-soft     text-info-text     border-info-border",
+  violet:   "bg-violet-soft   text-violet-text   border-violet-border",
   neutral:  "bg-neutral-soft  text-neutral-text  border-neutral-border",
 };
 
 const dotClass: Record<Tone, string> = {
   accent: "bg-accent", ok: "bg-ok", warn: "bg-warn",
-  critical: "bg-critical", info: "bg-info", neutral: "bg-neutral",
+  critical: "bg-critical", info: "bg-info", violet: "bg-violet", neutral: "bg-neutral",
+};
+
+/**
+ * A tone as a tinted tile: soft ground, saturated glyph, no border.
+ *
+ * This is the one piece of colour the redesign spends freely. A page of six
+ * white panels with six grey icons is legible and completely undifferentiated
+ * — you find "Recent visits" by reading every heading. Give each panel's icon
+ * its own hue and the page acquires a map: the amber one is history, the green
+ * one is the summary, the violet one is the diary. The hue is a landmark, and
+ * that is all it is — it is never the only thing saying what a panel holds,
+ * and the clinical tones keep their meanings wherever they carry state.
+ */
+export const toneTile: Record<Tone, string> = {
+  accent:   "bg-accent-soft   text-accent-text",
+  ok:       "bg-ok-soft       text-ok-text",
+  warn:     "bg-warn-soft     text-warn-text",
+  critical: "bg-critical-soft text-critical-text",
+  info:     "bg-info-soft     text-info-text",
+  violet:   "bg-violet-soft   text-violet-text",
+  neutral:  "bg-neutral-soft  text-neutral-text",
 };
 
 export function Badge({
@@ -31,7 +53,7 @@ export function Badge({
     <span
       className={cn(
         "inline-flex items-center gap-1.5 rounded-[var(--r-pill)] border font-medium",
-        size === "sm" ? "px-2 py-[1px] text-[0.6875rem]" : "px-2.5 py-[3px] text-[0.75rem]",
+        size === "sm" ? "px-2 py-[1px] text-micro" : "px-2.5 py-[3px] text-caption",
         toneClass[tone],
         className,
       )}
@@ -87,9 +109,9 @@ export function Numeral({
     neutral: "bg-surface-inset text-ink-2",
   };
   const sizes = {
-    sm: "h-6 min-w-6 text-[0.6875rem] px-1.5",
-    md: "h-8 min-w-8 text-[0.8125rem] px-2",
-    lg: "h-11 min-w-11 text-[1rem] px-2.5",
+    sm: "h-6 min-w-6 text-micro px-1.5",
+    md: "h-8 min-w-8 text-label px-2",
+    lg: "h-11 min-w-11 text-lead px-2.5",
   };
   return (
     <span

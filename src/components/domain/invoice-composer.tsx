@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/navigation";
 import { useApp } from "@/lib/store/app-store";
 import { usePatient, useServicePrices, useSuggestedLines } from "@/lib/query/hooks";
 import { currency } from "@/lib/format";
@@ -256,19 +256,19 @@ export function InvoiceComposer({
         <Legend>Line items</Legend>
 
         {encounterId && suggestionsPending && (
-          <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-6 text-center text-[0.8125rem] text-ink-3">
+          <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-6 text-center text-label text-ink-3">
             Working out what this visit bills for…
           </p>
         )}
 
         {lines.length === 0 && !suggestionsPending && (
-          <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-6 text-center text-[0.8125rem] text-ink-3">
+          <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-6 text-center text-label text-ink-3">
             No lines yet — add one below.
           </p>
         )}
 
         {unpriced > 0 && (
-          <p className="flex items-start gap-2 rounded-[var(--r)] border border-warn-border bg-warn-soft px-3 py-2.5 text-[0.8125rem] leading-relaxed text-warn-text">
+          <p className="flex items-start gap-2 rounded-[var(--r)] border border-warn-border bg-warn-soft px-3 py-2.5 text-label leading-relaxed text-warn-text">
             <IconAlert size={14} className="mt-px shrink-0" />
             {unpriced === 1 ? "One line has" : `${unpriced} lines have`} no price in the tariff yet, so
             {unpriced === 1 ? " it is" : " they are"} suggested at zero. Type a figure here, or set one for
@@ -352,14 +352,14 @@ export function InvoiceComposer({
 
         {alreadyBilled.length > 0 && (
           <details className="rounded-[var(--r)] border border-line bg-surface-2 p-3">
-            <summary className="cursor-pointer text-[0.8125rem] font-medium text-ink-2">
+            <summary className="cursor-pointer text-label font-medium text-ink-2">
               Already billed ({alreadyBilled.length})
             </summary>
             <ul className="mt-2.5 space-y-2">
               {alreadyBilled.map((b, i) => {
                 const invoice = b.invoices[0];
                 return (
-                  <li key={i} className="flex items-center justify-between gap-3 rounded-[var(--r)] border border-line-soft bg-surface px-3 py-2 text-[0.8125rem]">
+                  <li key={i} className="flex items-center justify-between gap-3 rounded-[var(--r)] border border-line-soft bg-surface px-3 py-2 text-label">
                     <div>
                       <p className="text-ink">{b.description} × {b.qty}</p>
                       <p className="text-ink-3">
@@ -392,15 +392,15 @@ export function InvoiceComposer({
 
         <div className="rounded-[var(--r)] border border-line bg-surface-2 p-3">
           <dl className="space-y-1.5">
-            <div className="flex justify-between text-[0.8125rem]">
+            <div className="flex justify-between text-label">
               <dt className="text-ink-2">Subtotal</dt>
               <dd className="tnum font-mono text-ink">{currency(subtotal)}</dd>
             </div>
-            <div className="flex justify-between text-[0.8125rem]">
+            <div className="flex justify-between text-label">
               <dt className="text-ink-2">Tax</dt>
               <dd className="tnum font-mono text-ink">{currency(tax)}</dd>
             </div>
-            <div className="flex justify-between border-t border-line pt-1.5 text-[0.9375rem] font-semibold">
+            <div className="flex justify-between border-t border-line pt-1.5 text-body font-semibold">
               <dt className="text-ink">Total</dt>
               <dd className="tnum font-mono text-ink">{currency(subtotal + tax)}</dd>
             </div>
@@ -436,7 +436,7 @@ export function InvoiceComposer({
           </div>
         ) : (
           lines.length > 0 && (
-            <p className="rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-[0.75rem] text-ink-2">
+            <p className="rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-caption text-ink-2">
               This goes to the {DEPARTMENT_LABEL[[...byDepartment.keys()][0] ?? "clinic"].toLowerCase()} counter.
             </p>
           )

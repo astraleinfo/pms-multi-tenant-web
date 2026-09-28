@@ -5,6 +5,7 @@ import { useApp } from "@/lib/store/app-store";
 import { useClinicDb } from "@/lib/query/hooks";
 import { selectDoctors } from "@/lib/data/repository";
 import { formatTime12, formatDate } from "@/lib/format";
+import { appointmentTypes, formatLength, slotTimes } from "@/lib/appointment-types";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { ChoiceGroup, Field, Input, Select, Textarea } from "@/components/ui/field";
@@ -12,16 +13,6 @@ import { PatientPicker } from "./patient";
 import { Badge } from "@/components/ui/badge";
 import { IconAlert, IconCheck, IconPlus } from "@/components/ui/icons";
 
-/** Bookable slots come from the clinic's configuration, not a fixed list. */
-function slotTimes(start: string, end: string, step: number, duration: number) {
-  const [sh, sm] = start.split(":").map(Number);
-  const [eh, em] = end.split(":").map(Number);
-  const out: string[] = [];
-  for (let m = sh * 60 + sm; m + duration <= eh * 60 + em; m += step) {
-    out.push(`${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`);
-  }
-  return out;
-}
 
 /** §3.5 — book an appointment, with the doctor-availability check in front of it. */
 export function AppointmentModal({
@@ -35,16 +26,21 @@ export function AppointmentModal({
   const { session, today, config, createAppointment, conflictsFor, notify } = useApp();
   const db = useClinicDb();
   const doctors = selectDoctors(db, session.tenantId);
+  /* The type decides the length and the interval together: a 45-minute visit
+     is offered at 45-minute steps, so every slot on screen is one it fits. */
+  const types = appointmentTypes(config);
+  const [typeId, setTypeId] = React.useState(types[0]?.id ?? "");
+  const type = types.find((t) => t.id === typeId) ?? types[0];
+  const duration = type?.minutes ?? config.default_duration;
   const SLOT_TIMES = React.useMemo(
-    () => slotTimes(config.day_start, config.day_end, config.slot_minutes, config.default_duration),
-    [config.day_start, config.day_end, config.slot_minutes, config.default_duration],
+    () => slotTimes(config.day_start, config.day_end, duration),
+    [config.day_start, config.day_end, duration],
   );
 
   const [patient, setPatient] = React.useState<string | null>(defaultPatient ?? null);
   const [doctor, setDoctor] = React.useState(doctors[0]?.id ?? "");
   const [date, setDate] = React.useState(defaultDate ?? today);
   const [time, setTime] = React.useState("09:00");
-  const [duration, setDuration] = React.useState(config.default_duration);
   const [reason, setReason] = React.useState("");
   const [via, setVia] = React.useState<"front_desk" | "online" | "phone">("front_desk");
   const [touched, setTouched] = React.useState(false);
@@ -55,14 +51,16 @@ export function AppointmentModal({
     const doc = doctors[0]?.id ?? "";
     const day = defaultDate ?? today;
     /* open on a slot the clinician can actually take, not a fixed 09:00 */
-    const firstFree = SLOT_TIMES.find((t) => conflictsFor(doc, day, t, config.default_duration).length === 0)
-      ?? SLOT_TIMES[0];
+    const first = types[0];
+    const times = slotTimes(config.day_start, config.day_end, first?.minutes ?? duration);
+    const firstFree = times.find((t) => conflictsFor(doc, day, t, first?.minutes ?? duration).length === 0)
+      ?? times[0] ?? "";
     setPatient(defaultPatient ?? null);
     setDoctor(doc);
     setDate(day);
+    setTypeId(first?.id ?? "");
     setTime(firstFree);
-    setDuration(config.default_duration);
-    setReason("");
+    setReason(first?.name ?? "");
     setTouched(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -81,10 +79,23 @@ export function AppointmentModal({
     const set = new Set<string>();
     for (const t of SLOT_TIMES) if (conflictsFor(doctor, date, t, duration).length) set.add(t);
     return set;
-  }, [doctor, date, duration, conflictsFor]);
+  }, [doctor, date, duration, conflictsFor, SLOT_TIMES]);
+
+  /* Changing the type moves the grid. Keep the chosen time if it is still on
+     it and free; otherwise take the first free slot of the new grid. The
+     reason follows the type until someone types their own. */
+  const chooseType = (id: string) => {
+    const next = types.find((t) => t.id === id);
+    if (!next) return;
+    const times = slotTimes(config.day_start, config.day_end, next.minutes);
+    const free = (t: string) => conflictsFor(doctor, date, t, next.minutes).length === 0;
+    if (!times.includes(time) || !free(time)) setTime(times.find(free) ?? times[0] ?? "");
+    if (!reason.trim() || types.some((t) => t.name === reason.trim())) setReason(next.name);
+    setTypeId(id);
+  };
 
 
-  const invalid = !patient || !doctor || !reason.trim() || conflicts.length > 0;
+  const invalid = !patient || !doctor || !time || !reason.trim() || conflicts.length > 0;
 
   return (
     <Modal
@@ -144,8 +155,27 @@ export function AppointmentModal({
           </Field>
         </div>
 
+        <Field label="Appointment type" required>
+          <ChoiceGroup
+            value={type?.id ?? ""}
+            onChange={chooseType}
+            columns={types.length > 2 ? 3 : 2}
+            options={types.map((t) => ({ value: t.id, label: t.name, description: formatLength(t.minutes) }))}
+          />
+        </Field>
+
         <div>
-          <p className="mb-2 text-[0.8125rem] font-medium text-ink">Slot</p>
+          <p className="mb-2 flex items-baseline justify-between gap-2 text-label font-medium text-ink">
+            Slot
+            <span className="text-caption font-normal text-ink-2">
+              every {formatLength(duration)}{time ? ` · ${formatTime12(time)}–${formatTime12(addMinutes(time, duration))}` : ""}
+            </span>
+          </p>
+          {SLOT_TIMES.length === 0 && (
+            <p className="text-label text-critical-text">
+              A {formatLength(duration)} visit doesn’t fit between the clinic’s opening and closing times.
+            </p>
+          )}
           <div className="flex flex-wrap gap-1.5">
             {SLOT_TIMES.map((t) => {
               const busy = taken.has(t);
@@ -156,7 +186,7 @@ export function AppointmentModal({
                   type="button"
                   onClick={() => setTime(t)}
                   className={[
-                    "tnum rounded-[var(--r-sm)] border px-2.5 py-1.5 font-mono text-[0.75rem] transition-all duration-150",
+                    "tnum rounded-[var(--r-sm)] border px-2.5 py-1.5 text-caption transition-all duration-150",
                     /* busy survives selection: picking a taken slot must still look taken */
                     busy
                       ? on
@@ -176,11 +206,6 @@ export function AppointmentModal({
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Duration">
-            <Select value={String(duration)} onChange={(e) => setDuration(Number(e.target.value))}>
-              {[15, 20, 30, 45, 60].map((d) => <option key={d} value={d}>{d} minutes</option>)}
-            </Select>
-          </Field>
           <Field label="Booked via">
             <Select value={via} onChange={(e) => setVia(e.target.value as typeof via)}>
               <option value="front_desk">Front desk</option>
@@ -197,12 +222,12 @@ export function AppointmentModal({
 
         {conflicts.length > 0 && (
           <div className="rounded-[var(--r)] border border-critical-border bg-critical-soft p-3">
-            <p className="flex items-center gap-2 text-[0.8125rem] font-semibold text-critical-text">
+            <p className="flex items-center gap-2 text-label font-semibold text-critical-text">
               <IconAlert size={15} /> That slot is already taken
             </p>
             <ul className="mt-2 space-y-1">
               {conflicts.map((c) => (
-                <li key={c.id} className="tnum font-mono text-[0.75rem] text-critical-text">
+                <li key={c.id} className="tnum font-mono text-caption text-critical-text">
                   {formatTime12(c.time)}–{formatTime12(addMinutes(c.time, c.duration_min))} · {c.reason}
                 </li>
               ))}
@@ -282,8 +307,8 @@ export function WalkInModal({ open, onClose }: { open: boolean; onClose: () => v
             ]}
           />
         </Field>
-        <p className="rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-[0.75rem] leading-relaxed text-ink-2">
-          Walk-ins have no <code className="font-mono text-[0.6875rem]">appointment_id</code>. Everything downstream —
+        <p className="rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-caption leading-relaxed text-ink-2">
+          Walk-ins have no <code className="font-mono text-micro">appointment_id</code>. Everything downstream —
           consultation, prescription, billing — behaves identically either way.
         </p>
       </div>

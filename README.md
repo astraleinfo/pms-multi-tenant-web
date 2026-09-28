@@ -271,13 +271,28 @@ For the endpoint-by-endpoint map, see
 
 ## Design
 
-The palette is taken from the reference platform: "clinical daylight" — a cool blue-tinted
-ground, white cards, a white rail rather than a dark slab, and a single royal-blue interactive
-colour carried on filled pills. Red, amber, emerald and cyan stay reserved for clinical state and
-are never spent on decoration. Type is Fraunces for display, Inter Tight for text and IBM Plex
-Mono for anything that has to line up. Dark mode is a selected palette, not an inversion, and both
-categorical chart ramps were re-validated for colour-vision separation and chroma against their
-own surface.
+"Clinical daylight, long shift" — the whole system is tuned for someone at this screen for eight
+to twelve hours rather than for a first impression. An off-white ground carries off-white cards
+and a quiet rail; ink is charcoal, not black; one muted blue is the only interactive colour. Red,
+amber, emerald and cyan stay reserved for clinical state and are never spent on decoration, and
+every one of them is paired with a dot, an arrow or a word so that colour is never the only
+carrier. Dark mode is a selected slate palette, not an inversion, and both categorical chart ramps
+were re-validated for colour-vision separation and chroma against their own surface.
+
+Type is Inter throughout, with IBM Plex Mono for anything that has to line up. There is one scale
+— `text-micro` through `text-display-lg`, twelve steps named for the job rather than the size —
+and each step carries its own line-height and tracking, so `text-caption` is already comfortable
+without a `leading-*` beside it. Nothing lands below 12px. Weights stop at 600, and the thin end
+of the ramp is folded back to 400 so a stray `font-light` cannot put hairline text in front of
+someone at hour nine.
+
+Components name tokens, never raw sizes or hexes: sizes, weights, line-heights, surfaces, ink,
+lines, hover, focus and disabled all live in `src/app/globals.css`, so a change in comfort is a
+change in one file. Every foreground/background pair the screens can actually produce clears WCAG
+AA — 4.5:1 for text, 3:1 for the dots, bars and icons that carry state — checked against each
+surface a token can land on rather than assumed from the one case of ink on white. Disabled
+controls are the deliberate exception: they are repainted to ~3.3:1 rather than faded, because
+`opacity` on a filled button drags label and ground down together and lands near 2.5:1.
 
 Everything is responsive from 390px up: the rail becomes a drawer, grids collapse to one column,
 the patient register opens as cards on a phone, and wide tables and the day grid keep their

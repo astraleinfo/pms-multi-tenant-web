@@ -1,13 +1,15 @@
 "use client";
 
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import * as api from "@/lib/api";
 import { qk } from "./keys";
 import { useSession } from "@/lib/store/session";
 import { defaultConfig } from "@/lib/data/repository";
+import { withPrices } from "@/lib/data/catalog";
 import type {
-  FieldDefinition, Id, Patient, ServiceKind, ServicePrice, Tenant, TenantConfig, TenantFeature, User,
+  Feature, FieldDefinition, FeatureKey, Id, Patient, ServiceKind, ServicePrice, SupportRequest, Tenant, TenantConfig,
+  TenantFeature, User,
 } from "@/lib/types";
 
 /* ==========================================================================
@@ -118,11 +120,131 @@ export function useFeatures() {
   return { ...query, data: useResolved<TenantFeature[]>(query, EMPTY) };
 }
 
+/** The module catalogue, priced — see `useFeatureCatalog` and `usePlatformCatalog`. */
+export interface FeatureCatalog {
+  features: Feature[];
+  byKey: Record<FeatureKey, Feature>;
+  /** false until the prices have arrived; a price shown before then is a guess */
+  priced: boolean;
+  /** still waiting on the first answer — false again if that answer was an error */
+  isPending: boolean;
+}
+
+function catalogOf(rows: Parameters<typeof withPrices>[0], isPending: boolean): FeatureCatalog {
+  const features = withPrices(rows);
+  return {
+    features,
+    byKey: Object.fromEntries(features.map((f) => [f.key, f])) as Record<FeatureKey, Feature>,
+    priced: !!rows,
+    isPending,
+  };
+}
+
+/**
+ * Every module with what this clinic would be charged for it.
+ *
+ * The price is the platform's, set in the console, so it is read rather than
+ * compiled in: a clinic looking at a padlocked module is quoted the figure the
+ * platform will actually bill. Screens render a placeholder until `priced`.
+ */
+export function useFeatureCatalog(): FeatureCatalog {
+  const t = useTenantId();
+  const query = useClinicQuery(qk.catalogFeatures(t), api.listCatalogFeatures, !!t);
+  return useMemo(() => catalogOf(query.data, query.isPending), [query.data, query.isPending]);
+}
+
+/** The same catalogue from the console, where the super admin sets the prices. */
+export function usePlatformCatalog(): FeatureCatalog {
+  const { platformSession } = useSession();
+  const query = useQuery({
+    queryKey: qk.platformCatalog(),
+    queryFn: api.listPlatformCatalogFeatures,
+    enabled: platformSession.signedIn,
+  });
+  return useMemo(() => catalogOf(query.data, query.isPending), [query.data, query.isPending]);
+}
+
+export function usePlatformSettings() {
+  const { platformSession } = useSession();
+  return useQuery({
+    queryKey: qk.platformSettings(),
+    queryFn: api.getPlatformSettings,
+    enabled: platformSession.signedIn,
+  });
+}
+
+/** Astrale's own desk — shown until the live answer arrives, so the help
+ *  menu and the on-hold screen never render a blank phone number or a
+ *  `mailto:` with nobody in it. */
+const SUPPORT_FALLBACK: api.PublicSettings = {
+  support_email: "support@astrale.health",
+  support_phone: "+91 80 4718 2200",
+  support_hours: "Monday to Saturday, 9am – 7pm IST",
+};
+
+/** No session gate — anyone on a clinic's own address may read who to ask
+ *  for help, signed in or not. */
+export function useSupportInfo() {
+  return useQuery({
+    queryKey: qk.publicSettings(),
+    queryFn: api.getPublicSettings,
+    staleTime: 5 * 60_000,
+    placeholderData: SUPPORT_FALLBACK,
+  });
+}
+
+/**
+ * What this clinic owes the platform — the practice admin's view. Only asked
+ * for by someone who may see it; the API refuses everyone else with a 403.
+ */
+export function useSubscription(enabled = true) {
+  const t = useTenantId();
+  return useClinicQuery(qk.subscription(t), api.getSubscription, enabled && !!t);
+}
+
+/** Every clinic's bills, from the console. */
+export function usePlatformBilling() {
+  const { platformSession } = useSession();
+  return useQuery({
+    queryKey: qk.platformBilling(),
+    queryFn: api.platformBilling,
+    enabled: platformSession.signedIn,
+  });
+}
+
+/** One clinic's bills, from the console. */
+export function usePlatformSubscription(tenantId: Id | null) {
+  const { platformSession } = useSession();
+  return useQuery({
+    queryKey: qk.platformSubscription(tenantId ?? ""),
+    queryFn: () => api.tenantSubscription(tenantId!),
+    enabled: platformSession.signedIn && !!tenantId,
+  });
+}
+
+/** This clinic's asks of the support desk, newest first. */
+export function useSupportRequests() {
+  const t = useTenantId();
+  const query = useClinicQuery(qk.supportRequests(t), api.listSupportRequests);
+  return { ...query, data: useResolved<SupportRequest[]>(query, EMPTY) };
+}
+
 export function useConfig() {
   const t = useTenantId();
   const query = useClinicQuery(qk.config(t), api.getConfig);
   const fallback = useMemo(() => defaultConfig(t), [t]);
   return { ...query, data: useResolved<TenantConfig>(query, fallback) };
+}
+
+/** The clinic's own logo, as an object URL — `null` until it has one. Reads
+ *  the flag off `useConfig()` first, so a clinic without a logo never
+ *  fires the request that would 404. */
+export function useClinicLogoUrl(): string | null {
+  const t = useTenantId();
+  const { data: config } = useConfig();
+  const query = useClinicQuery(qk.logo(t), api.getClinicLogoFile, config.has_logo);
+  const blob = config.has_logo ? query.data : undefined;
+  return useMemo(() => (blob ? URL.createObjectURL(blob) : null), [blob]);
 }
 
 export function useFieldDefinitions() {
@@ -272,6 +394,12 @@ export function useAppointments() {
   return useClinicQuery(qk.appointments(t), api.listAppointments);
 }
 
+/** One booking, for its own screen. */
+export function useAppointment(id: Id) {
+  const t = useTenantId();
+  return useClinicQuery(qk.appointment(t, id), () => api.getAppointment(id), !!id);
+}
+
 export function useQueue() {
   const t = useTenantId();
   return useClinicQuery(qk.queue(t), api.listQueue);
@@ -292,6 +420,12 @@ export function usePrescriptions() {
   return useClinicQuery(qk.prescriptions(t), api.listPrescriptions);
 }
 
+/** One prescription, for its own screen. */
+export function usePrescription(id: Id) {
+  const t = useTenantId();
+  return useClinicQuery(qk.prescription(t, id), () => api.getPrescription(id), !!id);
+}
+
 /* The purchasable modules answer 403 when a clinic has not bought them, so
    these three only ask when the entitlement says they can. */
 function useFeatureEnabled(key: Parameters<typeof api.purchaseFeature>[0]) {
@@ -307,9 +441,9 @@ export function useLabOrders() {
 /**
  * One order, kept in step with what the bench does to it.
  *
- * The drawer used to read its order out of the list it was opened from, which
- * only worked while the list held everything: verifying an order takes it off
- * the Open page, and the drawer would have been left showing the row as it was.
+ * The order's popup reads it by id rather than out of the list it was opened
+ * from: verifying an order takes it off the Open page, and a copy from the list
+ * would be left showing the row as it was.
  */
 export function useLabOrder(id: Id) {
   const t = useTenantId();
@@ -520,6 +654,112 @@ export function usePlatformSnapshot() {
     queryFn: api.platformSnapshot,
     enabled: platformSession.signedIn,
   });
+}
+
+/**
+ * The background-job monitor.
+ *
+ * Polled rather than subscribed: the numbers are a live picture of work in
+ * flight, and a page that only moved when somebody reloaded it would be worse
+ * than no page. The interval is deliberately unhurried — this is a monitor
+ * somebody leaves open, and Flower is reading Celery's event stream either way.
+ *
+ * `enabled` follows the role as well as the session. A member of the support
+ * desk has no business firing this every few seconds to collect 403s, and the
+ * API would refuse it anyway.
+ */
+export function usePlatformJobs(query: api.JobQuery, options: { poll?: boolean } = {}) {
+  const { platformSession, platformUser } = useSession();
+  return useQuery({
+    queryKey: qk.platformJobs(query as Record<string, unknown>),
+    queryFn: () => api.listJobs(query),
+    enabled: platformSession.signedIn && api.isSuperAdmin(platformUser),
+    refetchInterval: options.poll === false ? false : 5_000,
+    /* A page already on screen stays while the next one lands, so the tiles
+       do not blink back to nothing every five seconds. */
+    placeholderData: (previous) => previous,
+  });
+}
+
+/** One job in full — the traceback and the return value the list leaves out. */
+export function usePlatformJob(taskId: Id | null) {
+  const { platformSession, platformUser } = useSession();
+  return useQuery({
+    queryKey: ["platform", "jobs", "task", taskId ?? ""],
+    queryFn: () => api.getJob(taskId!),
+    enabled: platformSession.signedIn && api.isSuperAdmin(platformUser) && !!taskId,
+    retry: false,
+  });
+}
+
+/** One clinic's entitlement rows, read from the console rather than inside it. */
+export function usePlatformTenantFeatures(tenantId: Id | null) {
+  const { platformSession } = useSession();
+  const query = useQuery({
+    queryKey: qk.platformFeatures(tenantId ?? ""),
+    queryFn: () => api.tenantFeatures(tenantId!),
+    enabled: platformSession.signedIn && !!tenantId,
+  });
+  return { ...query, data: useResolved<TenantFeature[]>(query, EMPTY) };
+}
+
+/** That clinic's staff, as the console sees them — support accounts excluded. */
+export function usePlatformTenantUsers(tenantId: Id | null) {
+  const { platformSession } = useSession();
+  const query = useQuery({
+    queryKey: qk.platformUsers(tenantId ?? ""),
+    queryFn: () => api.tenantUsers(tenantId!),
+    enabled: platformSession.signedIn && !!tenantId,
+  });
+  return { ...query, data: useResolved<User[]>(query, EMPTY) };
+}
+
+/**
+ * Every clinic's entitlement rows, for the views that read across all of them.
+ *
+ * The snapshot already says which modules are *on*; this is what says which are
+ * on trial and when each was switched on, which is the whole of what the
+ * console knows about subscriptions. It is one request per clinic because that
+ * is the route the API offers — each one scoped to its own tenant, which is the
+ * property worth keeping — and they are cached under the same `["platform"]`
+ * subtree as the snapshot, so one grant refreshes the lot.
+ *
+ * The screens above render from the snapshot until these land, so this is
+ * detail arriving rather than a page waiting.
+ */
+export function usePlatformEntitlements() {
+  const { platformSession } = useSession();
+  const { data: snapshot } = usePlatformSnapshot();
+  const ids = useMemo(
+    () => (snapshot?.tenants ?? []).map((r) => r.tenant.id),
+    [snapshot],
+  );
+
+  const queries = useQueries({
+    queries: ids.map((id) => ({
+      queryKey: qk.platformFeatures(id),
+      queryFn: () => api.tenantFeatures(id),
+      enabled: platformSession.signedIn,
+    })),
+  });
+
+  const settled = queries.every((q) => !q.isPending);
+  /* Keyed by clinic, so a row can ask for its own without scanning. Rebuilt
+     only when an answer actually changes — `useQueries` hands back a new array
+     every render, so the array itself is no use as a dependency. */
+  const signature = queries.map((q) => q.dataUpdatedAt).join(",");
+
+  const byTenant = useMemo(() => {
+    const map = new Map<Id, TenantFeature[]>();
+    ids.forEach((id, i) => {
+      const data = queries[i]?.data;
+      if (data) map.set(id, data);
+    });
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ids, signature]);
+
+  return { byTenant, isPending: !settled && ids.length > 0 };
 }
 
 /* ---- composition ----------------------------------------------------------- */

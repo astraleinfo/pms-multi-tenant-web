@@ -121,7 +121,7 @@ export function CounterPayment({
     >
       <div className="space-y-4">
         {isPending && (
-          <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-6 text-center text-[0.8125rem] text-ink-3">
+          <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-6 text-center text-label text-ink-3">
             Working out what is owed…
           </p>
         )}
@@ -140,8 +140,8 @@ export function CounterPayment({
             <ChargeList entry={entry} />
 
             <div className="flex items-center justify-between rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5">
-              <span className="text-[0.875rem] font-medium text-ink">To pay</span>
-              <span className="tnum font-mono text-[1.0625rem] font-semibold text-ink">{currency(due)}</span>
+              <span className="text-body font-medium text-ink">To pay</span>
+              <span className="tnum font-mono text-title-sm font-semibold text-ink">{currency(due)}</span>
             </div>
 
             <Checkbox
@@ -186,7 +186,7 @@ function ChargeList({ entry }: { entry: DepartmentAccount }) {
     <div className="space-y-3">
       {entry.unbilled.length > 0 && (
         <div>
-          <p className="mb-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-3">
+          <p className="mb-1.5 text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">
             Not billed yet
           </p>
           <ul className="divide-y divide-line-soft rounded-[var(--r)] border border-line">
@@ -197,18 +197,18 @@ function ChargeList({ entry }: { entry: DepartmentAccount }) {
 
       {entry.outstanding > 0.005 && (
         <div className="flex items-center justify-between rounded-[var(--r)] border border-line px-3 py-2.5">
-          <span className="text-[0.8125rem] text-ink-2">
+          <span className="text-label text-ink-2">
             Already invoiced and unpaid
             <span className="ml-1.5 text-ink-3">
               ({entry.invoices.length === 1 ? "1 invoice" : `${entry.invoices.length} invoices`})
             </span>
           </span>
-          <span className="tnum font-mono text-[0.8125rem] text-ink">{currency(entry.outstanding)}</span>
+          <span className="tnum font-mono text-label text-ink">{currency(entry.outstanding)}</span>
         </div>
       )}
 
       {unpriced > 0 && (
-        <p className="flex items-start gap-2 rounded-[var(--r)] border border-warn-border bg-warn-soft px-3 py-2.5 text-[0.75rem] leading-relaxed text-warn-text">
+        <p className="flex items-start gap-2 rounded-[var(--r)] border border-warn-border bg-warn-soft px-3 py-2.5 text-caption leading-relaxed text-warn-text">
           <IconAlert size={14} className="mt-px shrink-0" />
           {unpriced === 1 ? "One line has" : `${unpriced} lines have`} no price in the tariff, so
           {unpriced === 1 ? " it is" : " they are"} counted as zero. Set prices under Pricing.
@@ -225,15 +225,15 @@ function ChargeRow({ charge }: { charge: Charge }) {
   return (
     <li className="flex items-center justify-between gap-3 px-3 py-2">
       <div className="min-w-0">
-        <p className="truncate text-[0.8438rem] text-ink">{charge.description}</p>
-        <p className="text-[0.75rem] text-ink-3">
+        <p className="truncate text-label text-ink">{charge.description}</p>
+        <p className="text-caption text-ink-3">
           {charge.qty} × {currency(charge.unit_price)}
           {charge.tax_pct > 0 && ` · ${charge.tax_pct}% tax`}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {worthless && <Badge tone="warn" size="sm" dot={false}>No price set</Badge>}
-        <span className="tnum font-mono text-[0.8438rem] text-ink">{currency(charge.total)}</span>
+        <span className="tnum font-mono text-label text-ink">{currency(charge.total)}</span>
       </div>
     </li>
   );
@@ -346,7 +346,7 @@ export function FinalSettlement({
     >
       <div className="space-y-4">
         {isPending && (
-          <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-6 text-center text-[0.8125rem] text-ink-3">
+          <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-6 text-center text-label text-ink-3">
             Working out what is owed…
           </p>
         )}
@@ -365,15 +365,15 @@ export function FinalSettlement({
             {owing.map((entry) => (
               <li key={entry.department} className="flex items-center justify-between gap-3 px-3 py-2.5">
                 <div className="min-w-0">
-                  <p className="text-[0.875rem] font-medium text-ink">{DEPARTMENT_LABEL[entry.department]}</p>
-                  <p className="text-[0.75rem] text-ink-3">
+                  <p className="text-body font-medium text-ink">{DEPARTMENT_LABEL[entry.department]}</p>
+                  <p className="text-caption text-ink-3">
                     {[
                       entry.unbilled_total > 0.005 ? `${currency(entry.unbilled_total)} not billed yet` : null,
                       entry.outstanding > 0.005 ? `${currency(entry.outstanding)} already invoiced` : null,
                     ].filter(Boolean).join(" · ")}
                   </p>
                 </div>
-                <span className="tnum shrink-0 font-mono text-[0.9375rem] text-ink">{currency(entry.due)}</span>
+                <span className="tnum shrink-0 font-mono text-body text-ink">{currency(entry.due)}</span>
               </li>
             ))}
           </ul>
@@ -386,7 +386,7 @@ export function FinalSettlement({
             {done.map((entry) => (
               <li
                 key={entry.department}
-                className="flex items-center justify-between gap-3 rounded-[var(--r)] border border-line-soft px-3 py-2 text-[0.8125rem] text-ink-3"
+                className="flex items-center justify-between gap-3 rounded-[var(--r)] border border-line-soft px-3 py-2 text-label text-ink-3"
               >
                 <span className="flex items-center gap-2">
                   <IconCheck size={13} className="shrink-0 text-ok-text" />
@@ -401,8 +401,8 @@ export function FinalSettlement({
         {owing.length > 0 && (
           <>
             <div className="flex items-center justify-between rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5">
-              <span className="text-[0.875rem] font-medium text-ink">To pay now</span>
-              <span className="tnum font-mono text-[1.0625rem] font-semibold text-ink">{currency(total)}</span>
+              <span className="text-body font-medium text-ink">To pay now</span>
+              <span className="tnum font-mono text-title-sm font-semibold text-ink">{currency(total)}</span>
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -416,7 +416,7 @@ export function FinalSettlement({
               </Field>
             </div>
 
-            <p className="text-[0.75rem] leading-relaxed text-ink-3">
+            <p className="text-caption leading-relaxed text-ink-3">
               Each counter is invoiced and paid separately, so the ledger still shows
               consultation, lab and pharmacy apart. To pay only some of it, or part of one
               counter, use Collect on that counter instead.

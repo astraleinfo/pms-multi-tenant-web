@@ -62,14 +62,14 @@ export default function DisplayPage() {
       <div className="relative mx-auto max-w-6xl">
         <header className="flex flex-wrap items-end justify-between gap-4 border-b border-white/10 pb-6">
           <div>
-            <p className="text-[0.6875rem] uppercase tracking-[0.2em] text-stage-dim">Now serving</p>
-            <h1 className="mt-2 font-display text-[clamp(1.75rem,3.6vw,2.6rem)] font-semibold leading-none tracking-[-0.03em]">
+            <p className="text-micro uppercase tracking-[0.2em] text-stage-dim">Now serving</p>
+            <h1 className="mt-2 font-display text-[clamp(1.75rem,3.6vw,2.6rem)] font-semibold leading-none tracking-[-0.03em] text-stage-ink">
               {tenant.name}
             </h1>
           </div>
           <div className="text-right">
             <p className="tnum font-mono text-[clamp(1.75rem,3.6vw,2.6rem)] font-medium leading-none">{clock || "--:--"}</p>
-            <p className="mt-2 text-[0.8125rem] text-stage-dim">{formatDate(today, "day")}</p>
+            <p className="mt-2 text-label text-stage-dim">{formatDate(today, "day")}</p>
           </div>
         </header>
 
@@ -77,8 +77,8 @@ export default function DisplayPage() {
         <section className="mt-8">
           {nowServing.length === 0 ? (
             <div className="rounded-[var(--r-xl)] border border-white/10 bg-white/[0.03] px-8 py-16 text-center">
-              <p className="font-display text-[1.75rem] font-semibold tracking-[-0.02em]">No one is being called</p>
-              <p className="mt-2 text-[1rem] text-stage-dim">Please take a seat — you will be called by token number.</p>
+              <p className="font-display text-display font-semibold">No one is being called</p>
+              <p className="mt-2 text-lead text-stage-dim">Please take a seat — you will be called by token number.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -87,14 +87,15 @@ export default function DisplayPage() {
                   key={q.id}
                   className="rise rounded-[var(--r-xl)] border border-accent/40 bg-accent/[0.12] p-7"
                 >
-                  <p className="text-[0.6875rem] uppercase tracking-[0.18em] text-accent-hover">
+                  {/* the night-shift accent text: the house blue itself is too dark to read on this stage */}
+                  <p className="text-label font-medium uppercase tracking-[0.14em] text-[#A6C0F5]">
                     {q.status === "called" ? "Called" : "In consultation"}
                   </p>
                   <p className="tnum mt-3 font-mono text-[clamp(3.5rem,11vw,6rem)] font-semibold leading-none text-stage-ink">
                     {String(q.token_no).padStart(2, "0")}
                   </p>
-                  <p className="mt-4 text-[1.125rem] font-medium">{shortName(q.patient_name)}</p>
-                  <p className="mt-1 text-[0.9375rem] text-stage-dim">{userName(db, q.doctor_id)}</p>
+                  <p className="mt-4 text-title font-medium">{shortName(q.patient_name)}</p>
+                  <p className="mt-1 text-body text-stage-dim">{userName(db, q.doctor_id)}</p>
                 </div>
               ))}
             </div>
@@ -103,9 +104,9 @@ export default function DisplayPage() {
 
         {/* waiting */}
         <section className="mt-10">
-          <h2 className="text-[0.6875rem] uppercase tracking-[0.2em] text-stage-dim">Waiting</h2>
+          <h2 className="text-micro uppercase tracking-[0.2em] text-stage-dim">Waiting</h2>
           {waiting.length === 0 ? (
-            <p className="mt-4 text-[1rem] text-stage-dim">The waiting room is clear.</p>
+            <p className="mt-4 text-lead text-stage-dim">The waiting room is clear.</p>
           ) : (
             <ul className="mt-4 flex flex-wrap gap-3">
               {waiting.map((q) => (
@@ -113,12 +114,12 @@ export default function DisplayPage() {
                   key={q.id}
                   className="min-w-[124px] rounded-[var(--r-lg)] border border-white/10 bg-white/[0.04] px-5 py-4"
                 >
-                  <p className="tnum font-mono text-[2rem] font-semibold leading-none">
+                  <p className="tnum font-mono text-display-lg font-semibold leading-none">
                     {String(q.token_no).padStart(2, "0")}
                   </p>
-                  <p className="mt-2 text-[0.875rem] text-stage-dim">{shortName(q.patient_name)}</p>
+                  <p className="mt-2 text-body text-stage-dim">{shortName(q.patient_name)}</p>
                   {q.priority === "urgent" && (
-                    <p className="mt-1 text-[0.6875rem] uppercase tracking-[0.12em] text-accent-hover">Priority</p>
+                    <p className="mt-1 text-caption font-medium uppercase tracking-[0.1em] text-[#A6C0F5]">Priority</p>
                   )}
                 </li>
               ))}
@@ -126,7 +127,7 @@ export default function DisplayPage() {
           )}
         </section>
 
-        <footer className="mt-12 flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-6 text-[0.8125rem] text-stage-dim">
+        <footer className="mt-12 flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-6 text-label text-stage-dim">
           <p>Tokens are issued in arrival order. Urgent cases are seen first.</p>
           <Link href="/queue" className="inline-flex items-center gap-1.5 text-stage-ink underline-offset-4 hover:underline">
             <IconChevronLeft size={14} /> Back to the queue

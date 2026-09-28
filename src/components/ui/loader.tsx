@@ -66,7 +66,7 @@ export function PageLoader({
       className={cn("fade flex flex-col items-center justify-center gap-3", className)}
     >
       <Spinner size={22} />
-      <p className="text-[0.8125rem] text-ink-3">{label}</p>
+      <p className="text-label text-ink-3">{label}</p>
     </div>
   );
 }

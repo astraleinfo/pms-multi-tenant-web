@@ -1,34 +1,22 @@
 "use client";
 
 import * as React from "react";
-import { useApp } from "@/lib/store/app-store";
-import {
-  useLabAttachments, useLabOrder, useLabOrderPage, useLabStats, useUsers,
-} from "@/lib/query/hooks";
-import * as api from "@/lib/api";
+import { useLabOrderPage, useLabStats, useUsers } from "@/lib/query/hooks";
 import { useDebounced } from "@/lib/debounce";
-
 import { formatDate, pluralise } from "@/lib/format";
-import type { LabAttachment, LabOrder, LabResultLine } from "@/lib/types";
+import type { LabOrder } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable, columnHelperFor } from "@/components/ui/data-table";
-import { Card, Legend } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { EmptyState, KV } from "@/components/ui/misc";
+import { EmptyState } from "@/components/ui/misc";
 import { Stat } from "@/components/ui/stat";
-import { Drawer } from "@/components/ui/modal";
-import { Input, Select } from "@/components/ui/field";
 import { Tabs } from "@/components/ui/tabs";
-import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { FeatureGate, RoleGate } from "@/components/domain/gates";
 import { StatusPill } from "@/components/domain/status";
-import { PatientChip, PatientRef } from "@/components/domain/patient";
-import {
-  IconAlert, IconCard, IconCheck, IconDownload, IconFlask, IconPlay, IconPlus, IconShield,
-  IconTrash,
-} from "@/components/ui/icons";
-import { CounterPayment } from "@/components/domain/counter-payment";
+import { PatientRef } from "@/components/domain/patient";
+import { LabOrderModal } from "@/components/domain/lab-order-detail";
+import { IconAlert, IconCheck, IconFlask, IconPlay, IconShield } from "@/components/ui/icons";
 
 type Tab = "open" | "ordered" | "pending" | "resulted" | "verified";
 
@@ -42,19 +30,6 @@ const SORT_KEYS: Record<string, string> = {
   status: "status",
 };
 
-/** A few sensible analyte skeletons so result entry is not a blank sheet. */
-const TEMPLATES: Record<string, LabResultLine[]> = {
-  FBC: [
-    { analyte: "Haemoglobin", value: "", unit: "g/dL", reference: "13.0–17.0", flag: "normal" },
-    { analyte: "White cell count", value: "", unit: "10⁹/L", reference: "4.0–11.0", flag: "normal" },
-    { analyte: "Platelets", value: "", unit: "10⁹/L", reference: "150–400", flag: "normal" },
-  ],
-  HBA1C: [{ analyte: "HbA1c", value: "", unit: "mmol/mol", reference: "20–41", flag: "normal" }],
-  CRP: [{ analyte: "C-reactive protein", value: "", unit: "mg/L", reference: "< 5", flag: "normal" }],
-};
-
-const blankLine = (): LabResultLine => ({ analyte: "", value: "", unit: "", reference: "", flag: "normal" });
-
 const col = columnHelperFor<LabOrder>();
 
 const labColumns = col.columns([
@@ -62,8 +37,8 @@ const labColumns = col.columns([
     header: "Ordered",
     cell: ({ getValue }) => (
       <>
-        <span className="tnum block font-mono text-[0.8125rem] text-ink">{formatDate(getValue().slice(0, 10))}</span>
-        <span className="tnum block font-mono text-[0.75rem] text-ink-3">{getValue().slice(11)}</span>
+        <span className="tnum block font-mono text-label text-ink">{formatDate(getValue().slice(0, 10))}</span>
+        <span className="tnum block font-mono text-caption text-ink-3">{getValue().slice(11)}</span>
       </>
     ),
   }),
@@ -76,7 +51,7 @@ const labColumns = col.columns([
     cell: ({ row }) => (
       <>
         <span className="block text-ink">{row.original.test_name}</span>
-        <span className="tnum block font-mono text-[0.75rem] text-ink-3">{row.original.test_code}</span>
+        <span className="tnum block font-mono text-caption text-ink-3">{row.original.test_code}</span>
       </>
     ),
   }),
@@ -126,7 +101,7 @@ function Lab() {
   const term = useDebounced(q);
   const [page, setPage] = React.useState(0);
   const [sort, setSort] = React.useState({ id: "ordered_at", desc: true });
-  const [open, setOpen] = React.useState<LabOrder | null>(null);
+  const [opened, setOpened] = React.useState<LabOrder | null>(null);
 
   const stats = useLabStats();
 
@@ -150,19 +125,14 @@ function Lab() {
   const rows = result?.items ?? [];
   const total = result?.total ?? 0;
 
-  /* The drawer reads the order by id, so it stays in step as the order moves
-     through its states — including off this page, which is what verifying one
-     from the Open tab does. */
-
   return (
     <>
       <PageHeader
-        eyebrow="Feature module"
         title="Lab"
-        description="Orders are raised from an encounter and travel through one state machine. Results stay invisible to the patient record until a technician verifies them."
+        description="Tests ordered from a consultation. A result reaches the patient’s record only once it has been verified."
         meta={
           <>
-            <span className="text-[0.8125rem] text-ink-2">{pluralise(stats.total, "order")}</span>
+            <span className="text-label text-ink-2">{pluralise(stats.total, "order")}</span>
             {stats.abnormal > 0 && (
               <Badge tone="critical" size="sm"><IconAlert size={11} /> {stats.abnormal} with flagged analytes</Badge>
             )}
@@ -198,7 +168,7 @@ function Lab() {
           getRowId={(o) => o.id}
           searchPlaceholder="Patient, test or panel"
           pageSize={PAGE_SIZE}
-          onRowClick={(o) => setOpen(o)}
+          onRowClick={(o) => setOpened(o)}
           minWidth="54rem"
           empty={<EmptyState icon={<IconFlask size={20} />} title="Nothing in this state"
                              body="Orders raised from a consultation land here." />}
@@ -215,306 +185,7 @@ function Lab() {
         />
       </Card>
 
-      {open && <OrderDrawer key={open.id} order={open} onClose={() => setOpen(null)} />}
+      <LabOrderModal order={opened} onClose={() => setOpened(null)} />
     </>
-  );
-}
-
-function OrderDrawer({ order: opened, onClose }: { order: LabOrder; onClose: () => void }) {
-  const { startLabOrder, saveLabResults, verifyLabOrder, hasFeature, can, notify } = useApp();
-
-  /* The clinic bills, and this person is allowed to take the money. Both, or
-     the button is an apology waiting to happen. */
-  const billsHere = hasFeature("billing") && can("billing:write");
-  /* The lab bills on its own invoices, so it can take its own money — a
-     patient collecting a report pays for the scan, not for their medicine. */
-  const [collecting, setCollecting] = React.useState(false);
-  /* the row that opened this stands in until the read lands */
-  const { data: fresh } = useLabOrder(opened.id);
-  const order = fresh ?? opened;
-  /* the drawer needs two names, which is the staff list — not the order book */
-  const { data: users } = useUsers();
-  const nameOf = (id: string | null | undefined) => users.find((u) => u.id === id)?.name ?? "—";
-
-
-  const [results, setResults] = React.useState<LabResultLine[]>(
-    order.results.length ? order.results : TEMPLATES[order.test_code] ?? [blankLine()],
-  );
-
-  const patch = (i: number, p: Partial<LabResultLine>) =>
-    setResults((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...p } : r)));
-
-  const editable = order.status === "pending" || order.status === "resulted";
-
-  return (
-    <Drawer
-      open
-      onClose={onClose}
-      width="lg"
-      title={order.test_name}
-      subtitle={`${order.patient_name} · ${order.patient_mrn}`}
-      footer={
-        <>
-          {billsHere && (
-            <Button variant="ghost" onClick={() => setCollecting(true)}>
-              <IconCard size={14} /> Collect payment
-            </Button>
-          )}
-          {order.status === "ordered" && (
-            <Button variant="primary" onClick={() => {
-              startLabOrder(order.id);
-              notify({ tone: "ok", title: "Sample accepted", body: "The order is now with the lab." });
-            }}>
-              <IconPlay size={14} /> Accept sample
-            </Button>
-          )}
-          {editable && (
-            <Button
-              variant="secondary"
-              onClick={() => {
-                saveLabResults(order.id, results.filter((r) => r.analyte.trim()));
-                notify({ tone: "ok", title: "Results saved", body: "Still held back until a technician verifies them." });
-              }}
-            >
-              Save results
-            </Button>
-          )}
-          {order.status === "resulted" && (
-            <Button variant="primary" onClick={() => {
-              verifyLabOrder(order.id);
-              notify({ tone: "ok", title: "Verified and released", body: "The result is now visible on the patient record." });
-            }}>
-              <IconShield size={14} /> Verify and release
-            </Button>
-          )}
-        </>
-      }
-    >
-      <div className="space-y-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <StatusPill kind="lab" status={order.status} />
-          <span className="tnum font-mono text-[0.75rem] text-ink-3">{order.test_code} · {order.panel}</span>
-        </div>
-
-        <dl className="grid grid-cols-2 gap-4">
-          <KV label="Ordered" value={order.ordered_at} mono />
-          <KV label="Requested by" value={nameOf(order.ordered_by)} />
-          {order.resulted_at && <KV label="Resulted" value={order.resulted_at} mono />}
-          {order.verified_at && <KV label="Verified" value={`${order.verified_at} · ${nameOf(order.verified_by)}`} />}
-        </dl>
-
-        {order.note && (
-          <div className="rounded-[var(--r)] border border-line bg-surface-2 p-3">
-            <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-3">Clinical question</p>
-            <p className="mt-1 text-[0.875rem] leading-relaxed text-ink">{order.note}</p>
-          </div>
-        )}
-
-        <div>
-          <Legend>Results</Legend>
-
-          {order.status === "ordered" && (
-            <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-6 text-center text-[0.8125rem] text-ink-3">
-              Accept the sample before entering results.
-            </p>
-          )}
-
-          {order.status === "verified" && (
-            <TableWrap>
-              <Table>
-                <THead>
-                  <tr><TH>Analyte</TH><TH>Value</TH><TH>Reference</TH><TH align="right">Flag</TH></tr>
-                </THead>
-                <TBody>
-                  {order.results.map((r) => (
-                    <TR key={r.analyte}>
-                      <TD>{r.analyte}</TD>
-                      <TD className="tnum font-mono">{r.value} {r.unit}</TD>
-                      <TD className="text-ink-3">{r.reference}</TD>
-                      <TD align="right">
-                        <Badge tone={r.flag === "normal" ? "ok" : r.flag === "high" ? "critical" : "warn"} size="sm">
-                          {r.flag}
-                        </Badge>
-                      </TD>
-                    </TR>
-                  ))}
-                </TBody>
-              </Table>
-            </TableWrap>
-          )}
-
-          {editable && (
-            <div className="space-y-2.5">
-              {results.map((r, i) => (
-                <div key={i} className="grid grid-cols-1 gap-2 rounded-[var(--r)] border border-line bg-surface-2 p-2.5 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_5rem_minmax(0,1fr)_7rem_auto]">
-                  <Input placeholder="Analyte" value={r.analyte} onChange={(e) => patch(i, { analyte: e.target.value })} />
-                  <Input placeholder="Value" value={r.value} onChange={(e) => patch(i, { value: e.target.value })} />
-                  <Input placeholder="Unit" value={r.unit} onChange={(e) => patch(i, { unit: e.target.value })} />
-                  <Input placeholder="Reference" value={r.reference} onChange={(e) => patch(i, { reference: e.target.value })} />
-                  <Select value={r.flag} onChange={(e) => patch(i, { flag: e.target.value as LabResultLine["flag"] })}>
-                    <option value="normal">Normal</option>
-                    <option value="high">High</option>
-                    <option value="low">Low</option>
-                  </Select>
-                  <Button variant="ghost" size="icon" aria-label="Remove row"
-                          onClick={() => setResults((p) => p.filter((_, idx) => idx !== i))}>
-                    <IconTrash size={14} />
-                  </Button>
-                </div>
-              ))}
-              <Button variant="secondary" size="sm" onClick={() => setResults((p) => [...p, blankLine()])}>
-                <IconPlus size={14} /> Add analyte
-              </Button>
-            </div>
-          )}
-        </div>
-
-        <Attachments order={order} />
-
-        <CounterPayment
-          open={collecting}
-          onClose={() => setCollecting(false)}
-          patientId={order.patient_id}
-          department="lab"
-        />
-
-        <p className="flex items-start gap-2 rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-[0.75rem] leading-relaxed text-ink-2">
-          <IconShield size={14} className="mt-px shrink-0 text-ink-3" />
-          Verification is the gate: <code className="font-mono text-[0.6875rem]">GET /encounters/&#123;id&#125;/lab-results</code> returns
-          verified rows only, so a saved-but-unsigned result never reaches the clinician's record view.
-        </p>
-      </div>
-    </Drawer>
-  );
-}
-
-/** Bytes, in the unit a person would say them in. */
-function fileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-const ACCEPT = ".pdf,.png,.jpg,.jpeg,.tif,.tiff,.webp,.csv,.txt";
-
-/**
- * The paperwork half of a lab order (§3.10).
- *
- * A scan, a machine printout, a signed report — the same clinical record as the
- * typed analytes, so it is filed against the order and released with it. A
- * verified order takes no more paper: verification is what put the result in
- * front of a clinician, and changing it afterwards would do so unsigned.
- */
-function Attachments({ order }: { order: LabOrder }) {
-  const { uploadLabAttachment, removeLabAttachment, notify } = useApp();
-  const { data: files = [], isPending } = useLabAttachments(order.id);
-  const input = React.useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = React.useState(false);
-
-  const locked = order.status === "verified";
-
-  const send = async (chosen: FileList | null) => {
-    const file = chosen?.[0];
-    if (!file) return;
-    setBusy(true);
-    try {
-      await uploadLabAttachment(order.id, file);
-      notify({ tone: "ok", title: "Report attached", body: file.name });
-    } catch (e) {
-      /* the API refuses by name — an unsupported kind, or one that is too big */
-      notify({
-        tone: "critical",
-        title: "That file was not attached",
-        body: e instanceof Error ? e.message : "That did not go through.",
-      });
-    } finally {
-      setBusy(false);
-      if (input.current) input.current.value = "";
-    }
-  };
-
-  const open = async (file: LabAttachment) => {
-    try {
-      /* The route needs the session, so the file is fetched rather than linked
-         to, then handed to the browser as a blob it already holds. */
-      const blob = await api.getLabAttachmentFile(order.id, file.id);
-      const url = URL.createObjectURL(blob);
-      window.open(url, "_blank", "noopener");
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch {
-      notify({ tone: "critical", title: "That file could not be opened" });
-    }
-  };
-
-  return (
-    <div>
-      <Legend>Reports and scans</Legend>
-
-      {files.length === 0 && !isPending && (
-        <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-5 text-center text-[0.8125rem] text-ink-3">
-          {locked
-            ? "Nothing was filed against this order."
-            : "No file yet — attach the scan, the printout or the signed report."}
-        </p>
-      )}
-
-      {files.length > 0 && (
-        <ul className="space-y-2">
-          {files.map((file) => (
-            <li
-              key={file.id}
-              className="flex items-center justify-between gap-3 rounded-[var(--r)] border border-line px-3 py-2.5"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-[0.8438rem] font-medium text-ink">{file.filename}</p>
-                <p className="text-[0.75rem] text-ink-3">
-                  {fileSize(file.size_bytes)} · {file.uploaded_at}
-                  {file.note ? ` · ${file.note}` : ""}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <Button variant="ghost" size="icon-sm" aria-label={`Open ${file.filename}`}
-                        onClick={() => void open(file)}>
-                  <IconDownload size={14} />
-                </Button>
-                {!locked && (
-                  <Button variant="ghost" size="icon-sm" aria-label={`Remove ${file.filename}`}
-                          onClick={() => {
-                            removeLabAttachment(order.id, file.id);
-                            notify({ tone: "ok", title: "File removed", body: file.filename });
-                          }}>
-                    <IconTrash size={14} />
-                  </Button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {!locked && (
-        <div className="mt-3">
-          <input
-            ref={input}
-            type="file"
-            accept={ACCEPT}
-            className="sr-only"
-            onChange={(e) => void send(e.target.files)}
-          />
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={busy}
-            onClick={() => input.current?.click()}
-          >
-            <IconPlus size={14} /> {busy ? "Uploading…" : "Upload a report"}
-          </Button>
-          <p className="mt-1.5 text-[0.75rem] text-ink-3">
-            PDF, image, CSV or plain text, up to 15 MB. Files are released with the order when it is
-            verified, and cannot be changed afterwards.
-          </p>
-        </div>
-      )}
-    </div>
   );
 }

@@ -56,10 +56,10 @@ export function DonutChart({
           })}
         </svg>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-          <span className="tnum font-display text-[1.5rem] font-semibold leading-none tracking-[-0.02em] text-ink">
+          <span className="tnum font-display text-h2 font-semibold leading-none text-ink">
             {hover != null ? format(slices[hover].value) : centreValue}
           </span>
-          <span className="mt-1 max-w-[90px] text-[0.6875rem] leading-tight text-ink-3">
+          <span className="mt-1 max-w-[90px] text-micro leading-tight text-ink-3">
             {hover != null ? slices[hover].label : centreLabel}
           </span>
         </div>

@@ -21,6 +21,7 @@ import { cn } from "@/lib/cn";
 import { Button } from "./button";
 import { SearchInput } from "./field";
 import { LoadingBar, TableSkeletonRows } from "./loader";
+import { tableHeadClass, tbodyClass, tdClass, thClass, trClass } from "./table";
 import { IconArrowDown, IconArrowUp, IconChevronLeft, IconChevronRight } from "./icons";
 
 /* ==========================================================================
@@ -48,7 +49,24 @@ export type AppTableFeatures = typeof tableFeatureSet;
 export interface ColumnMeta {
   align?: "left" | "right" | "center";
   width?: string | number;
+  /**
+   * Drop the column on screens narrower than this breakpoint. For what is
+   * useful but not essential — a narrow screen shows fewer columns rather
+   * than making the whole table scroll sideways.
+   */
+  hideBelow?: "sm" | "md" | "lg" | "xl";
 }
+
+/* Whole class names, because Tailwind reads the source text: a class built at
+   runtime is one it never sees. */
+const HIDE_BELOW: Record<NonNullable<ColumnMeta["hideBelow"]>, string> = {
+  sm: "hidden sm:table-cell",
+  md: "hidden md:table-cell",
+  lg: "hidden lg:table-cell",
+  xl: "hidden xl:table-cell",
+};
+
+const hideClass = (meta: ColumnMeta | undefined) => (meta?.hideBelow ? HIDE_BELOW[meta.hideBelow] : undefined);
 
 /** Typed column helper for a row shape. Define columns outside render. */
 export function columnHelperFor<T extends RowData>() {
@@ -166,14 +184,14 @@ export function DataTable<T extends RowData>({
   return (
     <div className={className}>
       {(searchPlaceholder || toolbar) && (
-        <div className="flex flex-wrap items-center justify-between gap-2.5 px-5 pb-3.5 pt-4">
+        <div className="flex flex-wrap items-center justify-between gap-2.5 px-4 pb-3 pt-3.5">
           {searchPlaceholder ? (
             <SearchInput
               value={String(table.state.globalFilter ?? "")}
               onChange={(e) => table.setGlobalFilter(e.target.value)}
               placeholder={searchPlaceholder}
               wrapperClassName="min-w-[190px] max-w-xs flex-1"
-              className="h-9"
+              className="h-8 text-label"
             />
           ) : <span />}
           {toolbar}
@@ -184,12 +202,12 @@ export function DataTable<T extends RowData>({
         {busy && !firstLoad && <LoadingBar />}
         <div
           className="-mx-px overflow-x-auto overscroll-x-contain"
-          /* the previous page stays legible while the next one is in flight */
-          style={busy && !firstLoad ? { opacity: 0.55, transition: "opacity var(--d-2) var(--ease-out)" } : undefined}
+          /* the previous page stays fully legible while the next one is in
+             flight; the bar above says it is working, the text is not faded */
           aria-busy={busy || undefined}
         >
           <table className="w-full border-collapse text-left" style={{ minWidth }}>
-            <thead className="border-y border-line bg-surface-2">
+            <thead className={tableHeadClass}>
               {table.getHeaderGroups().map((group) => (
                 <tr key={group.id}>
                   {group.headers.map((header) => {
@@ -203,18 +221,17 @@ export function DataTable<T extends RowData>({
                         style={(header.column.columnDef.meta as ColumnMeta | undefined)?.width
                           ? { width: (header.column.columnDef.meta as ColumnMeta).width }
                           : undefined}
-                        className={cn(
-                          "whitespace-nowrap px-4 py-2.5 text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-3",
-                          align === "right" && "text-right",
-                          align === "center" && "text-center",
-                        )}
+                        className={cn(thClass(align), hideClass(header.column.columnDef.meta as ColumnMeta | undefined))}
                       >
                         {header.isPlaceholder ? null : sortable ? (
                           <button
                             type="button"
                             onClick={header.column.getToggleSortingHandler()}
                             className={cn(
-                              "inline-flex items-center gap-1 rounded-[4px] uppercase tracking-[0.09em] transition-colors hover:text-ink",
+                              "inline-flex items-center gap-1 rounded-[4px] transition-colors hover:text-ink",
+                              /* the sorted column is the one fact the head
+                                 carries that is not just a name, so it is the
+                                 one that darkens */
                               sorted && "text-ink",
                               align === "right" && "flex-row-reverse",
                             )}
@@ -234,28 +251,23 @@ export function DataTable<T extends RowData>({
               ))}
             </thead>
 
-            <tbody className="divide-y divide-line-soft">
+            <tbody className={tbodyClass}>
               {firstLoad && <TableSkeletonRows rows={Math.min(pageSize, 8)} columns={columnCount} />}
               {rows.map((row) => (
                 <tr
                   key={row.id}
                   onClick={onRowClick ? () => onRowClick(row.original) : undefined}
-                  className={cn(
-                    "transition-colors duration-100",
-                    onRowClick && "cursor-pointer hover:bg-surface-2",
-                    isRowActive?.(row.original) && "bg-accent-soft/50",
-                  )}
+                  className={trClass({
+                    interactive: !!onRowClick,
+                    selected: isRowActive?.(row.original),
+                  })}
                 >
                   {row.getAllCells().map((cell) => {
                     const align = (cell.column.columnDef.meta as ColumnMeta | undefined)?.align;
                     return (
                       <td
                         key={cell.id}
-                        className={cn(
-                          "px-4 py-3 align-middle text-[0.8438rem] text-ink",
-                          align === "right" && "text-right",
-                          align === "center" && "text-center",
-                        )}
+                        className={cn(tdClass(align), hideClass(cell.column.columnDef.meta as ColumnMeta | undefined))}
                       >
                         <table.FlexRender cell={cell} />
                       </td>
@@ -272,8 +284,8 @@ export function DataTable<T extends RowData>({
       {!busy && rows.length === 0 && empty}
 
       {pageCount > 1 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line-soft px-5 py-3">
-          <p className="tnum text-[0.75rem] text-ink-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-2.5">
+          <p className="tnum text-caption text-ink-3">
             {total === 0 ? "No rows" : `${pageIndex * size + 1}–${Math.min((pageIndex + 1) * size, total)} of ${total}`}
           </p>
           <div className="flex items-center gap-1.5">
@@ -286,7 +298,7 @@ export function DataTable<T extends RowData>({
             >
               <IconChevronLeft size={15} />
             </Button>
-            <span className="tnum px-1 text-[0.75rem] text-ink-2">
+            <span className="tnum px-1 text-caption text-ink-2">
               {pageIndex + 1} / {pageCount}
             </span>
             <Button

@@ -23,7 +23,7 @@ import { ClinicalExamPanel } from "@/components/domain/clinical-exam";
 import { DynamicSummary } from "@/components/domain/dynamic-form";
 import { InvoiceComposer } from "@/components/domain/invoice-composer";
 import {
-  IconArrowRight, IconCheck, IconChevronLeft, IconFlask, IconPrint, IconReceipt, IconRx,
+  IconArrowRight, IconCheck, IconChevronLeft, IconFlask, IconPrint, IconReceipt, IconRx, IconStethoscope, IconUser,
 } from "@/components/ui/icons";
 
 export default function EncounterPage(props: PageProps<"/consultations/[id]">) {
@@ -36,8 +36,9 @@ export default function EncounterPage(props: PageProps<"/consultations/[id]">) {
     return (
       <Card className="mx-auto max-w-lg">
         <EmptyState
+          icon={<IconStethoscope size={26} />}
           title="No such encounter in this clinic"
-          body="Encounters are tenant-scoped; this one belongs elsewhere or no longer exists."
+          body="This consultation doesn’t exist, or it has been removed."
           action={<ButtonLink href="/consultations" variant="secondary" size="sm"><IconChevronLeft size={14} /> All consultations</ButtonLink>}
         />
       </Card>
@@ -78,9 +79,14 @@ function EncounterView({ id }: { id: string }) {
   return (
     <>
       <PageHeader
+        back={{ href: "/consultations", label: "Consultations" }}
         eyebrow={formatDate(encounter.date, "long")}
         title={encounter.diagnosis || encounter.chief_complaint}
-        description={`Recorded by ${userName(db, encounter.doctor_id)} · ${clinical.label} workflow`}
+        status={
+          <Badge tone={encounter.status === "signed" ? "ok" : "warn"} size="sm" dot>
+            {encounter.status === "signed" ? "Signed" : "Draft"}
+          </Badge>
+        }
         actions={
           <>
             <Button variant="ghost" onClick={() => void printConsultation()} disabled={printing}>
@@ -106,7 +112,7 @@ function EncounterView({ id }: { id: string }) {
         }
         meta={
           <>
-            <Badge tone={encounter.status === "signed" ? "ok" : "warn"} dot>{encounter.status}</Badge>
+            <span>Recorded by {userName(db, encounter.doctor_id)} · {clinical.label} workflow</span>
             {patient && <AllergyFlag patient={patient} />}
           </>
         }
@@ -115,15 +121,15 @@ function EncounterView({ id }: { id: string }) {
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_19rem]">
         <div className="min-w-0 space-y-5">
           <Card>
-            <CardHeader title="Consultation" subtitle={encounter.chief_complaint} />
+            <CardHeader icon={<IconStethoscope size={15} />} tone="info" title="Consultation" subtitle={encounter.chief_complaint} />
             <CardBody className="space-y-5">
               <div>
                 <Legend>Clinical notes</Legend>
-                <p className="text-[0.9375rem] leading-relaxed text-ink">{encounter.notes || "No notes recorded."}</p>
+                <p className="text-body leading-relaxed text-ink">{encounter.notes || "No notes recorded."}</p>
               </div>
               <div>
                 <Legend>Assessment</Legend>
-                <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <dl className="grid grid-cols-1 gap-x-4 sm:grid-cols-3">
                   <KV label="Diagnosis" value={encounter.diagnosis || "—"} />
                   <KV label="Follow-up" value={encounter.follow_up_days ? `${encounter.follow_up_days} days` : "None"} />
                   <KV
@@ -138,7 +144,7 @@ function EncounterView({ id }: { id: string }) {
           </Card>
 
           <Card>
-            <CardHeader title={clinical.examLabel} subtitle="The clinical_ext payload for this encounter." />
+            <CardHeader icon={<IconStethoscope size={15} />} tone="info" title={clinical.examLabel} hint="What was recorded in the exam at this visit." />
             <CardBody className="space-y-5">
               <ClinicalExamPanel clinicalType={tenant.clinical_type} ext={encounter.clinical_ext} readOnly />
               <div className="border-t border-line-soft pt-4">
@@ -149,15 +155,15 @@ function EncounterView({ id }: { id: string }) {
           </Card>
 
           <Card>
-            <CardHeader icon={<IconRx size={16} />} title="Prescriptions raised here" />
+            <CardHeader tone="violet" icon={<IconRx size={16} />} title="Prescriptions raised here" />
             <CardBody className="pt-0">
               {prescriptions.length === 0 ? (
-                <EmptyState compact title="Nothing prescribed at this visit" />
+                <EmptyState compact icon={<IconRx size={20} />} title="Nothing prescribed at this visit" />
               ) : (
                 prescriptions.map((rx) => (
                   <div key={rx.id} className="mb-3 rounded-[var(--r)] border border-line last:mb-0">
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line-soft px-3 py-2.5">
-                      <span className="tnum font-mono text-[0.75rem] text-ink-3">{rx.created_at}</span>
+                      <span className="tnum font-mono text-caption text-ink-3">{rx.created_at}</span>
                       <StatusPill kind="prescription" status={rx.status} size="sm" />
                     </div>
                     <TableWrap>
@@ -170,11 +176,11 @@ function EncounterView({ id }: { id: string }) {
                             <TR key={it.id}>
                               <TD>
                                 <span className="block font-medium text-ink">{it.medicine}</span>
-                                <span className="block text-[0.75rem] text-ink-3">{it.strength}</span>
+                                <span className="block text-caption text-ink-3">{it.strength}</span>
                               </TD>
                               <TD className="text-ink-2">
                                 {it.dosage}, {it.frequency}, {it.duration}
-                                {it.instructions && <span className="block text-[0.75rem] text-ink-3">{it.instructions}</span>}
+                                {it.instructions && <span className="block text-caption text-ink-3">{it.instructions}</span>}
                               </TD>
                               <TD align="right" className="tnum font-mono">{it.dispensed_qty}/{it.qty}</TD>
                             </TR>
@@ -190,18 +196,18 @@ function EncounterView({ id }: { id: string }) {
 
           {hasFeature("lab") && (
             <Card>
-              <CardHeader icon={<IconFlask size={16} />} title="Lab orders raised here"
-                          subtitle="Results reach the patient record only after verification." />
+              <CardHeader tone="info" icon={<IconFlask size={16} />} title="Lab orders raised here"
+                          hint="Results reach the patient record only after verification." />
               <CardBody className="pt-0">
                 {labs.length === 0 ? (
-                  <EmptyState compact title="No tests ordered at this visit" />
+                  <EmptyState compact icon={<IconFlask size={20} />} title="No tests ordered at this visit" />
                 ) : (
                   <ul className="space-y-2.5">
                     {labs.map((l) => (
                       <li key={l.id} className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--r)] border border-line px-3 py-2.5">
                         <div className="min-w-0">
-                          <p className="truncate text-[0.8438rem] font-medium text-ink">{l.test_name}</p>
-                          <p className="truncate text-[0.75rem] text-ink-3">{l.panel} · {l.test_code}</p>
+                          <p className="truncate text-label font-medium text-ink">{l.test_name}</p>
+                          <p className="truncate text-caption text-ink-3">{l.panel} · {l.test_code}</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <StatusPill kind="lab" status={l.status} size="sm" />
@@ -219,27 +225,32 @@ function EncounterView({ id }: { id: string }) {
         <aside className="space-y-5">
           {patient && (
             <Card>
-              <CardHeader title="Patient" />
+              <CardHeader icon={<IconUser size={15} />} tone="accent" title="Patient" />
               <CardBody className="pt-0">
                 <PatientChip patient={patient} size="lg" href={`/patients/${patient.id}`} />
-                <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-line-soft pt-4">
-                  <KV label="Record" value={<span className="tnum font-mono text-[0.8125rem]">{patient.mrn}</span>} />
-                  <KV label="Phone" value={<span className="tnum font-mono text-[0.8125rem]">{patient.phone}</span>} />
+                <dl className="mt-4 grid grid-cols-2 gap-x-3 border-t border-line-soft pt-4">
+                  <KV label="Record" value={<span className="tnum font-mono text-label">{patient.mrn}</span>} />
+                  <KV label="Phone" value={<span className="tnum font-mono text-label">{patient.phone}</span>} />
                 </dl>
-                <ButtonLink href={`/patients/${patient.id}`} variant="secondary" size="sm" className="mt-4 w-full">
-                  Full history <IconArrowRight size={14} />
-                </ButtonLink>
+                {/* The name above is the link to the record — a button under
+                    it to the same URL was the same door twice. This says the
+                    thing the chip cannot: how long since they were last in. */}
+                <p className="mt-3 text-caption text-ink-3">
+                  {patient.last_visit
+                    ? `Last seen ${relativeDay(patient.last_visit).toLowerCase()}`
+                    : "No previous visit on file"}
+                </p>
               </CardBody>
             </Card>
           )}
 
           {hasFeature("billing") && (
             <Card>
-              <CardHeader icon={<IconReceipt size={16} />} title="Billing" />
+              <CardHeader tone="ok" icon={<IconReceipt size={16} />} title="Billing" />
               <CardBody className="pt-0">
                 {invoices.length === 0 ? (
                   <>
-                    <p className="text-[0.8125rem] leading-relaxed text-ink-2">
+                    <p className="text-label leading-relaxed text-ink-2">
                       Nothing has been billed for this visit. Line items can be suggested from the consultation,
                       any lab orders and anything dispensed.
                     </p>

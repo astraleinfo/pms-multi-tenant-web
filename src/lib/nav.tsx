@@ -1,7 +1,7 @@
 import * as React from "react";
 import type { FeatureKey, Role } from "@/lib/types";
 import {
-  IconBox, IconCalendar, IconCard, IconChart, IconFlask, IconMonitor, IconMortar, IconPulse,
+  IconBox, IconCalendar, IconCard, IconChart, IconFlask, IconMonitor, IconPill, IconPulse,
   IconQueue, IconReceipt, IconRx, IconSettings, IconStethoscope, IconUsers,
 } from "@/components/ui/icons";
 
@@ -44,7 +44,7 @@ export const NAV: NavGroup[] = [
   {
     label: "Operations",
     items: [
-      { href: "/pharmacy", label: "Pharmacy", icon: IconMortar, feature: "pharmacy", roles: ["tenant_admin", "pharmacist", "doctor"], description: "Dispense against prescriptions." },
+      { href: "/pharmacy", label: "Pharmacy", icon: IconPill, feature: "pharmacy", roles: ["tenant_admin", "pharmacist", "doctor"], description: "Dispense against prescriptions." },
       { href: "/inventory", label: "Inventory", icon: IconBox, feature: "inventory", roles: ["tenant_admin", "pharmacist"], description: "One ledger for every stock movement." },
       { href: "/billing", label: "Billing", icon: IconReceipt, feature: "billing", roles: ["tenant_admin", "receptionist"], counter: "unpaid", description: "Invoices composed from the visit." },
     ],
@@ -61,6 +61,13 @@ export const NAV: NavGroup[] = [
 ];
 
 export const ALL_NAV_ITEMS = NAV.flatMap((g) => g.items);
+
+/**
+ * Where a padlock leads. A module this clinic has not been given opens its own
+ * page — what it does, a walkthrough, the price, and how to ask for it — not
+ * Settings, where there is no switch for anybody inside the clinic to throw.
+ */
+export const modulePath = (feature: FeatureKey) => `/modules/${feature}`;
 
 export function navItemFor(pathname: string) {
   return ALL_NAV_ITEMS

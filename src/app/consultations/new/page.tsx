@@ -1,11 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/navigation";
 import { useApp, useTenant } from "@/lib/store/app-store";
 import { useClinicDb, useSchema, usePatient } from "@/lib/query/hooks";
 import { selectDoctors, selectEncounters, selectQueue } from "@/lib/data/repository";
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
+import { modulePath } from "@/lib/nav";
 import { age, formatDate, relativeDay } from "@/lib/format";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader, Legend } from "@/components/ui/card";
@@ -20,23 +21,34 @@ import { ClinicalExamPanel } from "@/components/domain/clinical-exam";
 import { PrescriptionEditor, type DraftRxItem } from "@/components/domain/prescription-editor";
 import { LabOrderPicker, type DraftLabTest } from "@/components/domain/lab-order-picker";
 import {
-  IconCheck, IconChevronLeft, IconFlask, IconRx, IconStethoscope, IconBookmark,
+  IconBookmark, IconCheck, IconFlask, IconRx, IconStethoscope, IconUser,
 } from "@/components/ui/icons";
 
 export default function NewConsultationPage(props: PageProps<"/consultations/new">) {
   const sp = React.use(props.searchParams);
   const queueId = typeof sp.queue === "string" ? sp.queue : undefined;
   const patientId = typeof sp.patient === "string" ? sp.patient : undefined;
+  /* Where the caller wants this workspace opened. The patient record's "Add
+     prescription" and "Order lab test" both land here, because in this product
+     neither exists outside an encounter — so the least the link can do is put
+     the reader in front of the section they pressed for. */
+  const focus = sp.focus === "prescription" || sp.focus === "lab" ? sp.focus : undefined;
   return (
     <RoleGate allow={["doctor"]}>
       <FeatureGate feature="consultation">
-        <Workspace queueId={queueId} patientId={patientId} />
+        <Workspace queueId={queueId} patientId={patientId} focus={focus} />
       </FeatureGate>
     </RoleGate>
   );
 }
 
-function Workspace({ queueId, patientId }: { queueId?: string; patientId?: string }) {
+function Workspace({
+  queueId, patientId, focus,
+}: {
+  queueId?: string;
+  patientId?: string;
+  focus?: "prescription" | "lab";
+}) {
   const router = useRouter();
   const { session, today, hasFeature, notify, createEncounter, createPrescription, createLabOrder } = useApp();
   const db = useClinicDb();
@@ -52,6 +64,13 @@ function Workspace({ queueId, patientId }: { queueId?: string; patientId?: strin
 
   const { data: schema } = useSchema("encounter");
   const clinical = CLINICAL_TYPES.find((c) => c.key === tenant.clinical_type)!;
+
+  /* Once, on arrival. Not `scrollIntoView` on every render — the reader may
+     well have scrolled somewhere else by then. */
+  React.useEffect(() => {
+    if (!focus) return;
+    document.getElementById(focus)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focus]);
 
   const [complaint, setComplaint] = React.useState(queueEntry?.reason ?? "");
   const [notes, setNotes] = React.useState("");
@@ -119,21 +138,17 @@ function Workspace({ queueId, patientId }: { queueId?: string; patientId?: strin
   return (
     <>
       <PageHeader
+        back={{ href: "/consultations", label: "Consultations" }}
         eyebrow={queueEntry ? `Token ${String(queueEntry.token_no).padStart(2, "0")}` : "New encounter"}
         title={record ? record.full_name : "Consultation"}
-        description={`One encounter row, one clinical payload. ${clinical.examLabel} is what this clinical type contributes.`}
-        actions={
-          <ButtonLink href="/consultations" variant="ghost">
-            <IconChevronLeft size={15} /> All consultations
-          </ButtonLink>
-        }
+        description={`Record what happened at this visit — the ${clinical.examLabel.toLowerCase()}, the diagnosis, and any prescription or tests.`}
         meta={record ? <AllergyFlag patient={record} /> : undefined}
       />
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_19rem]">
         <div className="min-w-0 space-y-5">
           <Card>
-            <CardHeader title="Visit" subtitle="Who is in the chair and what brought them in." />
+            <CardHeader icon={<IconStethoscope size={15} />} tone="info" title="Visit" hint="Who is in the chair and what brought them in." />
             <CardBody className="space-y-4">
               {queueEntry ? (
                 <div className="flex flex-wrap items-center gap-3 rounded-[var(--r)] border border-accent-border bg-accent-soft/50 p-3">
@@ -168,7 +183,7 @@ function Workspace({ queueId, patientId }: { queueId?: string; patientId?: strin
           </Card>
 
           <Card>
-            <CardHeader title="Observations" subtitle="Common vitals, then whatever this clinical type asks for." />
+            <CardHeader icon={<IconStethoscope size={15} />} tone="info" title="Observations" hint="Common vitals, then whatever this clinical type asks for." />
             <CardBody className="space-y-5">
               <div>
                 <Legend>Vitals</Legend>
@@ -194,7 +209,6 @@ function Workspace({ queueId, patientId }: { queueId?: string; patientId?: strin
                         def={f}
                         value={ext[f.field_key]}
                         onChange={(v) => setExt((p) => ({ ...p, [f.field_key]: v }))}
-                        showScope
                       />
                     ))}
                   </div>
@@ -213,7 +227,7 @@ function Workspace({ queueId, patientId }: { queueId?: string; patientId?: strin
           </Card>
 
           <Card>
-            <CardHeader title="Assessment" subtitle="What you concluded and what happens next." />
+            <CardHeader icon={<IconStethoscope size={15} />} tone="info" title="Assessment" hint="What you concluded and what happens next." />
             <CardBody className="space-y-4">
               <Field label="Diagnosis">
                 <Input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)}
@@ -250,18 +264,18 @@ function Workspace({ queueId, patientId }: { queueId?: string; patientId?: strin
             </CardBody>
           </Card>
 
-          <Card>
-            <CardHeader icon={<IconRx size={16} />} title="Prescription"
-                        subtitle="Core — available whether or not this clinic sells medicines." />
+          <Card id="prescription" className="scroll-mt-20">
+            <CardHeader tone="violet" icon={<IconRx size={16} />} title="Prescription"
+                        hint="Core — available whether or not this clinic sells medicines." />
             <CardBody className="pt-0">
               <PrescriptionEditor items={rx} onChange={setRx} />
             </CardBody>
           </Card>
 
           {hasFeature("lab") ? (
-            <Card>
-              <CardHeader icon={<IconFlask size={16} />} title="Lab orders"
-                          subtitle="Tests are ordered from the encounter and travel with it." />
+            <Card id="lab" className="scroll-mt-20">
+              <CardHeader tone="info" icon={<IconFlask size={16} />} title="Lab orders"
+                          hint="Tests are ordered from the encounter and travel with it." />
               <CardBody className="pt-0">
                 <LabOrderPicker selected={tests} onChange={setTests} note={labNote} onNote={setLabNote} />
               </CardBody>
@@ -274,7 +288,7 @@ function Workspace({ queueId, patientId }: { queueId?: string; patientId?: strin
                   icon={<IconFlask size={20} />}
                   title="Lab is not enabled"
                   body="Tests cannot be ordered from this encounter until the module is switched on. Nothing else about the consultation changes."
-                  action={<ButtonLink href="/settings?tab=features" size="sm" variant="secondary">See modules</ButtonLink>}
+                  action={<ButtonLink href={modulePath("lab")} size="sm" variant="secondary">See what Lab does</ButtonLink>}
                 />
               </CardBody>
             </Card>
@@ -285,7 +299,7 @@ function Workspace({ queueId, patientId }: { queueId?: string; patientId?: strin
         <aside className="space-y-5">
           <div className="lg:sticky lg:top-[calc(var(--topbar-h)+1.25rem)] space-y-5">
             <Card>
-              <CardHeader title="Save" subtitle="Signing closes the token and releases the record." />
+              <CardHeader icon={<IconCheck size={15} />} tone="ok" title="Save" hint="Signing closes the token and releases the record." />
               <CardBody className="space-y-2.5 pt-0">
                 <Button variant="primary" className="w-full" onClick={() => void save(true)}>
                   <IconCheck size={15} /> Sign and complete
@@ -293,8 +307,7 @@ function Workspace({ queueId, patientId }: { queueId?: string; patientId?: strin
                 <Button variant="secondary" className="w-full" onClick={() => void save(false)}>
                   <IconBookmark size={15} /> Save as draft
                 </Button>
-                <ul className="mt-2 space-y-1.5 border-t border-line-soft pt-3 text-[0.75rem] leading-snug text-ink-2">
-                  <li>· Encounter written with {Object.keys(ext).length} clinical field{Object.keys(ext).length === 1 ? "" : "s"}.</li>
+                <ul className="mt-2 space-y-1.5 border-t border-line-soft pt-3 text-caption leading-snug text-ink-2">
                   {rx.filter((r) => r.medicine.trim()).length > 0 && (
                     <li>· Prescription with {rx.filter((r) => r.medicine.trim()).length} line{rx.filter((r) => r.medicine.trim()).length === 1 ? "" : "s"}.</li>
                   )}
@@ -306,10 +319,10 @@ function Workspace({ queueId, patientId }: { queueId?: string; patientId?: strin
 
             {record && (
               <Card>
-                <CardHeader title="Patient context" subtitle={`${record.mrn} · ${age(record.dob)} years`} />
+                <CardHeader icon={<IconUser size={15} />} tone="accent" title="Patient context" subtitle={`${record.mrn} · ${age(record.dob)} years`} />
                 <CardBody className="pt-0">
                   <AllergyFlag patient={record} />
-                  <dl className="mt-3 grid grid-cols-2 gap-3">
+                  <dl className="mt-3 grid grid-cols-2 gap-x-3">
                     <KV label="Blood group" value={record.blood_group ?? "—"} />
                     <KV label="Last seen" value={record.last_visit ? relativeDay(record.last_visit) : "Never"} />
                   </dl>
@@ -318,7 +331,7 @@ function Workspace({ queueId, patientId }: { queueId?: string; patientId?: strin
                       <Legend className="mt-4">Previously</Legend>
                       <ul className="space-y-2">
                         {past.slice(0, 3).map((e) => (
-                          <li key={e.id} className="text-[0.75rem] leading-snug">
+                          <li key={e.id} className="text-caption leading-snug">
                             <span className="tnum font-mono text-ink-3">{formatDate(e.date)}</span>
                             <span className="ml-2 text-ink">{e.diagnosis || e.chief_complaint}</span>
                           </li>
@@ -330,17 +343,6 @@ function Workspace({ queueId, patientId }: { queueId?: string; patientId?: strin
               </Card>
             )}
 
-            <Card>
-              <CardHeader icon={<IconStethoscope size={16} />} title="Why this form differs"
-                          subtitle={`${tenant.name} runs ${clinical.label.toLowerCase()}.`} />
-              <CardBody className="pt-0">
-                <p className="text-[0.75rem] leading-relaxed text-ink-2">{clinical.blurb}</p>
-                <p className="mt-2.5 text-[0.75rem] leading-relaxed text-ink-3">
-                  Switching the tenant in the topbar swaps both the extra fields above and the exam widget —
-                  the encounter table underneath is identical.
-                </p>
-              </CardBody>
-            </Card>
           </div>
         </aside>
       </div>

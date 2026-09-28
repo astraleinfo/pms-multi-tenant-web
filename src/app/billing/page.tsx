@@ -1,29 +1,29 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/navigation";
 
 import type { BillingDepartment, Invoice } from "@/lib/types";
 import { useBillingStats, useInvoicePage } from "@/lib/query/hooks";
 import { invoiceTotals } from "@/lib/data/repository";
 import { useDebounced } from "@/lib/debounce";
 
-import { currency, formatDate, pluralise } from "@/lib/format";
+import { currency, formatDate, pluralise, sentenceCase } from "@/lib/format";
 import { PageHeader } from "@/components/ui/page-header";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Card, CardBody } from "@/components/ui/card";
 import { DataTable, columnHelperFor } from "@/components/ui/data-table";
-import { Button } from "@/components/ui/button";
+import { Button, Segmented } from "@/components/ui/button";
 import { EmptyState, Meter } from "@/components/ui/misc";
 import { Stat } from "@/components/ui/stat";
-import { ChoiceGroup, SearchInput } from "@/components/ui/field";
+import { SearchInput } from "@/components/ui/field";
 import { Tabs } from "@/components/ui/tabs";
-import { DonutChart } from "@/components/charts/donut-chart";
 import { FeatureGate, RoleGate } from "@/components/domain/gates";
-import { Badge } from "@/components/ui/badge";
 import { DEPARTMENT_LABEL, StatusPill } from "@/components/domain/status";
-import { PatientChip, PatientRef } from "@/components/domain/patient";
+import { PatientRef } from "@/components/domain/patient";
 import { InvoiceComposer } from "@/components/domain/invoice-composer";
-import { IconAlert, IconCard, IconCheck, IconPlus, IconReceipt } from "@/components/ui/icons";
+import {
+  IconAlert, IconCard, IconCheck, IconPlus, IconReceipt, IconUser
+} from "@/components/ui/icons";
 import { PatientAccount } from "@/components/domain/patient-account";
 
 type Tab = "all" | "unpaid" | "draft" | "paid" | "void";
@@ -47,8 +47,8 @@ const invoiceColumns = col.columns([
     header: "Invoice",
     cell: ({ row }) => (
       <>
-        <span className="tnum block font-mono text-[0.8125rem] font-medium text-ink">{row.original.number}</span>
-        <span className="block text-[0.75rem] text-ink-3">{pluralise(row.original.line_items.length, "line")}</span>
+        <span className="tnum block font-mono text-label font-medium text-ink">{row.original.number}</span>
+        <span className="block text-caption text-ink-3">{pluralise(row.original.line_items.length, "line")}</span>
       </>
     ),
   }),
@@ -61,17 +61,13 @@ const invoiceColumns = col.columns([
   col.accessor("issued_at", {
     header: "Issued",
     cell: ({ row }) => (
-      <span className="tnum font-mono text-[0.8125rem] text-ink-2">{formatDate(row.original.issued_at)}</span>
+      <span className="tnum text-label text-ink-2">{formatDate(row.original.issued_at)}</span>
     ),
   }),
   col.accessor("department", {
     header: "Counter",
     enableSorting: false,
-    cell: ({ getValue }) => (
-      <Badge tone={getValue() === "clinic" ? "neutral" : "accent"} size="sm" dot={false}>
-        {DEPARTMENT_LABEL[getValue()]}
-      </Badge>
-    ),
+    cell: ({ getValue }) => <span className="text-label text-ink-2">{DEPARTMENT_LABEL[getValue()]}</span>,
   }),
   col.accessor((i) => invoiceTotals(i).total, {
     id: "total",
@@ -84,9 +80,10 @@ const invoiceColumns = col.columns([
     header: "Balance",
     meta: { align: "right" },
     cell: ({ getValue }) => (
-      <span className={`tnum font-mono ${getValue() > 0.005 ? "text-warn-text" : "text-ok-text"}`}>
-        {currency(getValue())}
-      </span>
+      /* only money still owed is coloured; a settled invoice owes nothing, and says so quietly */
+      getValue() > 0.005
+        ? <span className="tnum font-medium text-warn-text">{currency(getValue())}</span>
+        : <span className="text-ink-3">—</span>
     ),
   }),
   col.accessor("status", {
@@ -186,7 +183,6 @@ function Billing() {
   return (
     <>
       <PageHeader
-        eyebrow="Feature module"
         title="Billing"
         description="Invoices reference the encounter rather than copying it. Lines are suggested from the visit and priced from the clinic's own tariff — and the lab and the pharmacy bill on their own invoices, so each counter chases its own money."
         actions={
@@ -201,13 +197,25 @@ function Billing() {
         }
       />
 
+      {/* The totals are the practice admin's: for anyone else the server sends
+          the counts and not the money, and the counter works from those. */}
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label="Billed" value={currency(stats.billed)} icon={<IconReceipt size={16} />}
-              hint={`${pluralise(stats.count, "invoice")} excluding voids`} />
-        <Stat label="Collected" value={currency(stats.paid)} tone="ok" icon={<IconCheck size={16} />}
-              footer={<Meter value={stats.paid} max={Math.max(stats.billed, 1)} tone="ok" />} />
-        <Stat label="Outstanding" value={currency(stats.outstanding)} tone={stats.outstanding > 0 ? "warn" : "ok"}
-              icon={<IconAlert size={16} />} hint={`${pluralise(stats.unpaid, "invoice")} still owing`} />
+        {stats.billed !== undefined && stats.paid !== undefined && stats.outstanding !== undefined ? (
+          <>
+            <Stat label="Billed" value={currency(stats.billed)} icon={<IconReceipt size={16} />}
+                  hint={`${pluralise(stats.count, "invoice")} excluding voids`} />
+            <Stat label="Collected" value={currency(stats.paid)} icon={<IconCheck size={16} />}
+                  footer={<Meter value={stats.paid} max={Math.max(stats.billed, 1)} tone="ok" />} />
+            <Stat label="Outstanding" value={currency(stats.outstanding)} tone={stats.outstanding > 0 ? "warn" : "ink"}
+                  icon={<IconAlert size={16} />} hint={`${pluralise(stats.unpaid, "invoice")} still owing`} />
+          </>
+        ) : (
+          <>
+            <Stat label="Invoices" value={stats.count} icon={<IconReceipt size={16} />} hint="Excluding voids" />
+            <Stat label="Owing" value={stats.unpaid} tone={stats.unpaid > 0 ? "warn" : "ink"}
+                  icon={<IconAlert size={16} />} hint="Issued or part paid" />
+          </>
+        )}
         <Stat label="Drafts" value={stats.drafts} icon={<IconReceipt size={16} />} hint="Not yet issued" />
       </section>
 
@@ -216,8 +224,8 @@ function Billing() {
         value={view}
         onChange={setView}
         tabs={[
-          { value: "ledger", label: "Invoices", count: counts.all },
-          { value: "account", label: "A patient's account" },
+          { value: "ledger", label: "Invoices", icon: <IconReceipt size={15} />, count: counts.all },
+          { value: "account", label: "A patient's account", icon: <IconUser size={15} /> },
         ]}
       />
 
@@ -229,22 +237,12 @@ function Billing() {
       )}
 
       {view === "ledger" && (
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
-        <div className="min-w-0">
-          <ChoiceGroup<BillingDepartment | "all">
-            className="mb-4"
-            columns={4}
-            value={counter}
-            onChange={setCounter}
-            options={[
-              { value: "all", label: "Every counter", description: `${counters.all} invoices` },
-              { value: "clinic", label: "Clinic", description: `${counters.clinic} invoices` },
-              { value: "lab", label: "Lab", description: `${counters.lab} invoices` },
-              { value: "pharmacy", label: "Pharmacy", description: `${counters.pharmacy} invoices` },
-            ]}
-          />
-
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        /* The ledger is the page: full width, so every column fits whether the
+           rail is open or not. The counter filter sits on the same line as the
+           status tabs, and the money mix follows the table as one slim bar —
+           it is context for the ledger, not a rival to it. */
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <Tabs
               value={tab}
               onChange={setTab}
@@ -257,8 +255,20 @@ function Billing() {
                 { value: "void", label: "Void", count: counts.void },
               ]}
             />
-            <SearchInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Invoice number or patient"
-                         wrapperClassName="min-w-[200px] max-w-xs flex-1" />
+            <div className="flex flex-wrap items-center gap-2.5">
+              <Segmented<BillingDepartment | "all">
+                value={counter}
+                onChange={setCounter}
+                options={[
+                  { value: "all", label: "Every counter" },
+                  { value: "clinic", label: `Clinic · ${counters.clinic}` },
+                  { value: "lab", label: `Lab · ${counters.lab}` },
+                  { value: "pharmacy", label: `Pharmacy · ${counters.pharmacy}` },
+                ]}
+              />
+              <SearchInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Invoice number or patient"
+                           wrapperClassName="w-full sm:w-64" />
+            </div>
           </div>
 
           <Card className="overflow-hidden">
@@ -268,7 +278,7 @@ function Billing() {
               getRowId={(i) => i.id}
               pageSize={PAGE_SIZE}
               onRowClick={(inv) => router.push(`/billing/${inv.id}`)}
-              minWidth="50rem"
+              minWidth="52rem"
               empty={<EmptyState icon={<IconReceipt size={20} />} title="Nothing here" body="No invoice matches this filter." />}
               server={{
                 total,
@@ -282,51 +292,44 @@ function Billing() {
               }}
             />
           </Card>
+
+          {mix && mix.length > 0 && <MoneyMix mix={mix} />}
         </div>
-
-        <div className="space-y-5">
-          <Card>
-            <CardHeader title="Where the money came from" subtitle="Billed value by line-item source." />
-            <CardBody className="pt-1">
-              {mix.length ? (
-                <DonutChart
-                  slices={mix}
-                  centreValue={currency(mix.reduce((s, x) => s + x.value, 0))}
-                  centreLabel="billed"
-                  format={(n) => currency(n)}
-                  size={150}
-                />
-              ) : (
-                <EmptyState compact title="Nothing billed yet" />
-              )}
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader title="Invoice states" subtitle="Payments move an invoice along; they never edit it." />
-            <CardBody className="pt-1">
-              <ol className="space-y-2.5">
-                {[
-                  { s: "draft", d: "Composed, still editable, nothing owed." },
-                  { s: "issued", d: "Sent to the patient. Balance equals the total." },
-                  { s: "partially_paid", d: "A payment landed but did not clear it." },
-                  { s: "paid", d: "Payments cover the total." },
-                  { s: "void", d: "Cancelled. Excluded from every revenue figure." },
-                ].map((row) => (
-                  <li key={row.s} className="flex items-start gap-3">
-                    <StatusPill kind="invoice" status={row.s} size="sm" />
-                    <p className="min-w-0 flex-1 text-[0.75rem] leading-snug text-ink-2">{row.d}</p>
-                  </li>
-                ))}
-              </ol>
-            </CardBody>
-          </Card>
-        </div>
-      </div>
-
       )}
 
       <InvoiceComposer open={compose} onClose={() => setCompose(false)} patientId={null} encounterId={null} />
     </>
+  );
+}
+
+/** Billed value by source, as one bar — the proportions at a glance, the figures beside them. */
+function MoneyMix({ mix }: { mix: Array<{ label: string; value: number }> }) {
+  const total = mix.reduce((sum, m) => sum + m.value, 0) || 1;
+  const colours = ["var(--series-1)", "var(--series-2)", "var(--series-3)", "var(--series-4)", "var(--series-5)"];
+  return (
+    <Card>
+      <CardBody className="pt-card">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-label font-semibold text-ink">Where the money came from</h2>
+          <span className="tnum text-label text-ink-2">{currency(total)} billed</span>
+        </div>
+        <div className="mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-surface-3" role="img"
+             aria-label={mix.map((m) => `${sentenceCase(m.label)} ${Math.round((m.value / total) * 100)}%`).join(", ")}>
+          {mix.map((m, i) => (
+            <span key={m.label} style={{ width: `${(m.value / total) * 100}%`, background: colours[i % colours.length] }} />
+          ))}
+        </div>
+        <ul className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
+          {mix.map((m, i) => (
+            <li key={m.label} className="flex items-center gap-2 text-label">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: colours[i % colours.length] }} aria-hidden />
+              <span className="text-ink">{sentenceCase(m.label)}</span>
+              <span className="tnum text-ink-2">{currency(m.value)}</span>
+              <span className="tnum text-ink-3">{Math.round((m.value / total) * 100)}%</span>
+            </li>
+          ))}
+        </ul>
+      </CardBody>
+    </Card>
   );
 }

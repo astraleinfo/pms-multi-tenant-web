@@ -3,16 +3,10 @@
 import * as React from "react";
 import type { FieldDefinition } from "@/lib/types";
 import { cn } from "@/lib/cn";
+import { DataList, DataRow } from "@/components/ui/data-list";
 import { Legend } from "@/components/ui/card";
 import { ChipMulti, Checkbox, Field, Input, Select, Textarea } from "@/components/ui/field";
-import { Badge, type Tone } from "@/components/ui/badge";
 import { formatDate } from "@/lib/format";
-
-const SCOPE_META: Record<FieldDefinition["scope"], { label: string; tone: Tone }> = {
-  common: { label: "Common", tone: "neutral" },
-  clinical_type: { label: "Clinical", tone: "accent" },
-  tenant: { label: "Clinic", tone: "accent" },
-};
 
 export type FormValues = Record<string, unknown>;
 
@@ -21,13 +15,12 @@ export type FormValues = Record<string, unknown>;
  * exist — it draws whatever the resolver returned, in order, grouped.
  */
 export function DynamicForm({
-  fields, values, onChange, errors, showScopes = false, columns = 2, className,
+  fields, values, onChange, errors, columns = 2, className,
 }: {
   fields: FieldDefinition[];
   values: FormValues;
   onChange: (key: string, value: unknown) => void;
   errors?: Record<string, string>;
-  showScopes?: boolean;
   columns?: 1 | 2;
   className?: string;
 }) {
@@ -54,7 +47,6 @@ export function DynamicForm({
                 value={values[f.field_key]}
                 onChange={(v) => onChange(f.field_key, v)}
                 error={errors?.[f.field_key]}
-                showScope={showScopes}
                 columns={columns}
               />
             ))}
@@ -66,24 +58,21 @@ export function DynamicForm({
 }
 
 export function DynamicField({
-  def, value, onChange, error, showScope, columns = 2,
+  def, value, onChange, error, columns = 2,
 }: {
   def: FieldDefinition;
   value: unknown;
   onChange: (v: unknown) => void;
   error?: string;
-  showScope?: boolean;
   columns?: 1 | 2;
 }) {
   const id = `f-${def.id}`;
   const span = columns === 2 && def.span === 2 ? "sm:col-span-2" : "";
-  const scope = SCOPE_META[def.scope];
 
   const label = (
-    <span className="inline-flex items-center gap-2">
-      {def.label}
-      {showScope && <Badge tone={scope.tone} size="sm">{scope.label}</Badge>}
-    </span>
+    /* Where a field comes from (common, clinical type, the clinic's own) is
+       the builder's business, not the person filling it in — so no tag. */
+    <span className="inline-flex items-center gap-2">{def.label}</span>
   );
 
   return (
@@ -146,30 +135,47 @@ function renderValue(def: FieldDefinition, v: unknown) {
   return String(v);
 }
 
+/**
+ * The resolved schema, reduced to the rows that have something in them.
+ *
+ * Exported because a record page often wants to interleave schema fields with
+ * facts the schema does not hold — a record number, when somebody registered —
+ * and lay the result out in columns of its own choosing. `DynamicSummary` is
+ * the common case; this is the seam under it.
+ */
+export function summaryRows(fields: FieldDefinition[], values: FormValues) {
+  return fields
+    .map((f) => ({ f, v: values[f.field_key] }))
+    .filter(({ v }) => v != null && v !== "" && !(Array.isArray(v) && v.length === 0))
+    .map(({ f, v }) => ({ key: f.id, label: f.label, value: renderValue(f, v) }));
+}
+
 /** Read-only rendering of whatever ended up in clinical_ext. */
 export function DynamicSummary({
-  fields, values, className,
+  fields, values, className, columns = 2,
 }: {
   fields: FieldDefinition[];
   values: FormValues;
   className?: string;
+  /** one ruled column in a narrow sidebar, two on a full-width panel */
+  columns?: 1 | 2;
 }) {
   const rows = fields
     .map((f) => ({ f, v: values[f.field_key] }))
     .filter(({ v }) => v != null && v !== "" && !(Array.isArray(v) && v.length === 0));
 
   if (!rows.length) {
-    return <p className={cn("text-[0.8438rem] text-ink-3", className)}>Nothing recorded for this section.</p>;
+    return <p className={cn("text-label text-ink-3", className)}>Nothing recorded for this section.</p>;
   }
 
+  /* Two ruled columns rather than a grid of stacked pairs: a resolved record
+     runs to fifteen or twenty fields, and stacked they are a drift of grey
+     over dark with no column for the eye to follow. */
   return (
-    <dl className={cn("grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2", className)}>
+    <DataList columns={columns} className={className}>
       {rows.map(({ f, v }) => (
-        <div key={f.id} className="min-w-0">
-          <dt className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-3">{f.label}</dt>
-          <dd className="mt-0.5 text-[0.875rem] text-ink">{renderValue(f, v)}</dd>
-        </div>
+        <DataRow key={f.id} label={f.label} value={renderValue(f, v)} />
       ))}
-    </dl>
+    </DataList>
   );
 }

@@ -14,11 +14,10 @@ import { EmptyState } from "@/components/ui/misc";
 import { Stat } from "@/components/ui/stat";
 import { FeatureGate } from "@/components/domain/gates";
 import { StatusPill } from "@/components/domain/status";
-import { PatientChip, PatientRef } from "@/components/domain/patient";
+import { PatientRef } from "@/components/domain/patient";
 import { WalkInModal } from "@/components/domain/quick-actions";
 import {
-  IconArrowRight, IconCheck, IconClock, IconMonitor, IconPlay, IconPlus,
-  IconQueue, IconStethoscope, IconX,
+  IconCalendar, IconCheck, IconMonitor, IconPlay, IconPlus, IconQueue, IconStethoscope, IconX,
 } from "@/components/ui/icons";
 
 type Filter = "live" | "all" | "closed";
@@ -84,7 +83,7 @@ function QueueBoard() {
       <PageHeader
         eyebrow={formatDate(today, "day")}
         title="Queue"
-        description="Tokens are issued per tenant per day. A check-in and a walk-in produce the same kind of row — only one of them carries an appointment."
+        description="Everyone checked in today, in the order they will be seen. Booked patients and walk-ins share one board."
         actions={
           <>
             <ButtonLink href="/display" variant="secondary" target="_blank">
@@ -98,21 +97,21 @@ function QueueBoard() {
       />
 
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label="Waiting" value={counts.waiting} tone="warn" icon={<IconQueue size={16} />}
+        <Stat label="Waiting" value={counts.waiting} tone={counts.waiting ? "warn" : "ink"} icon={<IconQueue size={16} />}
               hint={counts.waiting ? `Longest wait ${duration((timings?.max_wait_minutes ?? 0))}` : "Nobody in the room"} />
-        <Stat label="Called" value={counts.called} tone="accent" icon={<IconPlay size={16} />}
+        <Stat label="Called" value={counts.called} icon={<IconPlay size={16} />}
               hint="Announced, not yet seated" />
-        <Stat label="In consultation" value={counts.inConsult} tone="accent" icon={<IconStethoscope size={16} />}
+        <Stat label="In consultation" value={counts.inConsult} icon={<IconStethoscope size={16} />}
               hint={`Average ${duration((timings?.avg_consultation_minutes ?? 0))} per visit`} />
-        <Stat label="Seen today" value={counts.completed} tone="ok" icon={<IconCheck size={16} />}
+        <Stat label="Seen today" value={counts.completed} icon={<IconCheck size={16} />}
               hint={`Average wait ${(timings?.avg_wait_minutes ?? 0)} min`} />
       </section>
 
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <Card data-tour="queue-board">
           <CardHeader
-            title="The board"
-            subtitle="Urgent tokens float above routine ones inside each state."
+            icon={<IconQueue size={15} />} tone="accent" title="The board"
+            hint="Urgent tokens float above routine ones inside each state."
             actions={
               <Segmented
                 size="sm"
@@ -131,8 +130,7 @@ function QueueBoard() {
               <EmptyState
                 icon={<IconQueue size={20} />}
                 title={filter === "live" ? "Nobody is waiting" : "Nothing here yet"}
-                body="Check in a booked patient from the arrivals list, or issue a walk-in token."
-                action={<Button size="sm" onClick={() => setWalkIn(true)}><IconPlus size={14} /> Add walk-in</Button>}
+                body="Check in a booked patient from the arrivals list beside this one, or issue a walk-in token from the button above."
               />
             ) : (
               /* the day spine */
@@ -161,19 +159,17 @@ function QueueBoard() {
                           </div>
                           <div className="flex shrink-0 flex-wrap items-center gap-2">
                             {q.priority === "urgent" && <Badge tone="critical" size="sm">Urgent</Badge>}
-                            <Badge tone={q.appointment_id ? "info" : "neutral"} size="sm">
-                              {q.appointment_id ? "Booked" : "Walk-in"}
-                            </Badge>
+                            {/* booked is the ordinary case; only the exception is marked */}
+                            {!q.appointment_id && <Badge tone="neutral" size="sm">Walk-in</Badge>}
                             <StatusPill kind="queue" status={q.status} size="sm" pulse={q.status === "in_consultation"} />
                           </div>
                         </div>
 
                         <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line-soft pt-2.5">
-                          <p className="tnum flex flex-wrap items-center gap-x-3 font-mono text-[0.75rem] text-ink-3">
-                            <span><IconClock size={11} className="mr-1 inline" />in {q.checked_in_at}</span>
-                            {q.called_at && <span>called {q.called_at}</span>}
-                            {waited != null && waited >= 0 && <span className="text-accent-text">waited {waited}m</span>}
-                            <span className="font-sans">{userName(db, q.doctor_id)}</span>
+                          <p className="tnum flex flex-wrap items-center gap-x-3 text-caption text-ink-3">
+                            <span>Arrived {q.checked_in_at}</span>
+                            {waited != null && waited >= 0 && <span>waited {waited} min</span>}
+                            <span>{userName(db, q.doctor_id)}</span>
                           </p>
 
                           <div className="flex flex-wrap items-center gap-1.5">
@@ -203,9 +199,9 @@ function QueueBoard() {
                               </ButtonLink>
                             )}
                             {q.status === "completed" && (
-                              <ButtonLink size="sm" variant="ghost" href={`/patients/${q.patient_id}`}>
-                                Patient record <IconArrowRight size={13} />
-                              </ButtonLink>
+                              /* the patient's name on this row is already a
+                                 link to exactly this page */
+                              <span className="text-caption text-ink-3">Seen</span>
                             )}
                           </div>
                         </div>
@@ -221,8 +217,8 @@ function QueueBoard() {
         <div className="space-y-5">
           <Card>
             <CardHeader
-              title="Expected to arrive"
-              subtitle={`${pluralise(arrivals.length, "booking")} today with nobody checked in yet.`}
+              icon={<IconCalendar size={15} />} tone="violet" title="Expected to arrive"
+              hint={`${pluralise(arrivals.length, "booking")} today with nobody checked in yet.`}
             />
             <CardBody className="pt-0">
               {arrivals.length === 0 ? (
@@ -233,7 +229,7 @@ function QueueBoard() {
                   {arrivals.map((a) => {
                     return (
                       <li key={a.id} className="flex flex-wrap items-center gap-3 py-3 first:pt-0 last:pb-0">
-                        <span className="tnum w-14 shrink-0 font-mono text-[0.8125rem] font-medium text-ink">
+                        <span className="tnum w-14 shrink-0 font-mono text-label font-medium text-ink">
                           {formatTime12(a.time)}
                         </span>
                         <span className="min-w-0 flex-1">
@@ -257,31 +253,6 @@ function QueueBoard() {
             </CardBody>
           </Card>
 
-          <Card>
-            <CardHeader title="State machine" subtitle="Every transition on this page follows it." />
-            <CardBody className="pt-1">
-              <ol className="space-y-2">
-                {[
-                  { s: "waiting", d: "Token issued, patient seated." },
-                  { s: "called", d: "Announced on the display." },
-                  { s: "in_consultation", d: "With the clinician." },
-                  { s: "completed", d: "Encounter saved and signed." },
-                ].map((row, i) => (
-                  <li key={row.s} className="flex items-start gap-3">
-                    <span className="tnum mt-0.5 w-4 shrink-0 font-mono text-[0.75rem] text-ink-3">{i + 1}</span>
-                    <div className="min-w-0">
-                      <StatusPill kind="queue" status={row.s} size="sm" />
-                      <p className="mt-1 text-[0.75rem] leading-snug text-ink-3">{row.d}</p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-              <p className="mt-3 border-t border-line-soft pt-3 text-[0.75rem] leading-relaxed text-ink-3">
-                A token can also leave the board as <span className="text-critical-text">no show</span> or{" "}
-                <span className="text-ink-2">cancelled</span> at any point before consultation.
-              </p>
-            </CardBody>
-          </Card>
         </div>
       </div>
 

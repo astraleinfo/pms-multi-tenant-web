@@ -1,13 +1,16 @@
 "use client";
 
 import type {
-  AccountStatus, Appointment, BillingDepartment, ClinicalTypeKey, Encounter, FeatureKey,
+  AccountStatus, Appointment, BillingDepartment, CatalogFeature, ClinicalTypeKey, Encounter,
+  FeatureKey,
   Charge, FieldDefinition, HistoryEvent, Id, InventoryBatch, InventoryItem, InventoryItemPatch,
   InventoryTransaction, InventoryTxType, Invoice, InvoiceLineItem, LabAttachment, LabOrder,
   LabResultLine, NewAppointment, NewEncounter, NewInventoryItem, NewServicePrice, Patient,
   PatientAccount, Payment, Prescription, PrescriptionItem, PricingMode, QueueEntry, Role,
   ServiceKind,
-  ServicePrice, ServicePricePatch, SuggestedLinesResponse, Tenant, TenantConfig, TenantFeature,
+  ServicePrice, ServicePricePatch, Subscription, SubscriptionInvoice, SubscriptionSummary,
+  SuggestedLinesResponse, SupportRequest, SupportRequestKind, Tenant,
+  TenantConfig, TenantFeature,
   User,
 } from "@/lib/types";
 import {
@@ -51,7 +54,20 @@ export interface PlatformStaff {
   email: string;
   initials: string;
   title: string;
+  /**
+   * `super_admin` or `support`.
+   *
+   * The console hides what a role cannot reach; the API refuses it either way,
+   * so reading this is a courtesy to the person, not a gate. Anything that
+   * only checked here would be bypassed by typing the URL.
+   */
+  role: PlatformRole;
 }
+
+export type PlatformRole = "super_admin" | "support";
+
+export const isSuperAdmin = (staff: PlatformStaff | null | undefined) =>
+  staff?.role === "super_admin";
 
 export type AuthResult =
   | { ok: true; user: User; mustChangePassword: boolean }
@@ -220,6 +236,9 @@ export interface MedicineSuggestionOut {
 }
 export const getMedicines = () => get<MedicineSuggestionOut[]>("/v1/catalog/medicines");
 
+/** The module catalogue with today's prices, as a clinic is quoted them. */
+export const listCatalogFeatures = () => get<CatalogFeature[]>("/v1/catalog/features");
+
 export interface PatientPage {
   items: Patient[];
   total: number;
@@ -324,6 +343,8 @@ export const listAppointmentPage = (query: AppointmentQuery = {}) =>
     doctor_id: query.doctor_id,
   });
 
+export const getAppointment = (id: Id) => get<Appointment>(`/v1/appointments/${id}`);
+
 export const listQueue = () => get<QueueEntry[]>("/v1/queue");
 
 export interface EncounterQuery extends PageQuery {
@@ -349,6 +370,8 @@ export interface PrescriptionQuery extends PageQuery {
 
 export const listPrescriptions = async () =>
   (await get<CountedPage<Prescription>>("/v1/prescriptions", WHOLE_COLLECTION)).items;
+
+export const getPrescription = (id: Id) => get<Prescription>(`/v1/prescriptions/${id}`);
 
 export const listPrescriptionPage = (query: PrescriptionQuery = {}) =>
   get<CountedPage<Prescription>>("/v1/prescriptions", {
@@ -404,6 +427,17 @@ export const listInvoicePage = (query: InvoiceQuery = {}) =>
   });
 
 export const getInvoice = (id: Id) => get<Invoice>(`/v1/billing/invoices/${id}`);
+
+/** The invoice on the clinic's letterhead, rendered by the API from the same
+    totals the screen shows. */
+export const getInvoicePdf = (id: Id) => requestBlob(`/v1/billing/invoices/${id}/pdf`);
+
+/* ---- the clinic's own subscription bills (practice admin) ------------------ */
+
+/** What this clinic owes the platform. Open even while the clinic is on hold. */
+export const getSubscription = () => get<Subscription>("/v1/tenant/subscription");
+export const getSubscriptionBillPdf = (billId: Id) =>
+  requestBlob(`/v1/tenant/subscription/invoices/${billId}/pdf`);
 
 /* ---- staff ---------------------------------------------------------------- */
 
@@ -464,18 +498,80 @@ export const resendInvitation = (userId: Id) => post<User>(`/v1/users/${userId}/
 export const setUserStatus = (userId: Id, status: AccountStatus) =>
   patch_<User>(`/v1/users/${userId}/status`, { status });
 
+export interface UserChanges {
+  name?: string;
+  /** a new username; anyone still invited is sent a fresh link at it */
+  email?: string;
+  role?: Role;
+  /** "" clears it */
+  speciality?: string;
+}
+
+/**
+ * Correct a colleague's details. Refused (409) for an admin's own role, for
+ * the clinic's last practice admin, and for an email somebody else uses.
+ */
+export const updateUser = (userId: Id, changes: UserChanges) =>
+  patch_<User>(`/v1/users/${userId}`, changes);
+
+/**
+ * Remove an account that never recorded anything. Anyone whose name is on a
+ * record is refused (409) with what they recorded — lock them instead.
+ */
+export const deleteUser = (userId: Id) => del<void>(`/v1/users/${userId}`);
+
 /* ---- configuration (§3.3) --------------------------------------------------- */
 
 export const updateConfig = (changes: Partial<TenantConfig>) =>
   patch_<TenantConfig>("/v1/tenant/config", stripReadOnly(changes));
 
-/** `tenant_id` is the server's to decide; sending it back would be rejected. */
+/** The clinic's own mark. A second upload replaces the first — there is only
+ *  ever one, so there is nothing here to list or address by id. */
+export const uploadClinicLogo = (file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  return upload<TenantConfig>("/v1/tenant/config/logo", form);
+};
+
+export const deleteClinicLogo = () => del<TenantConfig>("/v1/tenant/config/logo");
+
+/** The logo's own bytes, as a blob the caller turns into an object URL. Only
+ *  called once `has_logo` says there is one, or this 404s. */
+export const getClinicLogoFile = () => requestBlob("/v1/tenant/config/logo");
+
+/**
+ * `tenant_id` and `timezone` are the server's to decide — it sends them, and
+ * rejects them coming back (the patch refuses unknown keys), which used to
+ * fail every save from the configuration tab.
+ */
 function stripReadOnly(config: Partial<TenantConfig>) {
-  const { tenant_id: _tenantId, ...rest } = config as Partial<TenantConfig> & { tenant_id?: string };
+  const { tenant_id: _tenantId, timezone: _timezone, has_logo: _hasLogo, ...rest } =
+    config as Partial<TenantConfig> & { tenant_id?: string; timezone?: string; has_logo?: boolean };
   return rest;
 }
 
-/* ---- entitlements (§3.2) ---------------------------------------------------- */
+/* ---- entitlements (§3.2) ----------------------------------------------------
+ *
+ * Nothing in the app calls these two any more: a clinic asks the support desk
+ * for a module and a super admin grants it with `setTenantFeature`. They stay
+ * because the endpoints do — if the API withdraws the clinic-side purchase,
+ * withdraw them with it.
+ */
+
+/* ---- support desk ------------------------------------------------------------
+ *
+ * How a clinic asks for a module. The API stores the request and a background
+ * worker emails the desk, so "sent" here means "the platform has it" — not
+ * that the email has already left.
+ */
+
+export const listSupportRequests = () => get<SupportRequest[]>("/v1/tenant/support-requests");
+
+export const createSupportRequest = (input: {
+  kind: SupportRequestKind;
+  feature_key?: FeatureKey;
+  message?: string;
+}) => post<SupportRequest>("/v1/tenant/support-requests", input);
 
 export const purchaseFeature = (key: FeatureKey) =>
   post<TenantFeature>(`/v1/tenant/features/${key}/purchase`, {});
@@ -678,6 +774,88 @@ export interface StockMovement {
 export const recordStockMovement = async (input: StockMovement) =>
   (await post<InventoryTransaction>("/v1/inventory/transactions", input)).item_id;
 
+/* A sheet of stock lines, in and out. A row is matched on its SKU — a known
+   code updates the line, a new one opens it — and a quantity received goes on
+   the ledger as a purchase. The import runs in the background: the upload is
+   answered with a job, the worker writes every row or none, and the file is
+   deleted when it finishes either way. The export is in the import's own
+   layout, so it can be edited and sent back. */
+
+/** What a finished background import says — the counts for its kind, and on a
+    failure the rows to fix. */
+export interface ImportJobReport {
+  total: number;
+  valid: number;
+  invalid: number;
+  committed: boolean;
+  created: number;
+  updated: number;
+  /** inventory: rows that brought stock with them */
+  stocked: number;
+  /** staff: invitations that left */
+  invited: number;
+  /** rows that repeat another row, or something already here */
+  duplicates: number;
+  /** on a failure, the rows that need fixing */
+  rows: {
+    row: number;
+    label: string;
+    ok: boolean;
+    errors: string[];
+    action: "create" | "update";
+    qty: number;
+    /** set when the row repeats another: "row 4", or the SKU or email already here */
+    duplicate_of: string | null;
+  }[];
+}
+
+export interface ImportJob {
+  id: Id;
+  status: "queued" | "running" | "done" | "failed";
+  filename: string;
+  created_at: string;
+  finished_at: string | null;
+  /** on a failure, the one sentence that says why */
+  error: string;
+  report: ImportJobReport | null;
+}
+
+/** The sample sheet: every field, the fixed choices as dropdowns, an example per pricing mode. */
+export const inventoryImportTemplate = () => requestBlob("/v1/inventory/import/template");
+
+/** Hand a sheet to the worker. Answers at once with the job to poll. */
+export const startInventoryImport = (file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  return upload<ImportJob>("/v1/inventory/import", form);
+};
+
+export const getInventoryImport = (id: Id) => get<ImportJob>(`/v1/inventory/import/jobs/${id}`);
+
+/** The clinic's most recent import — null when there has never been one. */
+export const latestInventoryImport = () => get<ImportJob | null>("/v1/inventory/import/jobs/latest");
+
+/* ---- the staff list as a spreadsheet — the Team tab's import and export.
+   The import only adds people: an email the clinic already has is a
+   duplicate, never an update. Each person is emailed an invitation. */
+
+export const staffImportTemplate = () => requestBlob("/v1/users/import/template");
+
+export const exportStaff = () => requestBlob("/v1/users/export");
+
+export const startStaffImport = (file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  return upload<ImportJob>("/v1/users/import", form);
+};
+
+export const getStaffImport = (id: Id) => get<ImportJob>(`/v1/users/import/jobs/${id}`);
+
+export const latestStaffImport = () => get<ImportJob | null>("/v1/users/import/jobs/latest");
+
+/** Every stock line with what is on hand, and the batches on the shelf. */
+export const exportInventory = () => requestBlob("/v1/inventory/export");
+
 /* ---- billing (§3.12) ------------------------------------------------------------ */
 
 export const createInvoice = async (input: {
@@ -775,8 +953,15 @@ export interface DayValue { date: string; value: number }
 export interface AttendanceDay { date: string; kept: number; missed: number; cancelled: number }
 export interface Labelled { label: string; value: number }
 
+/*
+ * The money figures below are optional because the server leaves them out for
+ * anyone but a practice admin — `revenue:read` — rather than sending them for
+ * the screen to hide. `revenue_visible` says which answer this is.
+ */
 export interface Analytics {
   range: { from: string; to: string; days: number };
+  /** false when the money figures were left out */
+  revenue_visible: boolean;
   core: {
     patients: number;
     new_patients: number;
@@ -786,7 +971,7 @@ export interface Analytics {
     no_shows: number;
     encounters: number;
     prescriptions: number;
-    revenue: number;
+    revenue?: number;
     waiting_now: number;
     in_consultation: number;
     completed_today: number;
@@ -801,7 +986,7 @@ export interface Analytics {
   };
   modules: {
     pharmacy?: {
-      dispensed_units: number; dispensed_value: number;
+      dispensed_units: number; dispensed_value?: number;
       prescriptions_waiting: number; fully_dispensed: number;
     };
     lab?: {
@@ -814,16 +999,16 @@ export interface Analytics {
       expiring_soon: Array<{ batch_no: string; expiry: string; qty: number; item: string; days_left: number }>;
     };
     billing?: {
-      billed: number; paid: number; outstanding: number;
+      billed?: number; paid?: number; outstanding?: number;
       count: number; unpaid: number; drafts: number;
-      revenue_mix: Labelled[];
+      revenue_mix?: Labelled[];
     };
     advanced_reports?: {
       age_cohort: Labelled[];
       sex_split: Labelled[];
       clinicians: Array<{
         user_id: Id; name: string; initials: string; speciality: string | null;
-        encounters: number; prescriptions: number; revenue: number;
+        encounters: number; prescriptions: number; revenue?: number;
       }>;
     };
   };
@@ -841,6 +1026,10 @@ export interface Analytics {
  * what to compute.
  */
 export const getAnalytics = (days: number) => get<Analytics>("/v1/analytics/dashboard", { days });
+
+/** The reports page as a PDF — the same read model, for filing or printing. */
+export const getReportPdf = (days: number) =>
+  requestBlob("/v1/analytics/report.pdf", { query: { days } });
 
 /* ---- platform (§3.1) ------------------------------------------------------------ */
 
@@ -939,6 +1128,8 @@ export interface TenantEdit {
   plan?: string;
   timezone?: string;
   clinical_type?: ClinicalTypeKey;
+  /** never bill this clinic, and lift any hold it is under */
+  billing_exempt?: boolean;
 }
 
 export const updateTenant = (tenantId: Id, changes: TenantEdit) =>
@@ -950,6 +1141,137 @@ export const setTenantStatus = async (tenantId: Id, status: Tenant["status"]) =>
 /** This clinic's staff, as the console sees them — support accounts excluded. */
 export const tenantUsers = (tenantId: Id) =>
   get<User[]>(`/v1/platform/tenants/${tenantId}/users`);
+
+/** What one clinic has asked the desk for, newest first. */
+export const tenantSupportRequests = (tenantId: Id) =>
+  get<SupportRequest[]>(`/v1/platform/tenants/${tenantId}/support-requests`);
+
+/** The module catalogue with today's prices, as the console sells it. */
+export const listPlatformCatalogFeatures = () =>
+  get<CatalogFeature[]>("/v1/platform/catalog/features");
+
+/**
+ * Set what a module costs per month, for every clinic at once.
+ *
+ * Super admin only: the API answers 403 to the support desk, so hiding the
+ * control from `support` is presentation, not protection. A core module
+ * carries no price and is refused with a 409.
+ */
+export const setFeaturePrice = (featureKey: FeatureKey, priceMonthly: number) =>
+  patch_<CatalogFeature>(`/v1/platform/catalog/features/${featureKey}`, {
+    price_monthly: priceMonthly,
+  });
+
+/* ---- platform settings (§ platform settings) --------------------------------- */
+
+export interface PlatformSettings {
+  support_email: string;
+  support_phone: string;
+  support_hours: string;
+  default_day_start: string;
+  default_day_end: string;
+  default_slot_minutes: 15 | 20 | 30;
+  default_duration: number;
+  default_tax_pct: number;
+  default_payment_terms_days: number;
+  default_expiry_alert_days: number;
+  default_currency: "GBP" | "EUR" | "USD" | "INR";
+  invite_token_ttl_seconds: number;
+  reset_token_ttl_seconds: number;
+  reminder_lead_hours: number;
+  rent_due_days: number;
+  rent_grace_days: number;
+  rent_reminder_days_before_due: number;
+}
+
+export const getPlatformSettings = () => get<PlatformSettings>("/v1/platform/settings");
+
+export const updatePlatformSettings = (changes: Partial<PlatformSettings>) =>
+  patch_<PlatformSettings>("/v1/platform/settings", changes);
+
+export interface PublicSettings {
+  support_email: string;
+  support_phone: string;
+  support_hours: string;
+}
+
+/** No session needed — this is what a clinic that can't self-serve reads to
+ *  know who to ask. */
+export const getPublicSettings = () => get<PublicSettings>("/v1/public/settings");
+
+/* ---- subscription billing, from the console ---------------------------------- */
+
+export interface PlatformBillingRow {
+  tenant: Tenant;
+  summary: SubscriptionSummary;
+  invoices: SubscriptionInvoice[];
+}
+
+export interface PlatformBilling {
+  /** whether the beat raises bills by itself; "run now" works either way */
+  enabled: boolean;
+  currency: string;
+  due_days: number;
+  grace_days: number;
+  reminder_days_before_due: number;
+  clinics: PlatformBillingRow[];
+}
+
+export interface BillingRun {
+  clinics: number;
+  raised: string[];
+  reminded: string[];
+  held: string[];
+  lifted: string[];
+  failed: string[];
+}
+
+export const platformBilling = () => get<PlatformBilling>("/v1/platform/billing");
+/** Super admin: raise this month's bills and send what is due now. Idempotent. */
+export const runBilling = () => post<BillingRun>("/v1/platform/billing/run");
+export const tenantSubscription = (tenantId: Id) =>
+  get<Subscription>(`/v1/platform/tenants/${tenantId}/subscription`);
+export const tenantBillPdf = (tenantId: Id, billId: Id) =>
+  requestBlob(`/v1/platform/tenants/${tenantId}/subscription/invoices/${billId}/pdf`);
+/** Super admin: record a bill as paid. Lifts the hold if it was the last thing holding the clinic. */
+export const settleBill = (tenantId: Id, billId: Id, reference: string) =>
+  post<Subscription>(`/v1/platform/tenants/${tenantId}/subscription/invoices/${billId}/settle`, { reference });
+/** Super admin: withdraw a bill raised in error. */
+export const voidBill = (tenantId: Id, billId: Id) =>
+  post<Subscription>(`/v1/platform/tenants/${tenantId}/subscription/invoices/${billId}/void`);
+
+/* ---- onboarding from a spreadsheet ------------------------------------------ */
+
+export type ImportKind = "users" | "patients";
+
+export interface ImportReport {
+  kind: ImportKind;
+  total: number;
+  valid: number;
+  invalid: number;
+  /** false for a preview — nothing was written */
+  committed: boolean;
+  created: number;
+  /** staff only: invitations that left */
+  invited: number;
+  rows: { row: number; label: string; ok: boolean; errors: string[] }[];
+}
+
+/** The sample sheet for this clinic — its own custom patient fields included. */
+export const importTemplate = (tenantId: Id, kind: ImportKind) =>
+  requestBlob(`/v1/platform/tenants/${tenantId}/imports/${kind}/template`);
+
+/**
+ * Check a filled-in sheet; with `commit`, write it. A commit is refused (422)
+ * unless every row passes, and then nothing at all is written.
+ */
+export const runImport = (tenantId: Id, kind: ImportKind, file: File, commit: boolean) => {
+  const form = new FormData();
+  form.append("file", file);
+  return upload<ImportReport>(
+    `/v1/platform/tenants/${tenantId}/imports/${kind}?commit=${commit ? "true" : "false"}`, form,
+  );
+};
 
 export const tenantFeatures = (tenantId: Id) =>
   get<TenantFeature[]>(`/v1/platform/tenants/${tenantId}/features`);
@@ -989,3 +1311,127 @@ export interface SupportSession {
 
 export const openSupportSession = (tenantId: Id) =>
   post<SupportSession>(`/v1/platform/tenants/${tenantId}/impersonate`);
+
+/* ---- background jobs (super admin only) ------------------------------------
+ *
+ * Celery's work, read through Flower. Flower's own port is not published
+ * anywhere: these all go to the API, which checks that the caller is a
+ * platform super admin before it relays a byte. A clinic session of any role
+ * — practice admin included — is answered 403 here, so hiding the menu item
+ * is presentation, not protection.
+ */
+
+export type JobStatus = "pending" | "active" | "completed" | "failed" | "retried" | "revoked";
+
+export interface Job {
+  id: Id;
+  /** the registered task name, e.g. `pms.support.deliver` */
+  name: string;
+  status: JobStatus;
+  /** Celery's own state — the buckets above fold some of them together */
+  state: string;
+  worker: string | null;
+  queue: string | null;
+  /** the call as the worker was handed it, already rendered by Celery */
+  args: string;
+  kwargs: string;
+  /** ISO-8601, UTC — a job belongs to no clinic, so it has no local clock */
+  received_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  /** how long it ran, or how long it has been running so far */
+  runtime_seconds: number | null;
+  running: boolean;
+  retries: number;
+  exception: string | null;
+  /** only on the single-job read */
+  traceback: string | null;
+  result: string | null;
+  eta: string | null;
+}
+
+export interface JobWorker {
+  name: string;
+  online: boolean;
+  active: number;
+  processed: number;
+  succeeded: number;
+  failed: number;
+  retried: number;
+  concurrency: number | null;
+  queues: string[];
+  load_average: number[];
+}
+
+export interface JobSummary {
+  active: number;
+  pending: number;
+  completed: number;
+  failed: number;
+  retried: number;
+  revoked: number;
+  workers_online: number;
+  workers_total: number;
+  /** how many task records the counts above were taken over */
+  window: number;
+}
+
+export interface JobsPage {
+  /** false while the monitor is unreachable — the page says so rather than
+      drawing zeroes, which would read like a quiet platform */
+  available: boolean;
+  problem: string | null;
+  summary: JobSummary;
+  workers: JobWorker[];
+  task_names: string[];
+  worker_names: string[];
+  items: Job[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface JobQuery {
+  status?: JobStatus;
+  task?: string;
+  worker?: string;
+  /** ISO-8601; a value without a zone is read as UTC */
+  since?: string;
+  until?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export const listJobs = (query: JobQuery = {}) =>
+  get<JobsPage>("/v1/platform/jobs", {
+    status: query.status,
+    task: query.task,
+    worker: query.worker,
+    since: query.since,
+    until: query.until,
+    search: query.search,
+    limit: query.limit,
+    offset: query.offset,
+  });
+
+export const getJob = (taskId: Id) => get<Job>(`/v1/platform/jobs/tasks/${taskId}`);
+
+/**
+ * Ask for a short-lived cookie, then open Flower's own interface.
+ *
+ * A browser loading an interface cannot put an `Authorization` header on the
+ * stylesheet, the script and the dozen requests that page fires, so the API
+ * mints an HttpOnly cookie that opens that one route and nothing else. What
+ * comes back is the path to point a tab or a frame at.
+ */
+export interface FlowerSession {
+  url: string;
+  expires_in: number;
+}
+
+export const openFlowerSession = () =>
+  post<FlowerSession>("/v1/platform/jobs/flower-session");
+
+export const closeFlowerSession = () =>
+  del<void>("/v1/platform/jobs/flower-session").catch(() => undefined);

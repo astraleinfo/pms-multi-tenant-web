@@ -11,8 +11,8 @@ import { SessionProvider, useSession } from "@/lib/store/session";
 import { useQueueStream, type ConnectionState } from "@/lib/realtime";
 import { setActiveCurrency, setToday, TODAY } from "@/lib/format";
 import type {
-  AccountStatus, Appointment, BillingDepartment, ClinicalTypeKey, Encounter, FeatureKey,
-  FieldDefinition, Id, InventoryItem, InventoryItemPatch, Invoice, InvoiceLineItem, LabAttachment,
+  AccountStatus, Appointment, BillingDepartment, CatalogFeature, ClinicalTypeKey, Encounter,
+  FeatureKey, FieldDefinition, Id, InventoryItem, InventoryItemPatch, Invoice, InvoiceLineItem, LabAttachment,
   LabResultLine, NewAppointment, NewEncounter, NewInventoryItem, NewServicePrice, Payment,
   PrescriptionItem, QueueEntry, ServicePrice, ServicePricePatch, Tenant, TenantConfig,
   TenantFeature, User,
@@ -70,8 +70,17 @@ interface AppContextValue {
   createUser: (input: api.NewUser) => Promise<User>;
   setUserPassword: (userId: Id, password: string) => Promise<User>;
   setUserStatus: (userId: Id, status: AccountStatus) => void;
+  /** awaited: the edit form shows a refusal against the field it is about */
+  updateUser: (userId: Id, changes: api.UserChanges) => Promise<User>;
+  /** awaited: a refusal says what the person recorded, and offers a lock */
+  deleteUser: (userId: Id) => Promise<void>;
 
   updateConfig: (patch: Partial<TenantConfig>) => void;
+  /** awaited: the settings page shows the new mark as soon as this resolves */
+  uploadClinicLogo: (file: File) => Promise<TenantConfig>;
+  removeClinicLogo: () => void;
+  /** Unused by the UI — a module is granted by a super admin, not bought from
+      inside the clinic. See the note in `lib/api`. */
   purchaseFeature: (key: FeatureKey) => void;
   deactivateFeature: (key: FeatureKey) => void;
   addFieldDefinition: (d: Omit<FieldDefinition, "id" | "tenant_id" | "scope" | "clinical_type">) => void;
@@ -161,6 +170,9 @@ interface AppContextValue {
   setTenantFeature: (
     tenantId: Id, featureKey: FeatureKey, status: TenantFeature["status"],
   ) => Promise<TenantFeature>;
+  /** Set a module's monthly price for every clinic. Super admin only. */
+  setFeaturePrice: (featureKey: FeatureKey, priceMonthly: number) => Promise<CatalogFeature>;
+  updatePlatformSettings: (changes: Partial<api.PlatformSettings>) => Promise<api.PlatformSettings>;
   resendTenantInvitation: (tenantId: Id, userId: Id) => Promise<api.TenantCreated>;
   openSupportSession: (tenantId: Id) => Promise<api.SupportSession>;
   /** Send this colleague their "set your password" link again. */
@@ -194,7 +206,9 @@ function AppFacade({ children }: { children: React.ReactNode }) {
   const connection = useQueueStream();
 
   /* every money figure follows the clinic's configured currency */
-  React.useEffect(() => { setActiveCurrency(config.currency); }, [config.currency]);
+  /* Rupees only. A clinic configured before that rule may still carry another
+     code in its settings; money is formatted as INR whatever it says. */
+  React.useEffect(() => { setActiveCurrency("INR"); }, []);
 
   /* "today" is the clinic's, not the browser's — a practice in Manchester and
      a screen in its waiting room must never disagree about the date */
@@ -205,8 +219,11 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     () => { void qc.invalidateQueries({ queryKey: qk.tenant(tenantId) }); },
     [qc, tenantId],
   );
+  /* The console reads a snapshot *and* per-clinic entitlement rows, so a grant
+     has to refresh both — invalidating only the snapshot would leave the module
+     screen insisting the switch is still where it was. */
   const invalidatePlatform = React.useCallback(
-    () => { void qc.invalidateQueries({ queryKey: qk.platform() }); },
+    () => { void qc.invalidateQueries({ queryKey: qk.platformRoot() }); },
     [qc],
   );
 
@@ -274,6 +291,8 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     (a: { patientId: Id; input: Parameters<typeof api.takeCounterPayment>[1] }) =>
       api.takeCounterPayment(a.patientId, a.input));
   const mUpdateConfig = useTenantMutation((p: Partial<TenantConfig>) => api.updateConfig(p));
+  const mUploadLogo = useTenantMutation((file: File) => api.uploadClinicLogo(file));
+  const mRemoveLogo = useTenantMutation<void, TenantConfig>(() => api.deleteClinicLogo());
   const mPurchase = useTenantMutation((k: FeatureKey) => api.purchaseFeature(k));
   const mDeactivate = useTenantMutation((k: FeatureKey) => api.deactivateFeature(k));
   const mAddField = useTenantMutation((d: Omit<FieldDefinition, "id" | "tenant_id" | "scope" | "clinical_type">) => api.addFieldDefinition(d));
@@ -284,6 +303,14 @@ function AppFacade({ children }: { children: React.ReactNode }) {
      the one this happens to most — so a toast here would say it twice. */
   const mCreateUser = useMutation({
     mutationFn: (input: api.NewUser) => api.createUser(input),
+    onSuccess: invalidateTenant,
+  });
+  const mUpdateUser = useMutation({
+    mutationFn: (a: { id: Id; changes: api.UserChanges }) => api.updateUser(a.id, a.changes),
+    onSuccess: invalidateTenant,
+  });
+  const mDeleteUser = useMutation({
+    mutationFn: (id: Id) => api.deleteUser(id),
     onSuccess: invalidateTenant,
   });
   const mUserPassword = useMutation({
@@ -307,6 +334,16 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     mutationFn: (a: { id: Id; key: FeatureKey; status: TenantFeature["status"] }) =>
       api.setTenantFeature(a.id, a.key, a.status),
     onSuccess: invalidatePlatform,
+  });
+  /* The catalogue sits under `["platform"]`, so the one invalidation redraws
+     the price and every revenue figure computed from it together. */
+  const mFeaturePrice = useMutation({
+    mutationFn: (a: { key: FeatureKey; price: number }) => api.setFeaturePrice(a.key, a.price),
+    onSuccess: invalidatePlatform,
+  });
+  const mPlatformSettings = useMutation({
+    mutationFn: (changes: Partial<api.PlatformSettings>) => api.updatePlatformSettings(changes),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.platformSettings() }),
   });
   const mResendTenantInvite = useMutation({
     mutationFn: (a: { id: Id; userId: Id }) => api.resendTenantInvitation(a.id, a.userId),
@@ -352,8 +389,12 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     createUser: (input) => mCreateUser.mutateAsync(input),
     setUserPassword: (id, password) => mUserPassword.mutateAsync({ id, password }),
     setUserStatus: (id, status) => mUserStatus.mutate({ id, status }),
+    updateUser: (id, changes) => mUpdateUser.mutateAsync({ id, changes }),
+    deleteUser: (id) => mDeleteUser.mutateAsync(id),
 
     updateConfig: (patch) => mUpdateConfig.mutate(patch),
+    uploadClinicLogo: (file) => mUploadLogo.mutateAsync(file),
+    removeClinicLogo: () => mRemoveLogo.mutate(),
     purchaseFeature: (key) => mPurchase.mutate(key),
     deactivateFeature: (key) => mDeactivate.mutate(key),
     addFieldDefinition: (d) => mAddField.mutate(d),
@@ -412,6 +453,8 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     setTenantStatus: (id, status) => mTenantStatus.mutate({ id, status }),
     updateTenant: (id, changes) => mUpdateTenant.mutateAsync({ id, changes }),
     setTenantFeature: (id, key, status) => mTenantFeature.mutateAsync({ id, key, status }),
+    setFeaturePrice: (key, price) => mFeaturePrice.mutateAsync({ key, price }),
+    updatePlatformSettings: (changes) => mPlatformSettings.mutateAsync(changes),
     resendTenantInvitation: (id, userId) => mResendTenantInvite.mutateAsync({ id, userId }),
     openSupportSession: (id) => api.openSupportSession(id),
     resendInvitation: (userId) => mResendInvite.mutateAsync(userId),
