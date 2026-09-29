@@ -45,6 +45,7 @@ export const qk = {
   catalogFeatures: (t: Id) => ["tenant", t, "catalog", "features"] as const,
   /** What this clinic owes the platform. */
   subscription: (t: Id) => ["tenant", t, "subscription"] as const,
+  referrals: (t: Id) => ["tenant", t, "referrals"] as const,
 
   patients: (t: Id) => ["tenant", t, "patients"] as const,
   /** The key carries the query, so every page and search is its own cache entry

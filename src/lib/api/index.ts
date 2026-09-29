@@ -10,7 +10,7 @@ import type {
   ServiceKind,
   ServicePrice, ServicePricePatch, Subscription, SubscriptionInvoice, SubscriptionSummary,
   SuggestedLinesResponse, SupportRequest, SupportRequestKind, Tenant,
-  TenantConfig, TenantFeature,
+  TenantConfig, TenantFeature, ReferralProgram, ReferralStatus,
   User,
 } from "@/lib/types";
 import {
@@ -438,6 +438,13 @@ export const getInvoicePdf = (id: Id) => requestBlob(`/v1/billing/invoices/${id}
 export const getSubscription = () => get<Subscription>("/v1/tenant/subscription");
 export const getSubscriptionBillPdf = (billId: Id) =>
   requestBlob(`/v1/tenant/subscription/invoices/${billId}/pdf`);
+
+/* ---- referral credits ---------------------------------------------------- */
+
+export const getReferralProgram = () => get<ReferralProgram>("/v1/tenant/referrals");
+
+/** Mints on the first call; every call after that returns the same code. */
+export const mintReferralCode = () => post<ReferralProgram>("/v1/tenant/referral-code");
 
 /* ---- staff ---------------------------------------------------------------- */
 
@@ -1106,7 +1113,7 @@ const asCreated = (body: TenantCreatedBody): TenantCreated => ({
  */
 export const createTenant = async (input: {
   name: string; slug: string; city: string; clinical_type: ClinicalTypeKey;
-  admin_name: string; admin_email: string;
+  admin_name: string; admin_email: string; referral_code?: string;
 }) => asCreated(await post<TenantCreatedBody>("/v1/platform/tenants", input));
 
 /** Send a clinic's administrator their link again. */
@@ -1146,6 +1153,12 @@ export const tenantUsers = (tenantId: Id) =>
 export const tenantSupportRequests = (tenantId: Id) =>
   get<SupportRequest[]>(`/v1/platform/tenants/${tenantId}/support-requests`);
 
+/** Who referred this clinic (if anyone), and its own referral programme. */
+export const tenantReferrals = (tenantId: Id) =>
+  get<{ referred_by: { referrer_tenant_name: string; code_used: string; status: ReferralStatus; created_at: string } | null; program: ReferralProgram }>(
+    `/v1/platform/tenants/${tenantId}/referrals`,
+  );
+
 /** The module catalogue with today's prices, as the console sells it. */
 export const listPlatformCatalogFeatures = () =>
   get<CatalogFeature[]>("/v1/platform/catalog/features");
@@ -1182,6 +1195,7 @@ export interface PlatformSettings {
   rent_due_days: number;
   rent_grace_days: number;
   rent_reminder_days_before_due: number;
+  referral_credit_amount: number;
 }
 
 export const getPlatformSettings = () => get<PlatformSettings>("/v1/platform/settings");

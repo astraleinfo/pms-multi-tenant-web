@@ -170,6 +170,8 @@ export interface Tenant {
   billing_hold_since?: string | null;
   /** never billed by the platform */
   billing_exempt?: boolean;
+  /** NULL until the clinic mints one from its own Settings */
+  referral_code?: string | null;
 }
 
 /* ---- the platform's monthly bill to a clinic ---------------------------------- */
@@ -228,14 +230,42 @@ export interface SubscribedModule {
 
 export interface SubscriptionPlan {
   modules: SubscribedModule[];
-  /** what the next bill will come to, at today's prices */
+  /** the sum of the billed modules, before any referral credit */
   monthly_total: number;
+  /** spendable referral credit right now */
+  credit_balance: number;
+  /** what the next bill will actually come to, after credit */
+  amount_due: number;
 }
 
 export interface Subscription {
   summary: SubscriptionSummary;
   invoices: SubscriptionInvoice[];
   plan: SubscriptionPlan | null;
+}
+
+/* ---- referral credits ---------------------------------------------------- */
+
+export type ReferralStatus = "pending" | "vested" | "void";
+
+export interface Referral {
+  id: Id;
+  referred_tenant_name: string;
+  code_used: string;
+  credit_amount: number;
+  currency: string;
+  status: ReferralStatus;
+  created_at: string;
+  vested_at: string | null;
+}
+
+export interface ReferralProgram {
+  code: string | null;
+  formatted_code: string | null;
+  credit_amount: number;
+  currency: string;
+  balance: number;
+  referrals: Referral[];
 }
 
 export type FieldScope = "common" | "clinical_type" | "tenant";
