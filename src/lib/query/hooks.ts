@@ -202,6 +202,12 @@ export function useSubscription(enabled = true) {
   return useClinicQuery(qk.subscription(t), api.getSubscription, enabled && !!t);
 }
 
+/** This clinic's referral code (if it has one), its balance, and its referrals. */
+export function useReferralProgram(enabled = true) {
+  const t = useTenantId();
+  return useClinicQuery(qk.referrals(t), api.getReferralProgram, enabled && !!t);
+}
+
 /** Every clinic's bills, from the console. */
 export function usePlatformBilling() {
   const { platformSession } = useSession();

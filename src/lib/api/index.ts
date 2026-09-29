@@ -32,6 +32,7 @@ import {
    ========================================================================== */
 
 export { ApiError } from "./client";
+export type { ReferralProgram, ReferralStatus };
 
 /* ---- session ------------------------------------------------------------- */
 

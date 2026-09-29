@@ -79,6 +79,8 @@ interface AppContextValue {
   /** awaited: the settings page shows the new mark as soon as this resolves */
   uploadClinicLogo: (file: File) => Promise<TenantConfig>;
   removeClinicLogo: () => void;
+  /** Mints on first call; returns the existing code on every call after. */
+  mintReferralCode: () => Promise<api.ReferralProgram>;
   /** Unused by the UI — a module is granted by a super admin, not bought from
       inside the clinic. See the note in `lib/api`. */
   purchaseFeature: (key: FeatureKey) => void;
@@ -293,6 +295,7 @@ function AppFacade({ children }: { children: React.ReactNode }) {
   const mUpdateConfig = useTenantMutation((p: Partial<TenantConfig>) => api.updateConfig(p));
   const mUploadLogo = useTenantMutation((file: File) => api.uploadClinicLogo(file));
   const mRemoveLogo = useTenantMutation<void, TenantConfig>(() => api.deleteClinicLogo());
+  const mMintReferralCode = useTenantMutation<void, api.ReferralProgram>(() => api.mintReferralCode());
   const mPurchase = useTenantMutation((k: FeatureKey) => api.purchaseFeature(k));
   const mDeactivate = useTenantMutation((k: FeatureKey) => api.deactivateFeature(k));
   const mAddField = useTenantMutation((d: Omit<FieldDefinition, "id" | "tenant_id" | "scope" | "clinical_type">) => api.addFieldDefinition(d));
@@ -395,6 +398,7 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     updateConfig: (patch) => mUpdateConfig.mutate(patch),
     uploadClinicLogo: (file) => mUploadLogo.mutateAsync(file),
     removeClinicLogo: () => mRemoveLogo.mutate(),
+    mintReferralCode: () => mMintReferralCode.mutateAsync(),
     purchaseFeature: (key) => mPurchase.mutate(key),
     deactivateFeature: (key) => mDeactivate.mutate(key),
     addFieldDefinition: (d) => mAddField.mutate(d),
