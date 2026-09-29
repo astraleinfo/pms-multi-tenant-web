@@ -73,12 +73,15 @@ function CreateClinic({
   const [type, setType] = React.useState<ClinicalTypeKey>("dental");
   const [admin, setAdmin] = React.useState("");
   const [email, setEmail] = React.useState("");
+  const [referralCode, setReferralCode] = React.useState("");
+  const [referralError, setReferralError] = React.useState<string | null>(null);
   const [touched, setTouched] = React.useState(false);
 
   React.useEffect(() => {
     if (open) {
       setName(""); setSlug(""); setSlugTouched(false); setCity("");
-      setType("dental"); setAdmin(""); setEmail(""); setTouched(false);
+      setType("dental"); setAdmin(""); setEmail(""); setReferralCode("");
+      setReferralError(null); setTouched(false);
     }
   }, [open]);
 
@@ -102,6 +105,7 @@ function CreateClinic({
 
   const submit = async () => {
     setTouched(true);
+    setReferralError(null);
     if (!name.trim() || !admin.trim() || !email.trim() || slugProblem(effectiveSlug, taken)) return;
 
     const adminEmail = email.trim();
@@ -117,9 +121,14 @@ function CreateClinic({
         clinical_type: type,
         admin_name: admin.trim(),
         admin_email: adminEmail,
+        ...(referralCode.trim() ? { referral_code: referralCode.trim() } : {}),
       });
     } catch (error) {
       setBusy(false);
+      if (error instanceof api.ApiError && error.fieldErrors.referral_code) {
+        setReferralError(error.fieldErrors.referral_code);
+        return;
+      }
       notify({
         tone: "critical",
         title: "That clinic was not created",
@@ -214,6 +223,19 @@ function CreateClinic({
           <Input
             type="email" value={email} onChange={(e) => setEmail(e.target.value)}
             placeholder={`admin@${effectiveSlug || "clinic"}.test`} invalid={!!emailError}
+          />
+        </Field>
+
+        <Field
+          label="Referral code"
+          className="sm:col-span-2"
+          error={referralError}
+          help={!referralError ? "Optional — if another clinic referred this one, enter their code." : undefined}
+        >
+          <Input
+            value={referralCode}
+            onChange={(e) => { setReferralCode(e.target.value); setReferralError(null); }}
+            placeholder="ABCD-1234"
           />
         </Field>
       </div>
