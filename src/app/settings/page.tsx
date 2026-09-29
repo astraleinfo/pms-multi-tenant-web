@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import * as api from "@/lib/api";
 import { useApp, useTenant } from "@/lib/store/app-store";
 import {
-  useClinicDb, useClinicLogoUrl, useFeatureCatalog, useSchema, useSubscription, useUsers,
+  useClinicDb, useClinicLogoUrl, useFeatureCatalog, useReferralProgram, useSchema, useSubscription, useUsers,
 } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { cn } from "@/lib/cn";
@@ -14,7 +14,7 @@ import { CLINICAL_TYPES, FEATURES } from "@/lib/data/catalog";
 import { activeFeatureKeys, selectUsers } from "@/lib/data/repository";
 import { ROLE_LABEL, modulePath } from "@/lib/nav";
 import { currency, formatDate, formatTime12, pluralise, titleCase } from "@/lib/format";
-import type { AppointmentType, FieldDefinition, FieldType, Role, User } from "@/lib/types";
+import type { AppointmentType, FieldDefinition, FieldType, Referral, Role, User } from "@/lib/types";
 import {
   appointmentTypes, formatLength, newTypeId, slotTimes, TYPE_LENGTHS, typeListProblem,
 } from "@/lib/appointment-types";
@@ -798,8 +798,101 @@ function SubscriptionTab({ today }: { today: string }) {
         <SubscriptionBills subscription={data} today={today} />
       </SettingsSection>
 
+      <ReferralSection currency={summary.currency} />
+
       <HowToPay />
     </div>
+  );
+}
+
+function ReferralSection({ currency: currencyCode }: { currency: string }) {
+  const { data, isPending } = useReferralProgram();
+  const { mintReferralCode, notify } = useApp();
+  const [minting, setMinting] = React.useState(false);
+
+  const mint = async () => {
+    setMinting(true);
+    try {
+      await mintReferralCode();
+      notify({ tone: "ok", title: "Referral code ready", body: "Share it with the clinic you're referring." });
+    } catch (error) {
+      notify({
+        tone: "critical", title: "Could not create a code",
+        body: error instanceof Error ? error.message : "Try again.",
+      });
+    }
+    setMinting(false);
+  };
+
+  const copy = (code: string) => {
+    navigator.clipboard?.writeText(code).then(
+      () => notify({ tone: "ok", title: "Code copied", body: code }),
+      () => notify({ tone: "warn", title: "Could not copy", body: code }),
+    );
+  };
+
+  return (
+    <SettingsSection
+      title="Referrals"
+      hint="Share your code with another clinic. Once they join Astrale and pay their first bill, you get a credit toward your own next one."
+    >
+      {isPending || !data ? (
+        <p className="px-4 py-6 text-center text-label text-ink-3">Reading your referral programme…</p>
+      ) : !data.code ? (
+        <SettingLinkRow
+          label="You haven't created a referral code yet"
+          hint={`Every clinic you refer that pays its first bill earns you ${rentMoney(data.credit_amount, currencyCode)} off your own next one.`}
+        >
+          <Button variant="primary" size="sm" disabled={minting} onClick={() => void mint()}>
+            <IconSpark size={14} /> {minting ? "Creating…" : "Get referral code"}
+          </Button>
+        </SettingLinkRow>
+      ) : (
+        <>
+          <SettingLinkRow label="Your referral code" hint="Share this with a clinic you want to refer.">
+            <span className="tnum rounded-[var(--r)] border border-line-strong bg-surface-2 px-3 py-1.5 font-mono text-body font-semibold text-ink">
+              {data.formatted_code}
+            </span>
+            <Button variant="secondary" size="sm" onClick={() => copy(data.code!)}>Copy</Button>
+          </SettingLinkRow>
+          <SettingLinkRow label="Credit per referral" hint="What a new referral earns you today.">
+            <span className="tnum text-label font-medium text-ink">
+              {rentMoney(data.credit_amount, currencyCode)}
+            </span>
+          </SettingLinkRow>
+          <SettingLinkRow label="Your balance" hint="Comes off your next bill automatically, up to what you owe.">
+            <span className="tnum text-label font-semibold text-ink">
+              {rentMoney(data.balance, currencyCode)}
+            </span>
+          </SettingLinkRow>
+          {data.referrals.length > 0 && (
+            <div className="px-4 py-3">
+              <p className="text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">Your referrals</p>
+              <ul className="mt-2 space-y-1.5">
+                {data.referrals.map((r) => <ReferralRow key={r.id} referral={r} currency={currencyCode} />)}
+              </ul>
+            </div>
+          )}
+        </>
+      )}
+    </SettingsSection>
+  );
+}
+
+function ReferralRow({ referral, currency: currencyCode }: { referral: Referral; currency: string }) {
+  const tone = referral.status === "vested" ? "ok" : referral.status === "void" ? "critical" : "warn";
+  const label = referral.status === "vested" ? "Credited" : referral.status === "void" ? "Voided" : "Pending";
+  return (
+    <li className="flex items-center justify-between gap-3 rounded-[var(--r)] border border-line px-3 py-2">
+      <div className="min-w-0">
+        <p className="truncate text-label font-medium text-ink">{referral.referred_tenant_name}</p>
+        <p className="text-caption text-ink-3">{formatDate(referral.created_at)}</p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <span className="tnum text-label text-ink-2">{rentMoney(referral.credit_amount, currencyCode)}</span>
+        <Badge tone={tone} size="sm">{label}</Badge>
+      </div>
+    </li>
   );
 }
 
