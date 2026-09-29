@@ -153,6 +153,34 @@ export function SubscriptionPlan({ subscription }: { subscription: Subscription 
               <span className="tnum font-mono text-body font-semibold text-ink">{rentMoney(plan.monthly_total, code)}</span>
             </td>
           </tr>
+          {/* Referral credit comes off the next bill. The amount shown is what
+              the server says the bill will actually be reduced by, so the two
+              rows always add up to the "Next bill" figure it raises. */}
+          {plan.credit_balance > 0 && (
+            <>
+              <tr className="bg-surface-2">
+                <td colSpan={2} className="px-4 pb-3 text-label text-ink-2">
+                  Referral credit
+                  {plan.credit_balance - (plan.monthly_total - plan.amount_due) > 0.005 && (
+                    <span className="ml-2 text-caption text-ink-3">
+                      {rentMoney(plan.credit_balance, code)} available
+                    </span>
+                  )}
+                </td>
+                <td colSpan={2} className="px-4 pb-3 text-right">
+                  <span className="tnum font-mono text-label text-ok-text">
+                    −{rentMoney(plan.monthly_total - plan.amount_due, code)}
+                  </span>
+                </td>
+              </tr>
+              <tr className="border-t border-line bg-surface-2">
+                <td colSpan={2} className="px-4 py-3 text-label font-semibold text-ink">Next bill</td>
+                <td colSpan={2} className="px-4 py-3 text-right">
+                  <span className="tnum font-mono text-body font-semibold text-ink">{rentMoney(plan.amount_due, code)}</span>
+                </td>
+              </tr>
+            </>
+          )}
         </tfoot>
       </Table>
     </TableWrap>

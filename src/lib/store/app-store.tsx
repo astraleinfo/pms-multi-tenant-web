@@ -11,7 +11,7 @@ import { SessionProvider, useSession } from "@/lib/store/session";
 import { useQueueStream, type ConnectionState } from "@/lib/realtime";
 import { setActiveCurrency, setToday, TODAY } from "@/lib/format";
 import type {
-  AccountStatus, Appointment, BillingDepartment, CatalogFeature, ClinicalTypeKey, Encounter,
+  AccountStatus, Appointment, BillingDepartment, CatalogFeature, Encounter,
   FeatureKey, FieldDefinition, Id, InventoryItem, InventoryItemPatch, Invoice, InvoiceLineItem, LabAttachment,
   LabResultLine, NewAppointment, NewEncounter, NewInventoryItem, NewServicePrice, Payment,
   PrescriptionItem, QueueEntry, ServicePrice, ServicePricePatch, Tenant, TenantConfig,
@@ -163,10 +163,8 @@ interface AppContextValue {
     },
   ) => Promise<api.CounterPayment>;
 
-  createTenant: (input: {
-    name: string; slug: string; city: string; clinical_type: ClinicalTypeKey;
-    admin_name: string; admin_email: string;
-  }) => Promise<api.TenantCreated>;
+  /* Typed off the API call itself, so the two can never drift apart. */
+  createTenant: (input: Parameters<typeof api.createTenant>[0]) => Promise<api.TenantCreated>;
   setTenantStatus: (tenantId: Id, status: Tenant["status"]) => void;
   updateTenant: (tenantId: Id, changes: api.TenantEdit) => Promise<Tenant>;
   setTenantFeature: (
