@@ -155,6 +155,23 @@ function SettingsForm({ settings }: { settings: PlatformSettings }) {
           </Button>
         </SettingsActions>
       </SettingsSection>
+
+      <SettingsSection
+        title="Referral programme"
+        hint="What one completed referral earns its referrer. A referral counts once the clinic it referred pays its first bill. Changing this never rewrites a referral already earned."
+      >
+        <SettingRow label="Credit per referral" htmlFor="cfg-referral-credit" suffix="₹" width="sm">
+          <NumberInput id="cfg-referral-credit" min={0} max={999999} step="0.01"
+                       value={draft.referral_credit_amount}
+                       onChange={(n) => set("referral_credit_amount", n)} />
+        </SettingRow>
+        <SettingsActions note={dirty ? "Unsaved changes." : "Everything here matches the server."}>
+          <Button variant="ghost" disabled={!dirty || saving} onClick={() => setDraft(settings)}>Discard</Button>
+          <Button variant="primary" disabled={!dirty || saving} onClick={() => void save()}>
+            {saving ? "Saving…" : "Save changes"}
+          </Button>
+        </SettingsActions>
+      </SettingsSection>
     </div>
   );
 }
