@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import { useApp } from "@/lib/store/app-store";
-import { useQueryClient } from "@tanstack/react-query";
-import { isSuperAdmin } from "@/lib/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import * as api from "@/lib/api";
 import { qk } from "@/lib/query/keys";
 import {
   usePlatformCatalog, usePlatformSnapshot, usePlatformTenantFeatures, usePlatformTenantUsers,
@@ -70,6 +70,12 @@ function TenantConsole({ id }: { id: string }) {
     return consoleRows([snapshotRow], byTenant, catalog.features)[0];
   }, [snapshot, id, entitlements, featuresPending, catalog.features]);
 
+  const { data: referrals } = useQuery({
+    queryKey: qk.referrals(id),
+    queryFn: () => api.tenantReferrals(id),
+    enabled: !!row,
+  });
+
   if (isPending) return <PageLoader label="Opening the clinic…" />;
   if (!row) return <NotHere />;
 
@@ -77,7 +83,7 @@ function TenantConsole({ id }: { id: string }) {
 
   return (
     <>
-      <TenantHeader row={row} />
+      <TenantHeader row={row} referrals={referrals} />
 
       <section className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Stat
@@ -143,7 +149,12 @@ function NotHere() {
 
 /* ---- header ---------------------------------------------------------------- */
 
-function TenantHeader({ row }: { row: ConsoleRow }) {
+function TenantHeader({
+  row, referrals,
+}: {
+  row: ConsoleRow;
+  referrals?: Awaited<ReturnType<typeof api.tenantReferrals>>;
+}) {
   const { enter, entering } = useEnterClinic();
   const tenant = row.tenant;
 
@@ -185,6 +196,13 @@ function TenantHeader({ row }: { row: ConsoleRow }) {
         }
         className={tenant.status === "suspended" ? "mb-3" : undefined}
       />
+
+      {referrals?.referred_by && (
+        <p className="mt-1 text-caption text-ink-3">
+          Referred by{" "}
+          <span className="font-medium text-ink-2">{referrals.referred_by.referrer_tenant_name}</span>
+        </p>
+      )}
 
       {tenant.status === "suspended" && (
         <Callout tone="critical" title="Suspended" className="mb-6">
@@ -601,7 +619,7 @@ function BillsTab({ tenantId }: { tenantId: string }) {
       <CardBody>
         <ClinicBills
           row={{ tenant: clinic, invoices: data.invoices, summary: data.summary }}
-          superAdmin={isSuperAdmin(platformUser)}
+          superAdmin={api.isSuperAdmin(platformUser)}
           onChanged={() => { void queryClient.invalidateQueries({ queryKey: qk.platformRoot() }); }}
         />
       </CardBody>
