@@ -163,7 +163,7 @@ export function SubscriptionPlan({ subscription }: { subscription: Subscription 
                   Referral credit
                   {plan.credit_balance - (plan.monthly_total - plan.amount_due) > 0.005 && (
                     <span className="ml-2 text-caption text-ink-3">
-                      {rentMoney(plan.credit_balance, code)} available
+                      {rentMoney(plan.credit_balance - (plan.monthly_total - plan.amount_due), code)} available
                     </span>
                   )}
                 </td>
