@@ -14,6 +14,17 @@ import type { NextConfig } from "next";
 const API_ORIGIN = process.env.API_PROXY_TARGET ?? "http://127.0.0.1:8000";
 
 const nextConfig: NextConfig = {
+  /* a self-contained server.js plus only the node_modules it traces — what the
+     Docker image ships, instead of the whole dependency tree */
+  output: "standalone",
+
+  /* Node >= 22.12 resolves require("@swc/helpers/...") through the package's
+     `module-sync` export to its esm/ files, but the tracer only copies cjs/ —
+     so server.js dies on start without these. */
+  outputFileTracingIncludes: {
+    "/*": ["node_modules/.pnpm/@swc+helpers@*/node_modules/@swc/helpers/esm/**/*"],
+  },
+
   /* pin the workspace root so Turbopack does not walk up into the home directory */
   turbopack: {
     root: path.resolve("."),
