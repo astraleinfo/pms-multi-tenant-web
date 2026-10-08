@@ -1,0 +1,49 @@
+# Production.
+#
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# This is the `web` half of the stack in ../pms-multi-tenant-api, whose
+# docker-compose.prod.yml runs nginx, the API and the workers. Bring that up
+# first: it owns the `pms-internal` network, and its nginx proxies every
+# non-/api request to `web:3000` on it (WEB_UPSTREAM there).
+#
+#        internet ──443──> nginx ──/api/*──> api
+#                            │
+#                            └──── /* ─────> web   (this file)
+#
+#   PMS_NETWORK    the API stack's network. Compose prefixes it with that
+#                  project's name, so the default assumes the API was started
+#                  from a directory called pms-multi-tenant-api.
+#   PMS_WEB_IMAGE  the image to run, e.g. registry.example.com/pms-web:1a2b3c4
+
+services:
+  web:
+    image: ${PMS_WEB_IMAGE:-pms-web:latest}
+    build:
+      context: .
+    networks:
+      pms-internal:
+        # The name the API stack's nginx resolves.
+        aliases: [web]
+    # Not published: nginx is the only way in.
+    expose: ["3000"]
+    read_only: true
+    tmpfs:
+      # Next's image and fetch caches; uid 1000 is the image's `node` user.
+      - /app/.next/cache:uid=1000,gid=1000
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    stop_grace_period: 30s
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+networks:
+  pms-internal:
+    external: true
+    name: ${PMS_NETWORK:-pms-multi-tenant-api_pms-internal}

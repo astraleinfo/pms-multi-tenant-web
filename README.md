@@ -43,6 +43,30 @@ No hosts file is needed locally — browsers resolve every `*.localhost` name to
 The apex only ever serves the console, a clinic subdomain never serves it, and an
 unclaimed subdomain says so. That routing happens in `src/proxy.ts` before anything renders.
 
+## Deploying
+
+Production is a Docker image of the standalone server (`output: "standalone"`), running as the
+`web` service behind the nginx in `../pms-multi-tenant-api/docker-compose.prod.yml`. That nginx
+sends `/api/*` straight to the API with the clinic's `Host` intact, and everything else here, so
+the `next.config.ts` rewrite is never used in production.
+
+```bash
+# in ../pms-multi-tenant-api first — it owns the network and the nginx
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+
+# then here
+docker build -t pms-web:$(git rev-parse --short HEAD) --build-arg REVISION=$(git rev-parse HEAD) .
+PMS_WEB_IMAGE=pms-web:$(git rev-parse --short HEAD) docker compose -f docker-compose.prod.yml up -d
+```
+
+- **No runtime env.** The only settings are `NEXT_PUBLIC_*`, which are inlined at build time; leave
+  them unset for production so the API and the queue socket follow the browser's own origin.
+  `.dockerignore` keeps `.env.local` out of the build for the same reason.
+- **Network.** `PMS_NETWORK` names the API stack's network. It defaults to
+  `pms-multi-tenant-api_pms-internal`, which is what Compose calls it when started from that directory.
+- The container runs as `node` on a read-only filesystem with every capability dropped; only
+  `.next/cache` and `/tmp` are writable (tmpfs). It publishes no port — nginx is the only way in.
+
 ## Signing in
 
 Every user has their own email and password, and every page is behind that credential —
