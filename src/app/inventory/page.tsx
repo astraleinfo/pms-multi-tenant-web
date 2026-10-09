@@ -27,7 +27,7 @@ import {
 import { Tabs } from "@/components/ui/tabs";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { RankBar } from "@/components/charts/bar-chart";
-import { FeatureGate, RoleGate } from "@/components/domain/gates";
+import { RoleGate } from "@/components/domain/gates";
 import {
   IconAlert, IconArrowUp, IconBox, IconCheck, IconClock, IconList, IconPlus,
 } from "@/components/ui/icons";
@@ -136,9 +136,7 @@ function LedgerItemCell({ tx }: { tx: InventoryTransaction }) {
 export default function InventoryPage() {
   return (
     <RoleGate allow={["pharmacist"]}>
-      <FeatureGate feature="inventory">
-        <Inventory />
-      </FeatureGate>
+      <Inventory />
     </RoleGate>
   );
 }

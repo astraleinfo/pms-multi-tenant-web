@@ -199,16 +199,13 @@ export function PrescriptionEditor({
   items: DraftRxItem[];
   onChange: (next: DraftRxItem[]) => void;
 }) {
-  const { session, hasFeature, notify } = useApp();
+  const { session, notify } = useApp();
   const db = useClinicDb();
   const { data: catalogue = [] } = useMedicines();
 
-  const stocked = hasFeature("pharmacy") || hasFeature("inventory");
   const stockItems = React.useMemo(
-    () => (stocked
-      ? selectInventoryItems(db, session.tenantId).filter((i) => i.category === "medicine")
-      : []),
-    [stocked, db, session.tenantId],
+    () => selectInventoryItems(db, session.tenantId).filter((i) => i.category === "medicine"),
+    [db, session.tenantId],
   );
 
   /**
@@ -421,18 +418,12 @@ export function PrescriptionEditor({
         ))}
       </div>
 
-      {stocked && stockItems.length === 0 && (
+      {stockItems.length === 0 && (
         <p className="flex items-start gap-2 rounded-[var(--r)] border border-warn-border bg-warn-soft px-3 py-2.5 text-caption leading-relaxed text-warn-text">
           <IconAlert size={14} className="mt-px shrink-0" />
           There are no medicine lines in inventory yet, so nothing on this prescription can be dispensed
           by the pharmacy. Add them under Inventory and they will lead the list here.
         </p>
-      )}
-
-      {!hasFeature("pharmacy") && items.length > 0 && (
-        <Badge tone="neutral" size="sm">
-          This clinic has no pharmacy module — the prescription still prints and lives on the record.
-        </Badge>
       )}
     </div>
   );

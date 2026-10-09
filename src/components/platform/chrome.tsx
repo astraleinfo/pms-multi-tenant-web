@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "@/lib/navigation";
+import { usePathname } from "next/navigation";
+import { NavigationPending, useRouter } from "@/lib/navigation";
 import { useApp } from "@/lib/store/app-store";
 import { cn } from "@/lib/cn";
 import type { Id, Tenant } from "@/lib/types";
@@ -29,23 +30,20 @@ import { ConsoleRail } from "./rail";
 const RAIL_KEY = "astrale-pms.console-rail";
 
 /**
- * A console page: signed in, wrapped in the rail, inside the container every
- * section shares.
+ * The console's frame: signed in, wrapped in the rail, inside the container
+ * every section shares. Mounted once by the console's layout, so moving between
+ * sections swaps only the page — the rail stays where it is, open or collapsed.
  *
- * The guard is here rather than in a layout because the layout is a server
- * component and the session lives in the browser — and because a console page
- * that flashed its tenant list before redirecting would be showing every clinic
- * on the platform to somebody who is not signed in.
+ * The guard is here, in the browser, because the session lives there — and
+ * because a console page that flashed its tenant list before redirecting would
+ * be showing every clinic on the platform to somebody who is not signed in.
+ * The sign-in page is the one console address that brings no frame.
  */
-export function ConsolePage({
-  children, superAdmin,
-}: {
-  children: React.ReactNode;
-  /** this section is the platform's own machinery, not the support desk's */
-  superAdmin?: boolean;
-}) {
+export function ConsoleChrome({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const signIn = pathname === "/platform/login";
   const router = useRouter();
-  const { platformSession, platformUser, ready } = useApp();
+  const { platformSession, ready } = useApp();
   /* Five destinations is nothing to hide behind icons, where the clinic
      rail's twelve was — so, unlike that one, this rail rests open. */
   const [collapsed, setCollapsed] = React.useState(false);
@@ -64,16 +62,11 @@ export function ConsolePage({
   };
 
   React.useEffect(() => {
-    if (ready && !platformSession.signedIn) router.replace("/platform/login");
-  }, [ready, platformSession.signedIn, router]);
+    if (!signIn && ready && !platformSession.signedIn) router.replace("/platform/login");
+  }, [signIn, ready, platformSession.signedIn, router]);
 
+  if (signIn) return children;
   if (!ready || !platformSession.signedIn) return <StageLoader />;
-
-  /* Not a redirect. Somebody who followed a link to a section that is not
-     theirs should be told so, and left where they are — bouncing them to the
-     overview reads as a broken link rather than as an answer. The API has
-     already refused the data either way. */
-  const refused = superAdmin && !isSuperAdmin(platformUser);
 
   return (
     <div className="flex min-h-dvh bg-ground">
@@ -116,14 +109,35 @@ export function ConsolePage({
           </span>
         </header>
 
-        <main className="min-w-0 flex-1">
+        <main className="relative min-w-0 flex-1">
           <div className="mx-auto w-full max-w-[1440px] px-4 py-7 sm:px-6">
-            {refused ? <NotYourSection /> : children}
+            {children}
           </div>
+          <NavigationPending className="mx-auto w-full max-w-[1440px] px-4 py-7 sm:px-6" />
         </main>
       </div>
     </div>
   );
+}
+
+/**
+ * A console section. The frame is the layout's; this is only the question of
+ * whether the section is this operator's to see.
+ */
+export function ConsolePage({
+  children, superAdmin,
+}: {
+  children: React.ReactNode;
+  /** this section is the platform's own machinery, not the support desk's */
+  superAdmin?: boolean;
+}) {
+  const { platformUser } = useApp();
+  /* Not a redirect. Somebody who followed a link to a section that is not
+     theirs should be told so, and left where they are — bouncing them to the
+     overview reads as a broken link rather than as an answer. The API has
+     already refused the data either way. */
+  if (superAdmin && !isSuperAdmin(platformUser)) return <NotYourSection />;
+  return children;
 }
 
 function NotYourSection() {

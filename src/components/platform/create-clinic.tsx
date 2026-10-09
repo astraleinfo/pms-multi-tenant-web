@@ -4,7 +4,7 @@ import * as React from "react";
 import { useApp } from "@/lib/store/app-store";
 import { usePlatformSnapshot } from "@/lib/query/hooks";
 import * as api from "@/lib/api";
-import { CLINICAL_TYPES, FEATURES } from "@/lib/data/catalog";
+import { CLINICAL_TYPES, MODULES } from "@/lib/data/catalog";
 import { slugProblem, slugify } from "@/lib/tenancy";
 import type { ClinicalTypeKey, Id, Tenant } from "@/lib/types";
 import { cn } from "@/lib/cn";
@@ -21,7 +21,7 @@ import { IconArrowRight, IconLock, IconSpark } from "@/components/ui/icons";
 
    The one thing that only exists here: §3.1, performed by the platform rather
    than by a self-service form inside a tenant. It creates the tenant, claims
-   its subdomain, seeds the core modules, clones the field set for its clinical
+   its subdomain, writes its configuration, clones the field set for its clinical
    type and makes its first admin — who is emailed a link to choose a password
    nobody at the platform will ever see.
    ========================================================================== */
@@ -166,7 +166,7 @@ function CreateClinic({
       open={open}
       onClose={onClose}
       title="Create a clinic"
-      subtitle="Creates the tenant, claims its subdomain, seeds the core modules and makes its first admin."
+      subtitle="Creates the tenant, claims its subdomain, writes its configuration and makes its first admin. Every module is on from the start."
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
@@ -250,14 +250,11 @@ function CreateClinic({
       </div>
 
       <div className="mt-4 rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5">
-        <p className="text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">Seeded on creation</p>
+        <p className="text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">Every module, from day one</p>
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {FEATURES.filter((f) => f.is_core).map((f) => (
+          {MODULES.map((f) => (
             <Badge key={f.key} tone="accent" size="sm" dot={false}>{f.name}</Badge>
           ))}
-          <span className={cn("text-caption text-ink-3", "self-center")}>
-            — paid modules stay off until the platform switches them on
-          </span>
         </div>
       </div>
     </Modal>

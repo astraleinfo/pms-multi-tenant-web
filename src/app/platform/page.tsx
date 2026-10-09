@@ -2,15 +2,14 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { isSuperAdmin } from "@/lib/api";
+import { useApp } from "@/lib/store/app-store";
+import { usePlatformBilling, usePlatformSnapshot } from "@/lib/query/hooks";
+import { CLINICAL_TYPES, MODULES } from "@/lib/data/catalog";
+import { formatDate, pluralise } from "@/lib/format";
 import {
-  usePlatformBilling, usePlatformCatalog, usePlatformEntitlements, usePlatformSnapshot,
-} from "@/lib/query/hooks";
-import { CLINICAL_TYPES } from "@/lib/data/catalog";
-import { currency, formatDate } from "@/lib/format";
-import {
-  PAID_FEATURES, consoleRows, moduleStats,
-  platformTotals,
-  type ConsoleRow, type PlatformTotals,
+  consoleRows, platformTotals,
+  type AccountState, type ConsoleRow, type PlatformTotals,
 } from "@/lib/platform/subscriptions";
 import {
   charges, revenueSeries, revenueTotals,
@@ -22,7 +21,7 @@ import { cn } from "@/lib/cn";
 import { Card, CardBody, CardHeader, CardLink } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge, type Tone } from "@/components/ui/badge";
-import { EmptyState, Meter } from "@/components/ui/misc";
+import { EmptyState } from "@/components/ui/misc";
 import { Stat } from "@/components/ui/stat";
 import { PageHeader } from "@/components/ui/page-header";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
@@ -32,7 +31,7 @@ import { seriesColor } from "@/components/charts/chart-kit";
 import { Monogram } from "@/components/layout/rail";
 import { ConsolePage } from "@/components/platform/chrome";
 import { CreateClinicFlow } from "@/components/platform/create-clinic";
-import { AccountBadge } from "@/components/platform/module-controls";
+import { AccountBadge } from "@/components/platform/account-badge";
 import {
   IconAlert, IconArrowRight, IconChart, IconLayers, IconPlus, IconReceipt, IconSpark,
 } from "@/components/ui/icons";
@@ -51,31 +50,23 @@ export default function PlatformPage() {
 }
 
 function Overview() {
-  const { data: snapshot, isPending: snapshotPending } = usePlatformSnapshot();
-  const { byTenant } = usePlatformEntitlements();
-  const catalog = usePlatformCatalog();
+  const { data: snapshot, isPending } = usePlatformSnapshot();
   const { data: billing, isPending: billingPending, isError: billingIsError } = usePlatformBilling();
   const [creating, setCreating] = React.useState(false);
   /* Billing is a separate query from the platform snapshot and the API
      builds it one clinic at a time, so it routinely still resolves after
      the rest of this page has rendered. It is deliberately left out of this
-     gate — the snapshot- and catalogue-driven parts of the page have no
-     reason to wait on it — and its own pending/error state is instead
-     threaded into every billing-driven stat below via `revenueStatus`. */
-  const isPending = snapshotPending || catalog.isPending;
+     gate — the snapshot-driven parts of the page have no reason to wait on
+     it — and its own pending/error state is instead threaded into every
+     billing-driven figure below via `revenueStatus`. The fee rides on it
+     too, so a figure priced at the fee says "…" until it lands. */
+  const fee = billing?.fee_monthly ?? 0;
 
-  const rows = React.useMemo(
-    () => consoleRows(snapshot?.tenants ?? [], byTenant, catalog.features),
-    [snapshot, byTenant, catalog.features],
-  );
-  const totals = React.useMemo(() => platformTotals(rows), [rows]);
-  const stats = React.useMemo(
-    () => moduleStats(rows, catalog.features).filter((s) => !s.feature.is_core),
-    [rows, catalog.features],
-  );
+  const rows = React.useMemo(() => consoleRows(snapshot?.tenants ?? [], fee), [snapshot, fee]);
+  const totals = React.useMemo(() => platformTotals(rows, fee), [rows, fee]);
 
   /* Money is what was invoiced; the counts beside it are what clinics are
-     set up to hold. Two different questions, two different sources. */
+     set up to pay, at today's fee. Two different questions, two sources. */
   const revenueStatus = billingStatus({ data: billing, isPending: billingPending, isError: billingIsError });
   const revenue = React.useMemo(
     () => (billing ? revenueTotals(billing) : null),
@@ -111,7 +102,7 @@ function Overview() {
           <EmptyState
             icon={<IconLayers size={20} />}
             title="No clinics on this platform"
-            body="Creating one claims its subdomain, seeds the five core modules, clones the field set for its discipline and invites its first administrator."
+            body="Creating one claims its subdomain, clones the field set for its discipline and invites its first administrator. It has every module from the start."
             action={
               <Button variant="primary" onClick={() => setCreating(true)}>
                 <IconPlus size={15} /> Create the first clinic
@@ -129,7 +120,7 @@ function Overview() {
       <PageHeader
         eyebrow="Control centre"
         title="Astrale Platform"
-        description="Every clinic on this deployment, what each one holds, and what the whole of it earns. This is the only view that reads across tenants — the API still gathers it one clinic at a time, with that clinic bound to the connection."
+        description="Every clinic on this deployment, what each one pays, and what the whole of it earns. Every clinic runs every module. This is the only view that reads across tenants — the API still gathers it one clinic at a time, with that clinic bound to the connection."
         actions={
           <Button variant="primary" onClick={() => setCreating(true)}>
             <IconPlus size={15} /> Create clinic
@@ -145,7 +136,7 @@ function Overview() {
 
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <RunRateCard status={revenueStatus} series={series} currency={billing?.currency ?? "INR"} />
-        <ModuleAdoptionCard stats={stats} tenants={rows.length} />
+        <PlanCard rows={rows} fee={billing ? fee : null} currency={billing?.currency ?? "INR"} />
       </div>
 
       {/* Top-aligned rather than stretched: these two are lists of different
@@ -153,12 +144,12 @@ function Overview() {
           a long activity feed — matching their heights just draws a tall empty
           box around the good news. */}
       <div className="mt-5 grid grid-cols-1 items-start gap-5 xl:grid-cols-2">
-        <AttentionCard rows={rows} totals={totals} />
+        <AttentionCard rows={rows} totals={totals} priced={!!billing} currency={billing?.currency ?? "INR"} />
         <RecentActivityCard status={revenueStatus} recent={recent} currency={billing?.currency ?? "INR"} />
       </div>
 
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <TopClinicsCard rows={rows} />
+        <TopClinicsCard rows={rows} priced={!!billing} currency={billing?.currency ?? "INR"} />
         <DisciplineCard rows={rows} />
       </div>
 
@@ -223,18 +214,18 @@ function HeroStats({
         hint={monthly.hint}
       />
       <Stat
-        label="Live subscriptions" value={totals.billedSubscriptions}
+        label="Paying clinics" value={totals.billedTenants}
         icon={<IconSpark size={16} />}
-        hint={`${totals.trialSubscriptions} on trial · ${totals.lockedModules} still locked`}
+        hint={`${totals.trial} on trial · ${totals.exempt} exempt`}
       />
       <Stat
-        label="Needs attention" value={totals.suspended + totals.heldSubscriptions}
-        tone={totals.suspended || totals.heldSubscriptions ? "critical" : "ink"}
+        label="Needs attention" value={totals.suspended}
+        tone={totals.suspended ? "critical" : "ink"}
         icon={<IconAlert size={16} />}
         hint={
           totals.suspended
-            ? `${currency(totals.heldValue)}/mo held behind suspended clinics`
-            : "Every clinic is reachable and billing"
+            ? `${pluralise(totals.suspended, "clinic")} suspended`
+            : "Every clinic is reachable"
         }
       />
     </section>
@@ -254,12 +245,17 @@ function SecondaryStats({
     hint: `${revenue!.clinics} of ${totals.tenants} billed`,
   }));
 
+  const fee = billingCell(status === "pending" || status === "error" ? status : "billed", () => ({
+    value: `${rentMoney(totals.fee, currencyCode)}/mo`,
+    hint: "every module, every clinic",
+  }));
+
   const cells: Array<{ label: string; value: React.ReactNode; hint?: string }> = [
     { label: "Patients", value: totals.patients.toLocaleString(), hint: "across every register" },
     { label: "Encounters", value: totals.encounters.toLocaleString(), hint: "consultations signed" },
     { label: "Staff accounts", value: totals.users.toLocaleString(), hint: "sign-ins that exist" },
-    { label: "Modules enabled", value: totals.enabledModules, hint: "core and paid, every clinic" },
-    { label: "Modules locked", value: totals.lockedModules, hint: "paid, not yet sold" },
+    { label: "Modules", value: MODULES.length, hint: "in every clinic" },
+    { label: "Subscription fee", value: fee.value, hint: fee.hint },
     { label: "Per billed clinic", value: perClinic.value, hint: perClinic.hint },
   ];
 
@@ -319,43 +315,60 @@ function RunRateCard({
   );
 }
 
-function ModuleAdoptionCard({
-  stats, tenants,
+const PLAN_ORDER: AccountState[] = ["billed", "trial", "exempt", "held"];
+
+/**
+ * The one plan, and who is on which side of it. There is no catalogue to
+ * adopt — every clinic has every module — so what is worth seeing is how
+ * many clinics the fee applies to, and why it does not apply to the rest.
+ */
+function PlanCard({
+  rows, fee, currency: currencyCode,
 }: {
-  stats: ReturnType<typeof moduleStats>;
-  tenants: number;
+  rows: ConsoleRow[];
+  /** null until the billing read has brought the fee */
+  fee: number | null;
+  currency: string;
 }) {
+  const { platformUser } = useApp();
   return (
     <Card>
       <CardHeader
-        icon={<IconChart size={15} />} tone="accent" title="Module adoption"
-        hint="Paid modules, by the clinics holding them."
+        icon={<IconLayers size={15} />} tone="accent" title="One plan, every module"
+        hint="Every clinic runs the whole product. Billed clinics pay one monthly fee."
         actions={
-          <CardLink href="/platform/modules?tab=catalogue" trailing={<IconArrowRight size={13} />}>
-            Catalogue &amp; pricing
-          </CardLink>
+          /* the fee is a super admin's to set; the desk can read it here */
+          isSuperAdmin(platformUser) && (
+            <CardLink href="/platform/settings" trailing={<IconArrowRight size={13} />}>
+              Set the fee
+            </CardLink>
+          )
         }
       />
       <CardBody>
-        <ul className="space-y-3.5">
-          {[...stats].sort((a, b) => b.subscribers - a.subscribers).map((s) => (
-            <li key={s.feature.key}>
-              <div className="mb-1.5 flex items-baseline justify-between gap-3">
-                <Link
-                  href={`/platform/tenants?module=${s.feature.key}&moduleState=enabled`}
-                  className="truncate text-label text-ink underline-offset-4 hover:underline"
-                >
-                  {s.feature.name}
-                </Link>
-                <span className="tnum shrink-0 font-mono text-caption text-ink-2">
-                  {s.subscribers}/{tenants}
-                  <span className="ml-1.5 text-ink-3">{currency(s.feature.price_monthly)}</span>
+        <p className="tnum font-display text-display font-semibold leading-none text-ink">
+          {fee === null ? "…" : rentMoney(fee, currencyCode)}
+          <span className="ml-1 text-label font-normal text-ink-3">/ clinic / month</span>
+        </p>
+        <ul className="mt-4 divide-y divide-line-soft border-y border-line-soft">
+          {PLAN_ORDER.map((state) => (
+            <li key={state}>
+              <Link
+                href={`/platform/tenants?billing=${state}`}
+                className="flex items-center justify-between gap-3 py-2.5 text-label transition-colors hover:text-accent-text"
+              >
+                <AccountBadge state={state} />
+                <span className="tnum font-mono text-ink-2">
+                  {rows.filter((r) => r.state === state).length}
+                  <span className="ml-1 text-ink-3">{state === "billed" ? "billed" : "not billed"}</span>
                 </span>
-              </div>
-              <Meter value={s.subscribers} max={Math.max(1, tenants)} tone="accent" height={5} />
+              </Link>
             </li>
           ))}
         </ul>
+        <p className="mt-3 text-caption leading-relaxed text-ink-3">
+          {MODULES.map((m) => m.name).join(" · ")}
+        </p>
       </CardBody>
     </Card>
   );
@@ -397,34 +410,43 @@ interface AttentionItem {
  * The four things worth doing something about, each a link into the tenant list
  * with the filters already set — an answer rather than a number to go and chase.
  */
-function AttentionCard({ rows, totals }: { rows: ConsoleRow[]; totals: PlatformTotals }) {
+function AttentionCard({
+  rows, totals, priced, currency: currencyCode,
+}: {
+  rows: ConsoleRow[];
+  totals: PlatformTotals;
+  /** false until the fee has arrived — a figure priced at it would be a guess */
+  priced: boolean;
+  currency: string;
+}) {
   const dormantClinics = rows.filter((r) => !r.last_activity).length;
+  const money = (n: number) => (priced ? rentMoney(n, currencyCode) : "…");
 
   const items: AttentionItem[] = [
     {
       label: "Suspended clinics",
-      detail: totals.heldValue
-        ? `${currency(totals.heldValue)}/mo of modules held behind them`
-        : "No subscriptions held behind them",
+      detail: totals.suspended
+        ? `${money(totals.heldValue)}/mo not collected while they are`
+        : "Nothing is suspended",
       count: totals.suspended,
       tone: "critical",
       href: "/platform/tenants?status=suspended",
     },
     {
       label: "Trials running",
-      detail: totals.trialValue
-        ? `${currency(totals.trialValue)}/mo if they all convert`
+      detail: totals.trial
+        ? `${money(totals.trialValue)}/mo if they all convert`
         : "Nothing is on trial",
-      count: totals.trialSubscriptions,
+      count: totals.trial,
       tone: "warn",
       href: "/platform/tenants?billing=trial",
     },
     {
-      label: "Clinics on core only",
-      detail: "Live, and paying for nothing",
-      count: rows.filter((r) => r.state === "core_only").length,
+      label: "Exempt from billing",
+      detail: "Live, and never billed by the platform",
+      count: totals.exempt,
       tone: "info",
-      href: "/platform/tenants?billing=core_only",
+      href: "/platform/tenants?billing=exempt",
     },
     {
       label: "Never used",
@@ -531,14 +553,21 @@ function RecentActivityCard({
 
 /* ---- top clinics ------------------------------------------------------------- */
 
-function TopClinicsCard({ rows }: { rows: ConsoleRow[] }) {
-  const top = [...rows].sort((a, b) => b.mrr - a.mrr || b.patients - a.patients).slice(0, 6);
+function TopClinicsCard({
+  rows, priced, currency: currencyCode,
+}: {
+  rows: ConsoleRow[];
+  priced: boolean;
+  currency: string;
+}) {
+  /* Every billed clinic pays the same fee, so size is how much they use it. */
+  const top = [...rows].sort((a, b) => b.patients - a.patients || b.encounters - a.encounters).slice(0, 6);
 
   return (
     <Card className="overflow-hidden">
       <CardHeader
         icon={<IconReceipt size={15} />} tone="ok" title="Largest accounts"
-        hint="By what their modules are priced at, then by how much they use it."
+        hint="By how much they use the product — every billed clinic pays the same."
         actions={
           <Link
             href="/platform/tenants"
@@ -554,7 +583,7 @@ function TopClinicsCard({ rows }: { rows: ConsoleRow[] }) {
             <TR>
               <TH>Clinic</TH>
               <TH>Account</TH>
-              <TH>Modules</TH>
+              <TH align="right">Patients</TH>
               <TH align="right">Monthly</TH>
             </TR>
           </THead>
@@ -574,14 +603,12 @@ function TopClinicsCard({ rows }: { rows: ConsoleRow[] }) {
                   </Link>
                 </TD>
                 <TD><AccountBadge state={row.state} /></TD>
-                <TD>
-                  <span className="tnum font-mono text-label text-ink-2">
-                    {row.billed.length + row.trialing.length + row.held.length} of {PAID_FEATURES.length}
-                  </span>
+                <TD align="right">
+                  <span className="tnum font-mono text-label text-ink-2">{row.patients.toLocaleString()}</span>
                 </TD>
                 <TD align="right">
                   <span className={cn("tnum font-mono text-label", row.mrr ? "text-ink" : "text-ink-3")}>
-                    {row.mrr ? `${currency(row.mrr)}` : "—"}
+                    {!priced ? "…" : row.mrr ? rentMoney(row.mrr, currencyCode) : "—"}
                   </span>
                 </TD>
               </TR>

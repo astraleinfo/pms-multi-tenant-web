@@ -19,7 +19,7 @@ import { Stat } from "@/components/ui/stat";
 import { Input, NumberInput, Select } from "@/components/ui/field";
 import { Tabs } from "@/components/ui/tabs";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
-import { FeatureGate, RoleGate } from "@/components/domain/gates";
+import { RoleGate } from "@/components/domain/gates";
 import { StatusPill } from "@/components/domain/status";
 import { AllergyFlag, PatientChip, PatientRef } from "@/components/domain/patient";
 import { CounterPayment } from "@/components/domain/counter-payment";
@@ -32,15 +32,13 @@ import {
 export default function PharmacyPage() {
   return (
     <RoleGate allow={["pharmacist", "doctor"]}>
-      <FeatureGate feature="pharmacy">
-        <Pharmacy />
-      </FeatureGate>
+      <Pharmacy />
     </RoleGate>
   );
 }
 
 function Pharmacy() {
-  const { session, hasFeature } = useApp();
+  const { session } = useApp();
   const db = useClinicDb();
   const t = session.tenantId;
 
@@ -58,9 +56,7 @@ function Pharmacy() {
         title="Pharmacy"
         description="The counter reads prescription rows straight from the clinical record. Handing medicine over writes a dispense transaction into the one inventory ledger — no second stock table, no copied prescription."
         actions={
-          hasFeature("inventory") ? (
-            <ButtonLink href="/inventory" variant="secondary"><IconBox size={15} /> Inventory</ButtonLink>
-          ) : undefined
+          <ButtonLink href="/inventory" variant="secondary"><IconBox size={15} /> Inventory</ButtonLink>
         }
       />
 
@@ -170,11 +166,11 @@ function Pharmacy() {
 }
 
 function DispensePanel({ rx, onDone }: { rx: Prescription; onDone: () => void }) {
-  const { session, dispense, hasFeature, can, notify } = useApp();
+  const { session, dispense, can, notify } = useApp();
 
-  /* The clinic bills, and this person is allowed to take the money. Without
-     both, the window hands over the medicine and nothing else. */
-  const billsHere = hasFeature("billing") && can("billing:write");
+  /* This person is allowed to take the money. Without that, the window hands
+     over the medicine and nothing else. */
+  const billsHere = can("billing:write");
   /* Two steps at one window: hand the medicine over, then ask for the money. */
   const [busy, setBusy] = React.useState(false);
   const [collecting, setCollecting] = React.useState(false);
@@ -215,9 +211,7 @@ function DispensePanel({ rx, onDone }: { rx: Prescription; onDone: () => void })
         {/* What the window is owed, before anything is handed over. Somebody
             who came back only to pay is served from here, without dispensing
             anything they have already had. */}
-        {hasFeature("billing") && (
-          <PatientAccountSummary patientId={rx.patient_id} only="pharmacy" />
-        )}
+        <PatientAccountSummary patientId={rx.patient_id} only="pharmacy" />
 
         <div>
           <Legend>Lines to hand over</Legend>
@@ -292,8 +286,7 @@ function DispensePanel({ rx, onDone }: { rx: Prescription; onDone: () => void })
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line-soft pt-4">
           <p className="text-caption leading-snug text-ink-3">
-            What you hand over comes out of stock.
-            {hasFeature("billing") && " What was handed over then becomes a charge at the pharmacy counter."}
+            What you hand over comes out of stock, and then becomes a charge at the pharmacy counter.
           </p>
           <Button
             variant="primary"

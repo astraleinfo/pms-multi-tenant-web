@@ -72,7 +72,14 @@ export function Badge({
 /* ---- status → tone maps, one place, used everywhere ---------------------- */
 
 export const APPOINTMENT_TONE: Record<string, Tone> = {
-  scheduled: "info", checked_in: "accent", completed: "ok", cancelled: "neutral", no_show: "critical",
+  scheduled: "info", confirmed: "ok", checked_in: "accent", completed: "ok", cancelled: "neutral",
+  no_show: "critical",
+};
+/* Where a follow-up stands. The warm tones are the rows that still need the
+   desk: amber for a new slot to find, red for a number nobody answered. */
+export const FOLLOW_UP_TONE: Record<string, Tone> = {
+  pending: "neutral", confirmed: "ok", reschedule_required: "warn", no_answer: "critical",
+  call_back: "violet", declined: "neutral", rescheduled: "ok",
 };
 export const QUEUE_TONE: Record<string, Tone> = {
   waiting: "warn", called: "accent", in_consultation: "accent", completed: "ok",

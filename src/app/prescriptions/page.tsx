@@ -11,7 +11,6 @@ import { DataTable, columnHelperFor } from "@/components/ui/data-table";
 import { EmptyState, Meter } from "@/components/ui/misc";
 import { SearchInput } from "@/components/ui/field";
 import { Tabs } from "@/components/ui/tabs";
-import { FeatureGate } from "@/components/domain/gates";
 import { StatusPill } from "@/components/domain/status";
 import { PatientRef } from "@/components/domain/patient";
 import { PrescriptionDetailModal } from "@/components/domain/prescription-detail";
@@ -93,11 +92,7 @@ function RxPrescriber({ id }: { id: string }) {
 }
 
 export default function PrescriptionsPage() {
-  return (
-    <FeatureGate feature="prescription">
-      <Prescriptions />
-    </FeatureGate>
-  );
+  return <Prescriptions />;
 }
 
 function Prescriptions() {

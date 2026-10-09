@@ -11,7 +11,11 @@ export type Id = string;
 
 export type ClinicalTypeKey = "dental" | "ophthalmology" | "dermatology";
 
-export type FeatureKey =
+/**
+ * The PMS modules. Every clinic has every one of them — there is no per-clinic
+ * switch, price or trial. A key is only a name for copy and illustrations.
+ */
+export type ModuleKey =
   | "patient" | "appointment" | "queue" | "consultation" | "prescription"
   | "billing" | "pharmacy" | "lab" | "inventory" | "advanced_reports";
 
@@ -37,8 +41,8 @@ export interface AppointmentType {
 }
 
 /**
- * Per-tenant configuration (§3.3). Distinct from entitlements: this is how a
- * clinic has set the product up, not what it is allowed to use.
+ * Per-tenant configuration (§3.3): how a clinic has set the product up. It
+ * shapes behaviour inside modules and never hides one.
  */
 export interface TenantConfig {
   tenant_id: Id;
@@ -80,54 +84,16 @@ export interface ClinicalType {
   complaintExample: string;
 }
 
-/**
- * What a module *is* — the copy the product ships with. It carries no price:
- * prices are set in the console by a super admin and change without a
- * release, so they are read from the API (`useFeatureCatalog`,
- * `usePlatformCatalog`) and joined on here as `Feature`.
- */
-export interface FeatureCopy {
-  key: FeatureKey;
+/** What a module is — the copy the product ships with. */
+export interface ModuleInfo {
+  key: ModuleKey;
   name: string;
-  is_core: boolean;
   summary: string;
-  /** modules this one lights up in the nav */
-  unlocks: string[];
-  /**
-   * What somebody who does not have this module is told about it — the module
-   * page a padlock leads to. It is sales copy in the same sense a menu is:
-   * what the thing does, in the clinic's own terms, so the decision to ask for
-   * it is an informed one.
-   */
-  overview: string;
-  /** the working loop, in the order a clinic would live it */
-  how_it_works: { title: string; body: string }[];
-  /** what a walkthrough covers, chapter by chapter */
-  demo_chapters: string[];
-  /** the one thing about the price that is not the number itself */
-  pricing_note: string;
 }
-
-/** A module with its live price, as the catalogue endpoint serves it. */
-export interface Feature extends FeatureCopy {
-  price_monthly: number;
-}
-
-/** The module catalogue row as the API sends it. */
-export interface CatalogFeature {
-  key: FeatureKey;
-  name: string;
-  is_core: boolean;
-  summary: string;
-  price_monthly: number;
-  unlocks: string[];
-}
-
-export type TenantFeatureStatus = "active" | "inactive" | "trial";
 
 /* ---- support desk ----------------------------------------------------------- */
 
-export type SupportRequestKind = "activation" | "walkthrough" | "general";
+export type SupportRequestKind = "walkthrough" | "general";
 /** Whether the desk has been emailed. The request stands either way. */
 export type SupportRequestStatus = "queued" | "sent" | "failed";
 
@@ -135,7 +101,6 @@ export interface SupportRequest {
   id: Id;
   tenant_id: Id;
   kind: SupportRequestKind;
-  feature_key: FeatureKey | null;
   message: string;
   /** "Name <email>" of whoever asked */
   requested_by: string;
@@ -143,13 +108,6 @@ export interface SupportRequest {
   /** `YYYY-MM-DD HH:mm`, clinic time */
   created_at: string | null;
   sent_at: string | null;
-}
-
-export interface TenantFeature {
-  tenant_id: Id;
-  feature_key: FeatureKey;
-  status: TenantFeatureStatus;
-  activated_at: string | null;
 }
 
 export interface Tenant {
@@ -186,7 +144,7 @@ export interface SubscriptionInvoice {
   period_end: string;
   currency: string;
   amount: number;
-  lines: { feature_key: FeatureKey; name: string; amount: number }[];
+  lines: { name: string; amount: number }[];
   issued_on: string;
   due_on: string;
   /** the first day the clinic is held if this is still open */
@@ -214,23 +172,20 @@ export interface SubscriptionSummary {
   grace_days: number;
 }
 
-/** One module the clinic has switched on, and what it costs. */
-export interface SubscribedModule {
-  feature_key: FeatureKey;
-  name: string;
-  is_core: boolean;
-  /** a trial is on, but not billed */
-  status: "active" | "trial";
-  activated_at: string | null;
-  /** today's monthly price; 0 for a core module */
-  price_monthly: number;
-  /** whether next month's bill charges for it */
-  billed: boolean;
-}
+/** Why a clinic's next bill does not charge the fee. */
+export type NotBilledReason = "exempt" | "trial" | "suspended" | "no_fee";
 
+/**
+ * What the clinic pays the platform: one flat monthly fee, the same for every
+ * clinic, for the whole product. There is nothing per module to list.
+ */
 export interface SubscriptionPlan {
-  modules: SubscribedModule[];
-  /** the sum of the billed modules, before any referral credit */
+  /** the platform's monthly fee today */
+  price_monthly: number;
+  /** whether next month's bill charges it */
+  billed: boolean;
+  not_billed_reason: NotBilledReason | null;
+  /** the fee, or 0, before any referral credit */
   monthly_total: number;
   /** spendable referral credit right now */
   credit_balance: number;
@@ -338,7 +293,12 @@ export interface Patient {
   tags?: string[];
 }
 
-export type AppointmentStatus = "scheduled" | "checked_in" | "cancelled" | "no_show" | "completed";
+export type AppointmentStatus =
+  | "scheduled" | "confirmed" | "checked_in" | "cancelled" | "no_show" | "completed";
+
+/** Bookings still going to happen — the ones that can be checked in, moved or rung about. */
+export const BOOKED_STATUSES: readonly AppointmentStatus[] = ["scheduled", "confirmed"];
+export const isBooked = (status: AppointmentStatus) => BOOKED_STATUSES.includes(status);
 
 export interface Appointment {
   id: Id;
@@ -366,6 +326,54 @@ export interface Appointment {
 export type NewAppointment = Omit<
   Appointment, "id" | "tenant_id" | "status" | "patient_name" | "patient_mrn"
 >;
+
+/**
+ * A clinician's note on a patient. Never edited: a mistake is put right by a
+ * correction — another note naming this one in `amends_id`, by the same author.
+ */
+export interface PatientNote {
+  id: Id;
+  patient_id: Id;
+  body: string;
+  author_id: Id | null;
+  author_name: string;
+  /** the author's role when they wrote it */
+  author_role: Role | string;
+  /** `YYYY-MM-DD HH:mm`, clinic time */
+  created_at: string;
+  amends_id?: Id | null;
+}
+
+/** What came of one call. `rescheduled` is a reschedule booked on the call itself. */
+export type FollowUpOutcome =
+  | "confirmed" | "reschedule_required" | "rescheduled" | "no_answer" | "declined" | "call_back";
+
+/** Where a follow-up stands — worked out on the server from the booking and its last call. */
+export type FollowUpStatus =
+  | "pending" | "confirmed" | "reschedule_required" | "no_answer" | "declined" | "call_back";
+
+export interface FollowUpCall {
+  id: Id;
+  appointment_id: Id;
+  outcome: FollowUpOutcome;
+  notes: string;
+  called_by_id: Id | null;
+  called_by_name: string;
+  /** `YYYY-MM-DD HH:mm`, clinic time */
+  called_at: string;
+  /** only on a call that moved the booking — `YYYY-MM-DD HH:mm` */
+  moved_from?: string | null;
+  moved_to?: string | null;
+}
+
+/** One booking on the call list. */
+export interface FollowUp {
+  appointment: Appointment;
+  patient_phone: string;
+  status: FollowUpStatus;
+  attempts: number;
+  last_call: FollowUpCall | null;
+}
 
 export type QueueStatus = "waiting" | "called" | "in_consultation" | "completed" | "no_show" | "cancelled";
 

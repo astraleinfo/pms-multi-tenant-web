@@ -6,20 +6,17 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as api from "@/lib/api";
 import { qk } from "@/lib/query/keys";
 import {
-  usePlatformCatalog, usePlatformSnapshot, usePlatformTenantFeatures, usePlatformTenantUsers,
-  usePlatformSubscription,
+  usePlatformSnapshot, usePlatformSubscription, usePlatformTenantUsers,
 } from "@/lib/query/hooks";
-import { CLINICAL_TYPES } from "@/lib/data/catalog";
+import { CLINICAL_TYPES, MODULES } from "@/lib/data/catalog";
 import { currency, formatDate, pluralise, titleCase } from "@/lib/format";
-import {
-  PAID_FEATURES, consoleRows, type ConsoleRow, type Subscription,
-} from "@/lib/platform/subscriptions";
-import type { ClinicalTypeKey, TenantFeature, User } from "@/lib/types";
+import { consoleRows, type ConsoleRow } from "@/lib/platform/subscriptions";
+import type { ClinicalTypeKey, User } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Card, CardBody, CardHeader, CardFooter, Legend } from "@/components/ui/card";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, EmptyState, KV, Meter } from "@/components/ui/misc";
+import { Avatar, EmptyState, KV } from "@/components/ui/misc";
 import { Stat } from "@/components/ui/stat";
 import { Tabs } from "@/components/ui/tabs";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
@@ -32,9 +29,8 @@ import { ConsolePage, TenantAddress, useEnterClinic } from "@/components/platfor
 import { TenantStatusButton } from "@/components/platform/tenant-actions";
 import { ClinicBills } from "@/components/platform/clinic-bills";
 import { ImportButton } from "@/components/platform/import-dialog";
-import {
-  AccountBadge, BillingBadge, ModulePrice, ModuleSwitch, useModuleSwitch,
-} from "@/components/platform/module-controls";
+import { AccountBadge } from "@/components/platform/account-badge";
+import { SubscriptionPlan } from "@/components/domain/subscription";
 import {
   IconChevronLeft, IconInfo, IconLayers, IconReceipt, IconShield, IconUsers
 } from "@/components/ui/icons";
@@ -42,10 +38,9 @@ import {
 /* ==========================================================================
    One clinic, from above.
 
-   Everything the console knows about a tenant on one screen: its record, the
-   modules it holds and what each costs, the people inside it, and the switches
-   for all of that. It replaces two dialogs that each showed a third of this and
-   neither of which could show the third thing — what the clinic pays.
+   Everything the console knows about a tenant on one screen: its record, what
+   it pays and its bills, and the people inside it. It has every module, as
+   every clinic does, so there is nothing about modules to switch here.
    ========================================================================== */
 
 export default function TenantPage(props: PageProps<"/platform/tenants/[id]">) {
@@ -53,22 +48,20 @@ export default function TenantPage(props: PageProps<"/platform/tenants/[id]">) {
   return <ConsolePage><TenantConsole id={id} /></ConsolePage>;
 }
 
-type Tab = "details" | "modules" | "bills" | "staff";
+type Tab = "details" | "bills" | "staff";
 
 function TenantConsole({ id }: { id: string }) {
-  const { data: snapshot, isPending: snapshotPending } = usePlatformSnapshot();
-  const { data: entitlements, isPending: featuresPending } = usePlatformTenantFeatures(id);
-  const catalog = usePlatformCatalog();
-  const isPending = snapshotPending || catalog.isPending;
+  const { data: snapshot, isPending } = usePlatformSnapshot();
+  /* The clinic's own plan carries today's fee, so this page needs nothing
+     platform-wide to say what the clinic pays. */
+  const { data: subscription } = usePlatformSubscription(id);
+  const fee = subscription?.plan?.price_monthly ?? 0;
   const [tab, setTab] = React.useState<Tab>("details");
 
   const row = React.useMemo(() => {
     const snapshotRow = snapshot?.tenants.find((r) => r.tenant.id === id);
-    if (!snapshotRow) return null;
-    const byTenant = new Map<string, TenantFeature[]>();
-    if (!featuresPending) byTenant.set(id, entitlements);
-    return consoleRows([snapshotRow], byTenant, catalog.features)[0];
-  }, [snapshot, id, entitlements, featuresPending, catalog.features]);
+    return snapshotRow ? consoleRows([snapshotRow], fee)[0] : null;
+  }, [snapshot, id, fee]);
 
   const { data: referrals } = useQuery({
     queryKey: qk.referrals(id),
@@ -79,26 +72,28 @@ function TenantConsole({ id }: { id: string }) {
   if (isPending) return <PageLoader label="Opening the clinic…" />;
   if (!row) return <NotHere />;
 
-  const paidOn = [...row.billed, ...row.trialing, ...row.held];
+  const priced = !!subscription;
 
   return (
     <>
-      <TenantHeader row={row} referrals={referrals} />
+      <TenantHeader row={row} fee={priced ? fee : null} referrals={referrals} />
 
       <section className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Stat
-          label="Monthly subscription" value={currency(row.mrr)} unit={row.mrr ? "/mo" : undefined}
+          label="Monthly subscription"
+          value={priced ? currency(row.mrr) : "…"}
+          unit={row.mrr ? "/mo" : undefined}
           icon={<IconReceipt size={16} />}
-          hint={row.mrr ? `${currency(row.mrr * 12)} a year` : "Nothing is billed for this clinic"}
+          hint={
+            !priced ? "reading the plan…"
+              : row.mrr ? `${currency(row.mrr * 12)} a year`
+                : "Nothing is billed for this clinic"
+          }
         />
         <Stat
-          label="Paid modules" value={`${paidOn.length} / ${PAID_FEATURES.length}`}
+          label="Modules" value={MODULES.length}
           icon={<IconLayers size={16} />}
-          hint={
-            row.trialing.length
-              ? `${pluralise(row.trialing.length, "on trial", "on trial")}`
-              : `${row.locked.length} still locked`
-          }
+          hint="Every module, as every clinic has"
         />
         <Stat
           label="Staff accounts" value={row.users} icon={<IconUsers size={16} />}
@@ -116,14 +111,12 @@ function TenantConsole({ id }: { id: string }) {
         className="mb-5"
         tabs={[
           { value: "details", label: "Details", icon: <IconInfo size={15} /> },
-          { value: "modules", label: "Modules", icon: <IconLayers size={15} />, count: paidOn.length },
-          { value: "bills", label: "Bills", icon: <IconReceipt size={15} /> },
+          { value: "bills", label: "Subscription", icon: <IconReceipt size={15} /> },
           { value: "staff", label: "Staff", icon: <IconUsers size={15} />, count: row.users },
         ]}
       />
 
       {tab === "details" && <DetailsTab row={row} />}
-      {tab === "modules" && <ModulesTab row={row} loading={featuresPending} />}
       {tab === "bills" && <BillsTab tenantId={row.tenant.id} />}
       {tab === "staff" && <StaffTab row={row} />}
     </>
@@ -150,9 +143,10 @@ function NotHere() {
 /* ---- header ---------------------------------------------------------------- */
 
 function TenantHeader({
-  row, referrals,
+  row, fee, referrals,
 }: {
   row: ConsoleRow;
+  fee: number | null;
   referrals?: Awaited<ReturnType<typeof api.tenantReferrals>>;
 }) {
   const { enter, entering } = useEnterClinic();
@@ -206,9 +200,8 @@ function TenantHeader({
 
       {tenant.status === "suspended" && (
         <Callout tone="critical" title="Suspended" className="mb-6">
-          Its subdomain serves a notice rather than the app, nobody can sign in, and the{" "}
-          {currency(row.held.reduce((t, s) => t + s.feature.price_monthly, 0))}/mo of modules it
-          holds is collected by nobody until it is reactivated.
+          Its subdomain serves a notice rather than the app, nobody can sign in, and its{" "}
+          {fee === null ? "" : `${currency(fee)}/mo `}subscription is not billed until it is reactivated.
         </Callout>
       )}
     </>
@@ -291,7 +284,7 @@ function DetailsTab({ row }: { row: ConsoleRow }) {
             <Field label="City">
               <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Manchester" />
             </Field>
-            <Field label="Plan" help="A label for the commercial arrangement; it grants nothing on its own.">
+            <Field label="Plan" help="A label for the commercial arrangement. It grants nothing and limits nothing — every clinic has every module.">
               <Input value={plan} onChange={(e) => setPlan(e.target.value)} placeholder="Trial" />
             </Field>
 
@@ -361,149 +354,6 @@ function DetailsTab({ row }: { row: ConsoleRow }) {
             </dl>
           </CardBody>
         </Card>
-      </div>
-    </div>
-  );
-}
-
-/* ---- modules & billing ------------------------------------------------------ */
-
-/**
- * Which modules this clinic has, what each costs, and the platform's own switch
- * for every one of them.
- *
- * Entitlement, not configuration: switching one off closes its routes, it does
- * not delete anything. The core five have no switch, because the product does
- * not work without them and the server refuses anyway.
- */
-function ModulesTab({ row, loading }: { row: ConsoleRow; loading: boolean }) {
-  const modules = useModuleSwitch();
-  const tenant = row.tenant;
-
-  const core = row.subscriptions.filter((s) => s.feature.is_core);
-  const paid = row.subscriptions.filter((s) => !s.feature.is_core);
-  const trialValue = row.trialing.reduce((t, s) => t + s.feature.price_monthly, 0);
-  const lockedValue = row.locked.reduce((t, s) => t + s.feature.price_monthly, 0);
-
-  return (
-    <div className="space-y-5">
-      <Card>
-        <CardHeader
-          icon={<IconReceipt size={15} />} tone="ok" title="Subscription"
-          hint="What this clinic is charged a month, and what it is charged for."
-        />
-        <CardBody>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-5 lg:grid-cols-4">
-            <KV label="Billed now" value={`${currency(row.mrr)}/mo`} />
-            <KV label="On trial" value={trialValue ? `${currency(trialValue)}/mo` : "—"} />
-            <KV label="On hold" value={row.held.length ? `${currency(row.held.reduce((t, s) => t + s.feature.price_monthly, 0))}/mo` : "—"} />
-            <KV label="Not yet sold" value={lockedValue ? `${currency(lockedValue)}/mo` : "—"} />
-          </div>
-
-          <div className="mt-5">
-            <div className="mb-1.5 flex items-baseline justify-between gap-3 text-caption">
-              <span className="text-ink-2">Paid modules held</span>
-              <span className="tnum font-mono text-ink-3">
-                {paid.length - row.locked.length} of {paid.length}
-              </span>
-            </div>
-            <Meter
-              value={paid.length - row.locked.length}
-              max={paid.length}
-              tone="accent"
-            />
-          </div>
-
-          <p className="mt-4 text-caption leading-relaxed text-ink-3">
-            Figures are the catalogue price of what is switched on, not an invoice — the platform
-            has no billing service behind it yet. Enabling a module starts counting it from today;
-            a suspended clinic is held rather than billed.
-          </p>
-        </CardBody>
-      </Card>
-
-      <Card className="overflow-hidden">
-        <CardHeader
-          icon={<IconLayers size={15} />} tone="violet" title="Paid modules"
-          hint="The switch is the platform's. Nobody inside a clinic can throw it."
-          actions={loading ? <span className="text-caption text-ink-3">Reading entitlements…</span> : undefined}
-        />
-        <div className="divide-y divide-line-soft border-t border-line-soft">
-          {paid.map((line) => (
-            <ModuleRow
-              key={line.feature.key}
-              line={line}
-              busy={modules.isBusy(tenant.id, line.feature.key)}
-              onRequest={modules.request}
-            />
-          ))}
-        </div>
-      </Card>
-
-      <Card className="overflow-hidden">
-        <CardHeader
-          icon={<IconLayers size={15} />} tone="violet" title="Core modules"
-          hint="Seeded when the clinic was created. In every plan, and not switchable."
-        />
-        <div className="divide-y divide-line-soft border-t border-line-soft">
-          {core.map((line) => (
-            <ModuleRow
-              key={line.feature.key}
-              line={line}
-              busy={false}
-              onRequest={modules.request}
-            />
-          ))}
-        </div>
-      </Card>
-
-      {modules.dialog}
-    </div>
-  );
-}
-
-function ModuleRow({
-  line, busy, onRequest,
-}: {
-  line: Subscription;
-  busy: boolean;
-  onRequest: ReturnType<typeof useModuleSwitch>["request"];
-}) {
-  const { feature } = line;
-
-  return (
-    <div className="flex flex-wrap items-start justify-between gap-4 px-5 py-4">
-      <div className="min-w-0 flex-1">
-        {/* A core row said "Included", "Core", "Included in every plan" and
-            "Always on" — four chips for one fact. It keeps the one word that
-            names what it is; the switch column says the rest. */}
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-body font-medium text-ink">{feature.name}</p>
-          {feature.is_core
-            ? <Badge tone="neutral" size="sm" dot={false}>Core</Badge>
-            : <BillingBadge state={line.state} />}
-        </div>
-        <p className="mt-1 max-w-xl text-caption leading-snug text-ink-3">{feature.summary}</p>
-        {/* The activation date is only true of a module that is on: the server
-            keeps `activated_at` when one is switched off, so a dormant row
-            would otherwise claim to have been running since the day it was
-            last deactivated. */}
-        <p className="mt-1.5 text-caption text-ink-3">
-          Unlocks {feature.unlocks.join(", ")}
-          {line.since && line.state !== "dormant" && <> · on since {formatDate(line.since)}</>}
-        </p>
-      </div>
-
-      <div className="flex shrink-0 items-center gap-4">
-        {!feature.is_core && <ModulePrice feature={feature} size="sm" />}
-        <ModuleSwitch
-          tenant={line.tenant}
-          feature={feature}
-          status={line.status}
-          onRequest={onRequest}
-          busy={busy}
-          withTrial={!feature.is_core && line.status === "inactive"}
-        />
       </div>
     </div>
   );
@@ -614,15 +464,24 @@ function BillsTab({ tenantId }: { tenantId: string }) {
 
   if (isPending || !data || !clinic) return <PageLoader label="Reading the bills…" minHeight="30vh" />;
   return (
-    <Card>
-      <CardHeader icon={<IconReceipt size={15} />} tone="ok" title="Subscription bills" hint="Monthly bills for the paid modules switched on, and whether they are holding the clinic." />
-      <CardBody>
-        <ClinicBills
-          row={{ tenant: clinic, invoices: data.invoices, summary: data.summary }}
-          superAdmin={api.isSuperAdmin(platformUser)}
-          onChanged={() => { void queryClient.invalidateQueries({ queryKey: qk.platformRoot() }); }}
+    <div className="space-y-5">
+      <Card className="overflow-hidden">
+        <CardHeader
+          icon={<IconLayers size={15} />} tone="violet" title="Plan"
+          hint="One fee for the whole product, the same for every clinic. It is set in the console's settings."
         />
-      </CardBody>
-    </Card>
+        <SubscriptionPlan subscription={data} />
+      </Card>
+      <Card>
+        <CardHeader icon={<IconReceipt size={15} />} tone="ok" title="Subscription bills" hint="Monthly bills for the subscription fee, and whether they are holding the clinic." />
+        <CardBody>
+          <ClinicBills
+            row={{ tenant: clinic, invoices: data.invoices, summary: data.summary }}
+            superAdmin={api.isSuperAdmin(platformUser)}
+            onChanged={() => { void queryClient.invalidateQueries({ queryKey: qk.platformRoot() }); }}
+          />
+        </CardBody>
+      </Card>
+    </div>
   );
 }

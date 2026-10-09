@@ -5,14 +5,13 @@ import { useApp } from "@/lib/store/app-store";
 import { useClinicDb, useAnalytics } from "@/lib/query/hooks";
 import { selectAppointments, selectQueue, userName } from "@/lib/data/repository";
 import { duration, formatDate, formatTime12, minutesBetween, pluralise } from "@/lib/format";
-import type { QueueEntry } from "@/lib/types";
+import { isBooked, type QueueEntry } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button, ButtonLink, Segmented } from "@/components/ui/button";
 import { Badge, Numeral } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
 import { Stat } from "@/components/ui/stat";
-import { FeatureGate } from "@/components/domain/gates";
 import { StatusPill } from "@/components/domain/status";
 import { PatientRef } from "@/components/domain/patient";
 import { WalkInModal } from "@/components/domain/quick-actions";
@@ -23,11 +22,7 @@ import {
 type Filter = "live" | "all" | "closed";
 
 export default function QueuePage() {
-  return (
-    <FeatureGate feature="queue">
-      <QueueBoard />
-    </FeatureGate>
-  );
+  return <QueueBoard />;
 }
 
 const ORDER: Record<QueueEntry["status"], number> = {
@@ -70,7 +65,7 @@ function QueueBoard() {
 
   /* appointments booked for today that have not produced a queue entry yet */
   const arrivals = selectAppointments(db, t)
-    .filter((a) => a.date === today && a.status === "scheduled")
+    .filter((a) => a.date === today && isBooked(a.status))
     .sort((a, b) => a.time.localeCompare(b.time));
 
   const move = (q: QueueEntry, status: QueueEntry["status"], msg: string) => {

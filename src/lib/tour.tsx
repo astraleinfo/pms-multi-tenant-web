@@ -1,18 +1,19 @@
 "use client";
 
-import type { FeatureKey, Role } from "@/lib/types";
+import type { Role } from "@/lib/types";
 
 /* ==========================================================================
    The first-run tour.
 
    What it teaches is the thing this product is actually about: that the
-   address is the clinic, that a clinical type changes the forms, that an
-   entitlement locks whole modules, and that a clinic's own fields sit on top
-   of all three. Everything else here is chrome.
+   address is the clinic, that a clinical type changes the forms, and that a
+   clinic's own fields and configuration sit on top of both. Every clinic has
+   every module, so there is nothing about modules to explain beyond that.
+   Everything else here is chrome.
 
-   Steps are declarative and filtered before the tour starts — by role, by
-   entitlement, and by whether their anchor is on screen at all — so nobody is
-   ever shown a step pointing at something they cannot see. A step whose anchor
+   Steps are declarative and filtered before the tour starts — by role, and by
+   whether their anchor is on screen at all — so nobody is ever shown a step
+   pointing at something they cannot see. A step whose anchor
    never appears is skipped rather than left hanging.
    ========================================================================== */
 
@@ -31,10 +32,6 @@ export interface TourStep {
   placement?: "top" | "bottom" | "left" | "right";
   /** only for these roles */
   roles?: Role[];
-  /** only when this module is switched on */
-  feature?: FeatureKey;
-  /** only when it is *not* — for the step that explains locked modules */
-  whenLocked?: FeatureKey;
 }
 
 export interface TourContext {
@@ -42,9 +39,6 @@ export interface TourContext {
   clinicName: string;
   clinicalLabel: string;
   examLabel: string;
-  hasFeature: (key: FeatureKey) => boolean;
-  /** true when at least one module in the nav is locked */
-  anyLocked: boolean;
 }
 
 export function buildTour(ctx: TourContext): TourStep[] {
@@ -73,17 +67,11 @@ export function buildTour(ctx: TourContext): TourStep[] {
       id: "modules",
       anchor: "rail-nav",
       placement: "right",
-      title: ctx.anyLocked ? "Modules, and the ones you do not have" : "The modules you run",
-      body: ctx.anyLocked ? (
+      title: "Every module, for every clinic",
+      body: (
         <>
-          Patients, appointments, queue, consultation and prescriptions are always on. The rest are entitlements —
-          a padlock means this clinic has not been given that one. Clicking it opens the module&rsquo;s own page:
-          what it does, what it costs, and how to ask for it.
-        </>
-      ) : (
-        <>
-          Patients, appointments, queue, consultation and prescriptions are always on; this clinic has the rest as
-          well. Entitlements are enforced by the server, not by what appears here.
+          From patients to billing and reports, every clinic on Astrale has every module. What this list shows
+          you follows your role, never your clinic — and the server checks the same permissions on every request.
         </>
       ),
     },
@@ -91,11 +79,12 @@ export function buildTour(ctx: TourContext): TourStep[] {
       id: "clinical-type",
       anchor: "topbar-context",
       placement: "bottom",
-      title: `${ctx.clinicalLabel} is not the same as what you have bought`,
+      title: `${ctx.clinicalLabel} shapes the work, not the menu`,
       body: (
         <>
-          The clinical type decides the shape of the work — here, {ctx.examLabel.toLowerCase()} — while entitlements
-          decide which modules exist at all. The two never touch: a feature check never reads your discipline.
+          The clinical type decides what is recorded inside each module — here, {ctx.examLabel.toLowerCase()} — and
+          the charts and reports that follow from it. It never decides which modules exist: a dental practice, an
+          eye centre and a skin clinic have the same ones.
         </>
       ),
     },
@@ -117,7 +106,6 @@ export function buildTour(ctx: TourContext): TourStep[] {
       href: "/queue",
       anchor: "queue-board",
       placement: "top",
-      feature: "queue",
       title: "The day runs on the board",
       body: (
         <>
@@ -131,7 +119,6 @@ export function buildTour(ctx: TourContext): TourStep[] {
       href: "/patients",
       anchor: "patients-search",
       placement: "bottom",
-      feature: "patient",
       roles: ["tenant_admin", "receptionist", "doctor", "pharmacist", "lab_tech"],
       title: "The register, and the fields your clinic added",
       body: (
@@ -143,17 +130,17 @@ export function buildTour(ctx: TourContext): TourStep[] {
       ),
     },
     {
-      id: "entitlements",
-      href: "/settings?tab=features",
-      anchor: "settings-features",
+      id: "customisation",
+      href: "/settings?tab=fields",
+      anchor: "settings-fields",
       placement: "top",
       roles: ["tenant_admin"],
-      title: "What this clinic has, and what it has not",
+      title: "Your clinic's own fields",
       body: (
         <>
-          Every module is listed here with its price and whether it is on. The switch itself is the platform&rsquo;s:
-          a super admin grants a module, and it unlocks for everyone on the next request. The clinic&rsquo;s own
-          custom fields live on the next tab.
+          A field added here sits on top of the common and {ctx.clinicalLabel.toLowerCase()} sets, and appears on
+          the forms straight away. Configuration — hours, prefixes, tax, currency — changes how each module
+          behaves. Neither ever hides a module.
         </>
       ),
     },
@@ -162,7 +149,7 @@ export function buildTour(ctx: TourContext): TourStep[] {
       title: "That is the shape of it",
       body: (
         <>
-          Everything else follows the same four ideas. You can run this again whenever you like — it is under your
+          Everything else follows the same three ideas. You can run this again whenever you like — it is under your
           name in the top right, and in Settings.
         </>
       ),
@@ -171,8 +158,6 @@ export function buildTour(ctx: TourContext): TourStep[] {
 
   const yours = steps.filter((step) => {
     if (step.roles && !step.roles.includes(ctx.role) && ctx.role !== "tenant_admin") return false;
-    if (step.feature && !ctx.hasFeature(step.feature)) return false;
-    if (step.whenLocked && ctx.hasFeature(step.whenLocked)) return false;
     return true;
   });
 

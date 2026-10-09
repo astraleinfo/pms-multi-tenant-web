@@ -74,7 +74,7 @@ export function InvoiceComposer({
   );
   /* The tariff, for the picker below and for the one line a walk-in starts
      with. Prices are the practice admin's decision; this only quotes them. */
-  const { data: tariff } = useServicePrices({ active: true });
+  const { data: tariff, isPending: tariffPending } = useServicePrices({ active: true });
 
   const suggestions = React.useMemo<Draft[]>(() => {
     if (!encounterId) {
@@ -145,11 +145,13 @@ export function InvoiceComposer({
 
   React.useEffect(() => {
     if (!open || seeded.current) return;
-    /* Nothing to seed from yet: a visit whose suggestions are still in flight. */
-    if (encounterId && suggestionsPending) return;
+    /* Nothing to seed from yet: a visit whose suggestions are still in flight,
+       or a walk-in whose consultation is priced from a tariff still loading —
+       seeding then would pin the line at zero for the rest of this opening. */
+    if (encounterId ? suggestionsPending : tariffPending) return;
     setLines(suggestions);
     seeded.current = true;
-  }, [open, suggestions, suggestionsPending, encounterId]);
+  }, [open, suggestions, suggestionsPending, tariffPending, encounterId]);
 
   const patch = (key: string, p: Partial<Draft>) =>
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...p } : l)));
@@ -261,7 +263,13 @@ export function InvoiceComposer({
           </p>
         )}
 
-        {lines.length === 0 && !suggestionsPending && (
+        {!encounterId && tariffPending && lines.length === 0 && (
+          <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-6 text-center text-label text-ink-3">
+            Reading the clinic’s prices…
+          </p>
+        )}
+
+        {lines.length === 0 && !(encounterId ? suggestionsPending : tariffPending) && (
           <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-6 text-center text-label text-ink-3">
             No lines yet — add one below.
           </p>

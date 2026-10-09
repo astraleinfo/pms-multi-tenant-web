@@ -48,7 +48,7 @@ export default function EncounterPage(props: PageProps<"/consultations/[id]">) {
 }
 
 function EncounterView({ id }: { id: string }) {
-  const { session, hasFeature, updateEncounter, notify } = useApp();
+  const { session, updateEncounter, notify } = useApp();
   const db = useClinicDb();
   const { tenant } = useTenant();
   const t = session.tenantId;
@@ -103,7 +103,7 @@ function EncounterView({ id }: { id: string }) {
                 <IconCheck size={15} /> Sign encounter
               </Button>
             )}
-            {hasFeature("billing") && invoices.length === 0 && (
+            {invoices.length === 0 && (
               <Button variant="secondary" onClick={() => setBilling(true)}>
                 <IconReceipt size={15} /> Raise invoice
               </Button>
@@ -194,32 +194,30 @@ function EncounterView({ id }: { id: string }) {
             </CardBody>
           </Card>
 
-          {hasFeature("lab") && (
-            <Card>
-              <CardHeader tone="info" icon={<IconFlask size={16} />} title="Lab orders raised here"
-                          hint="Results reach the patient record only after verification." />
-              <CardBody className="pt-0">
-                {labs.length === 0 ? (
-                  <EmptyState compact icon={<IconFlask size={20} />} title="No tests ordered at this visit" />
-                ) : (
-                  <ul className="space-y-2.5">
-                    {labs.map((l) => (
-                      <li key={l.id} className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--r)] border border-line px-3 py-2.5">
-                        <div className="min-w-0">
-                          <p className="truncate text-label font-medium text-ink">{l.test_name}</p>
-                          <p className="truncate text-caption text-ink-3">{l.panel} · {l.test_code}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <StatusPill kind="lab" status={l.status} size="sm" />
-                          <ButtonLink href="/lab" variant="ghost" size="sm">Open <IconArrowRight size={13} /></ButtonLink>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardBody>
-            </Card>
-          )}
+          <Card>
+            <CardHeader tone="info" icon={<IconFlask size={16} />} title="Lab orders raised here"
+                        hint="Results reach the patient record only after verification." />
+            <CardBody className="pt-0">
+              {labs.length === 0 ? (
+                <EmptyState compact icon={<IconFlask size={20} />} title="No tests ordered at this visit" />
+              ) : (
+                <ul className="space-y-2.5">
+                  {labs.map((l) => (
+                    <li key={l.id} className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--r)] border border-line px-3 py-2.5">
+                      <div className="min-w-0">
+                        <p className="truncate text-label font-medium text-ink">{l.test_name}</p>
+                        <p className="truncate text-caption text-ink-3">{l.panel} · {l.test_code}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <StatusPill kind="lab" status={l.status} size="sm" />
+                        <ButtonLink href="/lab" variant="ghost" size="sm">Open <IconArrowRight size={13} /></ButtonLink>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardBody>
+          </Card>
         </div>
 
         <aside className="space-y-5">
@@ -244,42 +242,40 @@ function EncounterView({ id }: { id: string }) {
             </Card>
           )}
 
-          {hasFeature("billing") && (
-            <Card>
-              <CardHeader tone="ok" icon={<IconReceipt size={16} />} title="Billing" />
-              <CardBody className="pt-0">
-                {invoices.length === 0 ? (
-                  <>
-                    <p className="text-label leading-relaxed text-ink-2">
-                      Nothing has been billed for this visit. Line items can be suggested from the consultation,
-                      any lab orders and anything dispensed.
-                    </p>
-                    <Button variant="primary" size="sm" className="mt-3 w-full" onClick={() => setBilling(true)}>
-                      Compose invoice
-                    </Button>
-                  </>
-                ) : (
-                  <ul className="space-y-2">
-                    {invoices.map((inv) => {
-                      const tot = invoiceTotals(inv);
-                      return (
-                        <li key={inv.id}>
-                          <ButtonLink href={`/billing/${inv.id}`} variant="secondary" size="sm" className="w-full justify-between">
-                            <span className="tnum font-mono">{inv.number}</span>
-                            <span className="tnum font-mono">{currency(tot.total)}</span>
-                          </ButtonLink>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </CardBody>
-            </Card>
-          )}
+          <Card>
+            <CardHeader tone="ok" icon={<IconReceipt size={16} />} title="Billing" />
+            <CardBody className="pt-0">
+              {invoices.length === 0 ? (
+                <>
+                  <p className="text-label leading-relaxed text-ink-2">
+                    Nothing has been billed for this visit. Line items can be suggested from the consultation,
+                    any lab orders and anything dispensed.
+                  </p>
+                  <Button variant="primary" size="sm" className="mt-3 w-full" onClick={() => setBilling(true)}>
+                    Compose invoice
+                  </Button>
+                </>
+              ) : (
+                <ul className="space-y-2">
+                  {invoices.map((inv) => {
+                    const tot = invoiceTotals(inv);
+                    return (
+                      <li key={inv.id}>
+                        <ButtonLink href={`/billing/${inv.id}`} variant="secondary" size="sm" className="w-full justify-between">
+                          <span className="tnum font-mono">{inv.number}</span>
+                          <span className="tnum font-mono">{currency(tot.total)}</span>
+                        </ButtonLink>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </CardBody>
+          </Card>
         </aside>
       </div>
 
-      {hasFeature("billing") && patient && (
+      {patient && (
         <InvoiceComposer
           open={billing}
           onClose={() => setBilling(false)}

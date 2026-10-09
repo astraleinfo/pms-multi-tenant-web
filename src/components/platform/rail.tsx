@@ -12,7 +12,7 @@ import { Avatar } from "@/components/ui/misc";
 import { Menu, MenuItem, MenuSep } from "@/components/ui/modal";
 import { Tooltip } from "@/components/ui/info";
 import {
-  IconGauge, IconLayers, IconLogout, IconPulse, IconReceipt, IconSettings, IconSidebar, IconUsers,
+  IconGauge, IconLogout, IconPulse, IconReceipt, IconSettings, IconSidebar, IconUsers,
 } from "@/components/ui/icons";
 
 /** The platform's own mark — static, not a clinic's, so it lives as an asset
@@ -62,14 +62,8 @@ export const SECTIONS = [
     href: "/platform/settings" as const,
     label: "Settings",
     icon: <IconSettings size={17} />,
-    blurb: "New-clinic defaults, support contact",
+    blurb: "Subscription fee, new-clinic defaults, support contact",
     superAdmin: true,
-  },
-  {
-    href: "/platform/modules" as const,
-    label: "Modules & pricing",
-    icon: <IconLayers size={17} />,
-    blurb: "Pricing, subscriptions, access",
   },
   {
     href: "/platform/billing" as const,

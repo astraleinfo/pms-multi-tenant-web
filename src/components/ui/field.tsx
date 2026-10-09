@@ -3,20 +3,10 @@
 import * as React from "react";
 import { cn } from "@/lib/cn";
 import { IconCheck, IconChevronDown, IconEye, IconEyeOff, IconSearch } from "./icons";
+import { controlBase } from "./control";
+import { DateInput, DateTimeInput, Panel, TimeInput } from "./picker";
 
-/**
- * Placeholder text is a token, not a faded copy of the muted ink. Diluting
- * `--ink-3` to 80% put it at 4.3:1 — under AA, and it is often the only hint
- * of what a field wants. `--ink-placeholder` is tuned to clear 4.5:1 against
- * both the live and the disabled field ground.
- */
-const controlBase =
-  "w-full rounded-[var(--r)] border border-line-strong bg-surface text-ink " +
-  "placeholder:text-ink-placeholder shadow-[inset_0_1px_2px_hsl(var(--sh)/.04)] " +
-  "transition-[border-color,box-shadow,background-color] duration-150 ease-[var(--ease-brand)] " +
-  "focus:outline-none focus:border-focus focus:shadow-[var(--focus-ring)] " +
-  "disabled:bg-disabled-surface disabled:text-disabled-ink disabled:border-disabled-border " +
-  "disabled:cursor-not-allowed";
+export { Select } from "./picker";
 
 export function Label({
   htmlFor, children, required, hint, className,
@@ -72,6 +62,12 @@ export function Field({
 
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean }>(
   function Input({ className, invalid, ...rest }, ref) {
+    /* The browser's own date and time pickers are drawn by the operating
+       system and ignore the theme, so those three types get ours instead —
+       same value strings, same change event, so no call site has to know. */
+    if (rest.type === "date") return <DateInput className={className} invalid={invalid} {...rest} />;
+    if (rest.type === "time") return <TimeInput className={className} invalid={invalid} {...rest} />;
+    if (rest.type === "datetime-local") return <DateTimeInput className={className} invalid={invalid} {...rest} />;
     return (
       <input
         ref={ref}
@@ -211,28 +207,6 @@ export function NumberInput({
   );
 }
 
-export function Select({
-  className, invalid, children, ...rest
-}: React.SelectHTMLAttributes<HTMLSelectElement> & { invalid?: boolean }) {
-  return (
-    <div className="relative">
-      <select
-        className={cn(
-          controlBase, "h-9.5 appearance-none pl-3 pr-9 text-body",
-          invalid && "border-critical", className,
-        )}
-        {...rest}
-      >
-        {children}
-      </select>
-      <IconChevronDown
-        size={16}
-        className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-3"
-      />
-    </div>
-  );
-}
-
 export function SearchInput({
   className, wrapperClassName, ...rest
 }: React.InputHTMLAttributes<HTMLInputElement> & { wrapperClassName?: string }) {
@@ -282,10 +256,12 @@ export function Combobox({
   invalid?: boolean;
   className?: string;
 }) {
+  const auto = React.useId();
+  const listId = `${id ?? auto}-listbox`;
+  const input = React.useRef<HTMLInputElement>(null);
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const [active, setActive] = React.useState(0);
-  const wrap = React.useRef<HTMLDivElement>(null);
 
   const selected = options.find((o) => o.value === value) ?? null;
 
@@ -303,41 +279,47 @@ export function Combobox({
 
   React.useEffect(() => { setActive(0); }, [query, open]);
 
+  /* keep the highlighted row in view as the keyboard moves it */
   React.useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (wrap.current && !wrap.current.contains(e.target as Node)) {
-        setOpen(false);
-        setQuery("");
-      }
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [open]);
+    if (open) document.getElementById(`${listId}-${active}`)?.scrollIntoView({ block: "nearest" });
+  }, [open, active, listId]);
+
+  const close = React.useCallback(() => {
+    setOpen(false);
+    setQuery("");
+  }, []);
 
   const take = (option: ComboOption) => {
     onChange(option.value);
-    setOpen(false);
-    setQuery("");
+    close();
   };
 
   return (
-    <div className={cn("relative", className)} ref={wrap}>
+    <div className={cn("relative", className)}>
       <input
+        ref={input}
         id={id}
         role="combobox"
         aria-expanded={open}
-        aria-controls={id ? `${id}-listbox` : undefined}
+        aria-controls={open ? listId : undefined}
+        aria-activedescendant={open && matches[active] ? `${listId}-${active}` : undefined}
+        aria-autocomplete="list"
         autoComplete="off"
         disabled={disabled}
         value={text}
         placeholder={selected ? selected.label : placeholder}
         onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
+        /* Focus stays here after a pick, so focusing again never fires — a
+           click has to be able to open the list a second time on its own. */
+        onClick={() => setOpen(true)}
+        /* Leaving the field leaves the list. The rows take the mouse on
+           mousedown and keep focus here, so a pick never blurs it. */
+        onBlur={close}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown" || e.key === "ArrowUp") {
             e.preventDefault();
-            setOpen(true);
+            if (!open) { setOpen(true); return; }
             setActive((i) => {
               const next = e.key === "ArrowDown" ? i + 1 : i - 1;
               if (!matches.length) return 0;
@@ -351,9 +333,10 @@ export function Combobox({
             return;
           }
           if (e.key === "Escape" && open) {
+            /* this list, not the dialog it may be sitting in */
             e.preventDefault();
-            setOpen(false);
-            setQuery("");
+            e.stopPropagation();
+            close();
           }
         }}
         className={cn(
@@ -363,41 +346,49 @@ export function Combobox({
       />
       <IconChevronDown
         size={16}
-        className="pointer-events-none absolute right-2.5 top-[1.1875rem] -translate-y-1/2 text-ink-3"
+        className={cn(
+          "pointer-events-none absolute right-2.5 top-[1.1875rem] -translate-y-1/2 text-ink-3 transition-transform duration-150",
+          open && "rotate-180",
+        )}
       />
 
-      {open && (
-        <ul
-          id={id ? `${id}-listbox` : undefined}
-          role="listbox"
-          className="pop absolute left-0 right-0 z-40 mt-1.5 max-h-64 overflow-y-auto rounded-[var(--r)] border border-line bg-surface p-1.5 shadow-e3"
-        >
+      {/* In the top layer rather than under the field, so a dialog's
+          scrolling body cannot cut the list off at its footer. */}
+      <Panel
+        open={open}
+        anchor={input}
+        onClose={close}
+        className="p-1.5"
+        /* a press on the list, its scrollbar included, must not take focus
+           from the field — that would close it mid-scroll */
+        onMouseDown={(e) => e.preventDefault()}
+      >
+        <ul id={listId} role="listbox" aria-labelledby={id}>
           {matches.length === 0 && (
             <li className="px-3 py-5 text-center text-label text-ink-3">{emptyText}</li>
           )}
           {matches.map((option, i) => (
-            <li key={option.value} role="option" aria-selected={option.value === value}>
-              <button
-                type="button"
-                /* mousedown, not click: the input blurs first otherwise and the
-                   list is gone before the click lands */
-                onMouseDown={(e) => { e.preventDefault(); take(option); }}
-                onMouseEnter={() => setActive(i)}
-                className={cn(
-                  "flex w-full items-center justify-between gap-3 rounded-[var(--r-sm)] px-2.5 py-2 text-left transition-colors",
-                  i === active ? "bg-hover" : "",
-                  option.value === value ? "bg-accent-soft" : "",
-                )}
-              >
-                <span className="min-w-0 flex-1 truncate text-label text-ink">{option.label}</span>
-                {option.hint && (
-                  <span className="shrink-0 text-caption text-ink-3">{option.hint}</span>
-                )}
-              </button>
+            <li
+              key={option.value}
+              id={`${listId}-${i}`}
+              role="option"
+              aria-selected={option.value === value}
+              onMouseDown={(e) => { e.preventDefault(); take(option); }}
+              onMouseMove={() => { if (active !== i) setActive(i); }}
+              className={cn(
+                "flex cursor-pointer items-center justify-between gap-3 rounded-[var(--r-sm)] px-2.5 py-2 transition-colors",
+                i === active ? "bg-hover" : "",
+                option.value === value ? "bg-accent-soft" : "",
+              )}
+            >
+              <span className="min-w-0 flex-1 truncate text-label text-ink">{option.label}</span>
+              {option.hint && (
+                <span className="shrink-0 text-caption text-ink-3">{option.hint}</span>
+              )}
             </li>
           ))}
         </ul>
-      )}
+      </Panel>
     </div>
   );
 }

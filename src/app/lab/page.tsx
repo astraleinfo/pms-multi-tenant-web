@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
 import { Stat } from "@/components/ui/stat";
 import { Tabs } from "@/components/ui/tabs";
-import { FeatureGate, RoleGate } from "@/components/domain/gates";
+import { RoleGate } from "@/components/domain/gates";
 import { StatusPill } from "@/components/domain/status";
 import { PatientRef } from "@/components/domain/patient";
 import { LabOrderModal } from "@/components/domain/lab-order-detail";
@@ -88,9 +88,7 @@ function LabRequester({ id }: { id: string }) {
 export default function LabPage() {
   return (
     <RoleGate allow={["lab_tech", "doctor"]}>
-      <FeatureGate feature="lab">
-        <Lab />
-      </FeatureGate>
+      <Lab />
     </RoleGate>
   );
 }

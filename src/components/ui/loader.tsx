@@ -71,6 +71,54 @@ export function PageLoader({
   );
 }
 
+/**
+ * A screen in the shape of the screen that is coming: the page header, the
+ * toolbar under it, and a card of rows — the form nearly every page in the
+ * clinic takes. The rail and topbar are already there, so the wait reads as
+ * this page filling in rather than the app going blank.
+ */
+export function PageSkeleton({ className }: { className?: string }) {
+  return (
+    <div role="status" aria-live="polite" aria-busy="true" className={cn("fade", className)}>
+      <span className="sr-only">Loading</span>
+      <div aria-hidden>
+        {/* the header: title and its meta line, the page's action on the right */}
+        <div className="mb-block flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
+          <div className="min-w-0 flex-1 space-y-2.5">
+            <Skeleton className="h-7 w-52 max-w-full rounded-[var(--r)] bg-surface-inset" />
+            <Skeleton className="h-3 w-72 max-w-full bg-surface-inset" />
+          </div>
+          <Skeleton className="h-9.5 w-32 rounded-[var(--r)] bg-surface-inset" />
+        </div>
+
+        {/* the toolbar: a search and a filter, as the empty fields they will be */}
+        <div className="mb-block flex flex-wrap items-center gap-2.5">
+          <div className="flex h-9.5 w-full max-w-80 items-center gap-2.5 rounded-[var(--r)] border border-line bg-surface px-3">
+            <Skeleton className="h-3.5 w-3.5 rounded-full" />
+            <Skeleton className="h-3 w-40" />
+          </div>
+          <div className="flex h-9.5 w-36 items-center justify-between rounded-[var(--r)] border border-line bg-surface px-3">
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="h-2.5 w-2.5" />
+          </div>
+        </div>
+
+        <Card className="overflow-hidden">
+          <div className="flex items-center justify-between gap-4 border-b border-line-soft px-4 py-3.5">
+            <Skeleton className="h-4 w-36" />
+            <Skeleton className="h-3 w-20" />
+          </div>
+          <table className="w-full">
+            <tbody className="divide-y divide-line-soft">
+              <TableSkeletonRows rows={7} columns={5} />
+            </tbody>
+          </table>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 /** The same, filling the viewport — the shell's stages before there is a shell. */
 export function StageLoader({ label, className }: { label?: string; className?: string }) {
   return <PageLoader label={label} minHeight="100dvh" className={cn("bg-ground", className)} />;

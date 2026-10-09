@@ -111,6 +111,21 @@ export function toMinutes(hhmm: string) {
   return m ? Number(m[1]) * 60 + Number(m[2]) : -1;
 }
 
+/**
+ * The clinic's wall clock, "HH:mm". "Today" already comes from the clinic; a
+ * slot that has gone has to be judged by the clinic's clock too, not by
+ * wherever the browser happens to be.
+ */
+export function clinicClock(timezone?: string) {
+  const options: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", hourCycle: "h23" };
+  try {
+    return new Intl.DateTimeFormat("en-GB", { ...options, timeZone: timezone || undefined }).format(new Date());
+  } catch {
+    /* an unknown zone name: the browser's own clock beats no clock at all */
+    return new Intl.DateTimeFormat("en-GB", options).format(new Date());
+  }
+}
+
 export function formatTime12(hhmm: string) {
   const mins = toMinutes(hhmm);
   if (mins < 0) return hhmm;

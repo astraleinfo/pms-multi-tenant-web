@@ -2,8 +2,11 @@
 
 import * as React from "react";
 import Link from "next/link";
+import * as api from "@/lib/api";
+import { openPdfBlob } from "@/lib/pdf";
+import { PatientConsents } from "@/components/consent/patient-consents";
 import { useApp, useTenant } from "@/lib/store/app-store";
-import { useClinicDb, usePatient, usePatientHistory, useSchema } from "@/lib/query/hooks";
+import { useClinicDb, usePatient, usePatientHistory, usePatientNotes, useSchema } from "@/lib/query/hooks";
 import {
   invoiceTotals, selectAppointments, selectEncounters,
   selectInvoices, selectLabOrders, selectPrescriptions, userName,
@@ -13,7 +16,7 @@ import {
   addDays, age, currency, daysBetween, formatDate, formatTime12, pluralise, relativeDay,
   today as todayIso,
 } from "@/lib/format";
-import type { HistoryEvent, Patient } from "@/lib/types";
+import { isBooked, type HistoryEvent, type Patient } from "@/lib/types";
 import { PageHeader, MetaItem } from "@/components/ui/page-header";
 import { Card, CardBody, CardFooter, CardHeader, Legend } from "@/components/ui/card";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -31,26 +34,34 @@ import { AllergyFlag } from "@/components/domain/patient";
 import { PatientAccountSummary } from "@/components/domain/patient-account";
 import { AppointmentModal } from "@/components/domain/quick-actions";
 import { ClinicalExamPanel } from "@/components/domain/clinical-exam";
+import { LatestNote, PatientNotes } from "@/components/domain/patient-notes";
 import {
   IconAlert, IconCalendar, IconCard, IconCheck, IconChevronLeft, IconChevronRight, IconClock,
-  IconEdit, IconFlask, IconMail, IconPhone, IconPin, IconPrint, IconReceipt, IconRx,
-  IconStethoscope, IconUser, IconUsers,
+  IconEdit, IconFlask, IconMail, IconNote, IconPhone, IconPin, IconPrint, IconReceipt, IconRx,
+  IconShield, IconStethoscope, IconUser, IconUsers,
 } from "@/components/ui/icons";
 
-type Tab = "overview" | "history" | "clinical" | "orders" | "billing" | "edit";
+type Tab = "overview" | "history" | "clinical" | "notes" | "orders" | "consent" | "billing" | "edit";
 
 /** Held in the Contact panel instead of among the record's rows. */
 const CONTACT_KEYS = new Set(["phone", "email", "address"]);
 
+const TABS: readonly Tab[] = ["overview", "history", "clinical", "notes", "orders", "consent", "billing", "edit"];
+
 export default function PatientPage(props: PageProps<"/patients/[id]">) {
   const { id } = React.use(props.params);
+  const sp = React.use(props.searchParams);
+  /* a screen that sends someone back here can say which tab — the consent
+     signing screen returns to Consent, not to the top of the record */
+  const asked = typeof sp.tab === "string" ? sp.tab : "";
+  const initial: Tab = (TABS as readonly string[]).includes(asked) ? (asked as Tab) : "overview";
   /* One record, read by id. A patient in another clinic answers 404, which is
      the same answer as one that does not exist — deliberately. */
   const { data: patient, isPending } = usePatient(id);
 
   if (isPending) return <PageLoader label="Opening the record…" />;
   if (!patient) return <NotHere />;
-  return <PatientRecord patient={patient} />;
+  return <PatientRecord patient={patient} initial={initial} />;
 }
 
 function NotHere() {
@@ -83,15 +94,29 @@ function standing(patient: Patient): { tone: Tone; label: string } {
     : { tone: "ok", label: "Active" };
 }
 
-function PatientRecord({ patient }: { patient: Patient }) {
-  const { session, today, updatePatient, notify, hasFeature } = useApp();
+function PatientRecord({ patient, initial }: { patient: Patient; initial: Tab }) {
+  const { session, today, updatePatient, notify, can } = useApp();
   const db = useClinicDb();
   const { tenant } = useTenant();
   const t = session.tenantId;
   const id = patient.id;
 
-  const [tab, setTab] = React.useState<Tab>("overview");
+  const [tab, setTab] = React.useState<Tab>(initial);
   const [booking, setBooking] = React.useState(false);
+  const [printing, setPrinting] = React.useState(false);
+
+  /* Not the screen printed: a document drawn on the server from the record,
+     on the clinic's letterhead, with only the sections this role may read. */
+  const printRecord = async () => {
+    setPrinting(true);
+    try {
+      openPdfBlob(await api.getPatientRecordPdf(id));
+    } catch {
+      notify({ tone: "warn", title: "Could not prepare the record for printing" });
+    } finally {
+      setPrinting(false);
+    }
+  };
 
   const { data: schema } = useSchema("patient");
   const encounters = selectEncounters(db, t).filter((e) => e.patient_id === id)
@@ -102,10 +127,14 @@ function PatientRecord({ patient }: { patient: Patient }) {
   const appts = selectAppointments(db, t).filter((a) => a.patient_id === id)
     .sort((a, b) => b.date.localeCompare(a.date));
   const upcoming = appts
-    .filter((a) => a.date >= today && a.status === "scheduled")
+    .filter((a) => a.date >= today && isBooked(a.status))
     .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
   /* §3.13 — composed on the server, across every module, in one read. */
   const { data: history = [] } = usePatientHistory(id);
+  /* Notes are clinical: read under the consultation's permission, so a role
+     that cannot read encounters is not shown the tab or sent the notes. */
+  const seesNotes = can("encounter:read");
+  const { data: notes = [] } = usePatientNotes(id);
 
   const owing = invoices.filter((i) => i.status !== "void").reduce((s, i) => s + invoiceTotals(i).balance, 0);
   const clinical = CLINICAL_TYPES.find((c) => c.key === tenant.clinical_type)!;
@@ -145,9 +174,9 @@ function PatientRecord({ patient }: { patient: Patient }) {
   /* What is open on this patient.
      Not a restatement of the tab counts — those say how much is filed, this
      says how much is unfinished, which is the only one of the two that asks
-     anybody to do something. A module the clinic does not hold is silent:
-     prescriptions stay "pending" forever in a practice with no dispensary,
-     and nagging about that would be nagging about nothing. */
+     anybody to do something. Lab and money follow the reader's own
+     permissions: a role that cannot read the lab is not loaded its orders,
+     and an empty pane would read as "nothing ordered". */
   const followUp = React.useMemo(() => {
     const last = encounters.find((e) => e.follow_up_days);
     if (!last?.follow_up_days) return null;
@@ -156,10 +185,10 @@ function PatientRecord({ patient }: { patient: Patient }) {
   }, [encounters, today]);
 
   const unsigned = encounters.filter((e) => e.status === "draft").length;
-  const undispensed = hasFeature("pharmacy")
-    ? prescriptions.filter((r) => r.status !== "dispensed").length
-    : 0;
-  const unverified = hasFeature("lab") ? labs.filter((l) => l.status !== "verified").length : 0;
+  const seesLab = can("lab:read");
+  const seesBilling = can("billing:read");
+  const undispensed = prescriptions.filter((r) => r.status !== "dispensed").length;
+  const unverified = labs.filter((l) => l.status !== "verified").length;
 
   /* Who actually sees this person.
      The visits table names a clinician per row for the last five; this is the
@@ -200,7 +229,7 @@ function PatientRecord({ patient }: { patient: Patient }) {
           label: `${pluralise(unverified, "lab result")} not yet verified`,
         }]
       : []),
-    ...(hasFeature("billing") && owing > 0.005
+    ...(owing > 0.005
       ? [{
           key: "owing", icon: <IconReceipt size={16} />, tab: "billing" as Tab,
           label: `${currency(owing)} outstanding on this account`,
@@ -212,8 +241,14 @@ function PatientRecord({ patient }: { patient: Patient }) {
     { value: "overview", label: "Overview", icon: <IconUser size={15} /> },
     { value: "history", label: "History", icon: <IconClock size={15} />, count: history.length },
     { value: "clinical", label: "Encounters", icon: <IconStethoscope size={15} />, count: encounters.length },
+    ...(seesNotes
+      ? [{ value: "notes" as Tab, label: "Notes", icon: <IconNote size={15} />, count: notes.length }]
+      : []),
     { value: "orders", label: "Prescriptions & lab", icon: <IconRx size={15} />, count: prescriptions.length + labs.length },
-    ...(hasFeature("billing")
+    ...(can("consent:read")
+      ? [{ value: "consent" as Tab, label: "Consent", icon: <IconShield size={15} /> }]
+      : []),
+    ...(seesBilling
       ? [{ value: "billing" as Tab, label: "Financial", icon: <IconReceipt size={15} />, count: invoices.length }]
       : []),
     { value: "edit", label: "Edit record", icon: <IconEdit size={15} /> },
@@ -232,8 +267,11 @@ function PatientRecord({ patient }: { patient: Patient }) {
                 orders, invoices — is a tab three inches to the left. Printing
                 is the only thing that was not, so it is the only thing left,
                 and a one-item menu is just a button. */}
-            <Tooltip label="Print this record" side="top">
-              <Button variant="secondary" size="icon" onClick={() => window.print()} aria-label="Print this record">
+            <Tooltip label={printing ? "Preparing…" : "Print this record"} side="top">
+              <Button
+                variant="secondary" size="icon" onClick={printRecord} disabled={printing}
+                aria-label="Print this record" aria-busy={printing}
+              >
                 <IconPrint size={17} />
               </Button>
             </Tooltip>
@@ -480,6 +518,8 @@ function PatientRecord({ patient }: { patient: Patient }) {
             </div>
           )}
 
+          {tab === "notes" && seesNotes && <PatientNotes patient={patient} />}
+
           {tab === "orders" && (
             <div className="space-y-5">
               <Card>
@@ -519,7 +559,7 @@ function PatientRecord({ patient }: { patient: Patient }) {
                 </CardBody>
               </Card>
 
-              {hasFeature("lab") && (
+              {seesLab && (
                 <Card>
                   <CardHeader tone="info" icon={<IconFlask size={16} />} title="Lab orders"
                               hint="Only verified results are released to the record." />
@@ -574,16 +614,16 @@ function PatientRecord({ patient }: { patient: Patient }) {
             </div>
           )}
 
+          {tab === "consent" && <PatientConsents patient={patient} />}
+
           {tab === "billing" && (
             <div className="space-y-5">
-              {hasFeature("billing") && (
-                <Card>
-                  <CardHeader icon={<IconCard size={15} />} tone="ok" title="What is owed" hint="Each counter is settled on its own." />
-                  <CardBody className="pt-1">
-                    <PatientAccountSummary patientId={patient.id} />
-                  </CardBody>
-                </Card>
-              )}
+              <Card>
+                <CardHeader icon={<IconCard size={15} />} tone="ok" title="What is owed" hint="Each counter is settled on its own." />
+                <CardBody className="pt-1">
+                  <PatientAccountSummary patientId={patient.id} />
+                </CardBody>
+              </Card>
 
               <Card className="overflow-hidden">
               <CardHeader tone="ok" icon={<IconReceipt size={16} />} title="Invoices"
@@ -703,6 +743,8 @@ function PatientRecord({ patient }: { patient: Patient }) {
               )}
             </CardBody>
           </Card>
+
+          {seesNotes && <LatestNote patient={patient} onOpen={() => setTab("notes")} />}
 
           <Card>
             <CardHeader icon={<IconPhone size={15} />} tone="info" title="Contact" />

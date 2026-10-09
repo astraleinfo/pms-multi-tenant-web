@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import type { PlatformBilling } from "@/lib/api";
-import { charges, moduleRevenue, revenueSeries, revenueTotals } from "@/lib/platform/revenue";
+import { charges, clinicRevenue, revenueSeries, revenueTotals } from "@/lib/platform/revenue";
 import { rentMoney, rentMoneyCompact } from "@/components/domain/subscription";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -20,8 +20,8 @@ import { IconAlert, IconChart, IconReceipt, IconSpark, IconUsers } from "@/compo
    Revenue and activity, both read off raised invoices.
 
    Everything here answers "what did we bill, and what came in" — never
-   "what is this clinic set up to be billed", which is the access grid's
-   question and is computed from entitlements instead.
+   "what is this clinic set up to be billed", which is computed from today's
+   fee and each clinic's record instead (`lib/platform/subscriptions.ts`).
    ========================================================================== */
 
 /** Shown wherever a figure would otherwise be a zero that reads as collapse. */
@@ -104,7 +104,7 @@ export function RevenueTab({ query }: { query: BillingQuery }) {
   const billing = query.data;
   const totals = React.useMemo(() => (billing ? revenueTotals(billing) : null), [billing]);
   const series = React.useMemo(() => (billing ? revenueSeries(billing, 6) : []), [billing]);
-  const modules = React.useMemo(() => (billing ? moduleRevenue(billing) : []), [billing]);
+  const clinics = React.useMemo(() => (billing ? clinicRevenue(billing) : []), [billing]);
   const money = (n: number) => rentMoney(n, billing?.currency ?? "INR");
   /* The chart's y-axis has a fixed, narrow gutter — a full figure like
      "₹21,592.00" overflows it and gets clipped. Everywhere else on this
@@ -165,16 +165,16 @@ export function RevenueTab({ query }: { query: BillingQuery }) {
 
         <Card>
           <CardHeader
-            icon={<IconReceipt size={15} />} tone="ok" title="Revenue by module"
-            hint={`What each module billed in ${periodLabel(totals.period)}.`}
+            icon={<IconReceipt size={15} />} tone="ok" title="Revenue by clinic"
+            hint={`What each clinic was billed in ${periodLabel(totals.period)}.`}
           />
           <CardBody>
-            {modules.length ? (
+            {clinics.length ? (
               <RankBar
-                rows={modules.map((m) => ({
-                  label: m.name,
-                  value: m.billed,
-                  hint: `${m.clinics} ${m.clinics === 1 ? "clinic" : "clinics"}`,
+                rows={clinics.map((c) => ({
+                  label: c.tenant.name,
+                  value: c.billed,
+                  hint: c.collected >= c.billed ? "paid" : "open",
                 }))}
                 format={money}
               />
@@ -194,21 +194,20 @@ export function ActivityTab({ query }: { query: BillingQuery }) {
   const queryStatus = billingStatus(query);
   const billing = query.data;
   const rows = React.useMemo(() => (billing ? charges(billing) : []), [billing]);
-  const [module, setModule] = React.useState<string>("any");
+  const [clinic, setClinic] = React.useState<string>("any");
   const [status, setStatus] = React.useState<"any" | "open" | "paid">("any");
   const money = (n: number) => rentMoney(n, billing?.currency ?? "INR");
 
-  /* The modules that have actually been charged for, not the whole
-     catalogue — a filter offering something with no rows behind it is a
-     dead end. */
+  /* The clinics that have actually been charged, not every clinic — a filter
+     offering something with no rows behind it is a dead end. */
   const options = React.useMemo(() => {
     const seen = new Map<string, string>();
-    for (const row of rows) seen.set(row.feature_key, row.name);
+    for (const row of rows) seen.set(row.tenant.id, row.tenant.name);
     return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
   }, [rows]);
 
   const shown = rows.filter(
-    (r) => (module === "any" || r.feature_key === module) && (status === "any" || r.status === status),
+    (r) => (clinic === "any" || r.tenant.id === clinic) && (status === "any" || r.status === status),
   );
 
   if (queryStatus !== "billed" || !billing || !rows.length) {
@@ -219,11 +218,11 @@ export function ActivityTab({ query }: { query: BillingQuery }) {
     <Card className="overflow-hidden">
       <CardHeader
         icon={<IconReceipt size={15} />} tone="ok" title="Charges"
-        hint="Every module the platform has billed for, on the bill it was billed on."
+        hint="Every charge the platform has raised, on the bill it was raised on."
         actions={
           <div className="flex items-center gap-2">
-            <Select value={module} onChange={(e) => setModule(e.target.value)} className="h-8 text-label">
-              <option value="any">All modules</option>
+            <Select value={clinic} onChange={(e) => setClinic(e.target.value)} className="h-8 text-label">
+              <option value="any">All clinics</option>
               {options.map(([key, name]) => <option key={key} value={key}>{name}</option>)}
             </Select>
             <Select
@@ -251,7 +250,7 @@ export function ActivityTab({ query }: { query: BillingQuery }) {
               <TR>
                 <TH>Billed on</TH>
                 <TH>Clinic</TH>
-                <TH>Module</TH>
+                <TH>Charge</TH>
                 <TH>Status</TH>
                 <TH align="right">Amount</TH>
               </TR>

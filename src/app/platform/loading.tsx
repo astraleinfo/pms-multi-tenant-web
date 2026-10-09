@@ -1,6 +1,6 @@
-import { StageLoader } from "@/components/ui/loader";
+import { PageSkeleton } from "@/components/ui/loader";
 
-/** The console brings its own chrome, so its instant state fills the screen. */
+/** Shown inside the console's frame, which the layout keeps on screen. */
 export default function Loading() {
-  return <StageLoader />;
+  return <PageSkeleton />;
 }

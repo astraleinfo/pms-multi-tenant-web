@@ -31,6 +31,36 @@ export function slotTimes(dayStart: string, dayEnd: string, minutes: number) {
   return out;
 }
 
+/** "09:30" plus 45 → "10:15". */
+export function addMinutes(hhmm: string, mins: number) {
+  const [h, m] = hhmm.split(":").map(Number);
+  const total = h * 60 + m + mins;
+  return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
+/**
+ * The start times on one day a visit can actually be booked at: on the grid,
+ * clear of the clinician's other bookings, and — today — not already gone.
+ * `clashes` is the diary's own overlap check (`conflictsFor`), so this offers
+ * exactly what the booking dialog would; the server checks again on save.
+ */
+export function freeSlots({
+  dayStart, dayEnd, minutes, date, today, now, clashes,
+}: {
+  dayStart: string;
+  dayEnd: string;
+  minutes: number;
+  date: string;
+  today: string;
+  /** the clinic's clock, "HH:mm" */
+  now: string;
+  clashes: (time: string) => boolean;
+}) {
+  return slotTimes(dayStart, dayEnd, minutes).filter(
+    (t) => (date > today || (date === today && t > now)) && !clashes(t),
+  );
+}
+
 export function formatLength(minutes: number) {
   if (minutes < 60) return `${minutes} min`;
   const h = Math.floor(minutes / 60), m = minutes % 60;

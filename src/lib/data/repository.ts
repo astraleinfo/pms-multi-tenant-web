@@ -1,7 +1,7 @@
 import type {
-  Appointment, Encounter, FeatureKey, FieldDefinition, InventoryBatch, InventoryItem,
+  Appointment, Encounter, FieldDefinition, InventoryBatch, InventoryItem,
   InventoryTransaction, Invoice, LabOrder, Prescription, QueueEntry, Tenant,
-  TenantConfig, TenantFeature, User, Id,
+  TenantConfig, User, Id,
 } from "@/lib/types";
 
 /**
@@ -18,7 +18,6 @@ import type {
  */
 export interface Db {
   tenants: Tenant[];
-  tenantFeatures: TenantFeature[];
   users: User[];
   fieldDefinitions: FieldDefinition[];
   appointments: Appointment[];
@@ -74,20 +73,6 @@ export const findInvoice = (db: Db, t: Id, id: Id) =>
 
 export const userName = (db: Db, id: Id | null | undefined) =>
   db.users.find((u) => u.id === id)?.name ?? "—";
-
-/* ---- entitlements (§3.2) ------------------------------------------------- */
-
-export function isFeatureActive(db: Db, tenantId: Id, key: FeatureKey) {
-  return db.tenantFeatures.some(
-    (f) => f.tenant_id === tenantId && f.feature_key === key && f.status === "active",
-  );
-}
-
-export function activeFeatureKeys(db: Db, tenantId: Id): FeatureKey[] {
-  return db.tenantFeatures
-    .filter((f) => f.tenant_id === tenantId && f.status === "active")
-    .map((f) => f.feature_key);
-}
 
 /* ---- inventory ledger (§3.11) -------------------------------------------- */
 

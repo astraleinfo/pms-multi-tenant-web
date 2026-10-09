@@ -3,14 +3,14 @@
 import * as React from "react";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "@/lib/navigation";
-import { usePlatformCatalog, usePlatformEntitlements, usePlatformSnapshot } from "@/lib/query/hooks";
+import { usePlatformBilling, usePlatformSnapshot } from "@/lib/query/hooks";
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
 import { currency, pluralise, titleCase } from "@/lib/format";
 import {
-  PAID_FEATURES, consoleRows, platformTotals,
+  consoleRows, platformTotals,
   type AccountState, type ConsoleRow,
 } from "@/lib/platform/subscriptions";
-import type { ClinicalTypeKey, FeatureKey, Tenant } from "@/lib/types";
+import type { ClinicalTypeKey, Tenant } from "@/lib/types";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,20 +24,21 @@ import { Monogram } from "@/components/layout/rail";
 import { ConsolePage, TenantAddress } from "@/components/platform/chrome";
 import { CreateClinicFlow } from "@/components/platform/create-clinic";
 import { MonthlyCharge, TenantRowActions } from "@/components/platform/tenant-actions";
-import { AccountBadge } from "@/components/platform/module-controls";
+import { AccountBadge } from "@/components/platform/account-badge";
 import {
   IconFilter, IconLayers, IconLock, IconPlus, IconReceipt, IconUsers,
 } from "@/components/ui/icons";
 
 /* ==========================================================================
-   Every clinic, and the six questions worth asking about the set of them.
+   Every clinic, and the four questions worth asking about the set of them.
 
    The console's list used to answer one — "what is this called" — and hide the
    rest behind a menu. The work platform staff actually do here is narrower than
-   that and always the same shape: find the clinics on a module, or trialling
-   one, or suspended and still holding subscriptions, and then do one of four
-   things to a row. So the filters are the screen, and the actions are icons in
-   the row rather than a menu over it.
+   that and always the same shape: find the clinics of one discipline, or on
+   trial, or suspended, or exempt from billing, and then do one of four things
+   to a row. So the filters are the screen, and the actions are icons in the
+   row rather than a menu over it. Every clinic has every module, so there is
+   no module to filter by.
    ========================================================================== */
 
 export default function TenantsPage() {
@@ -85,10 +86,11 @@ const tenantColumns = col.columns([
       <span className="text-ink-2">{CLINICAL_TYPES.find((c) => c.key === getValue())!.label}</span>
     ),
   }),
-  col.accessor((r) => r.billed.length + r.trialing.length + r.held.length, {
-    id: "modules",
-    header: "Paid modules",
-    cell: ({ row }) => <ModuleCell row={row.original} />,
+  col.accessor((r) => r.patients, {
+    id: "patients",
+    header: "Patients",
+    meta: { align: "right" },
+    cell: ({ getValue }) => <span className="tnum font-mono text-label text-ink-2">{getValue().toLocaleString()}</span>,
   }),
   col.accessor((r) => r.mrr, {
     id: "subscription",
@@ -117,54 +119,25 @@ const tenantColumns = col.columns([
   }),
 ]);
 
-function ModuleCell({ row }: { row: ConsoleRow }) {
-  const on = [...row.billed, ...row.trialing, ...row.held];
-  if (!on.length) return <span className="text-label text-ink-3">Core only</span>;
-  return (
-    <div className="flex flex-col items-start gap-1">
-      <span className="tnum text-caption text-ink-3">
-        {on.length} of {PAID_FEATURES.length}
-      </span>
-      <span className="flex flex-wrap gap-1">
-        {on.map((s) => (
-          <Badge
-            key={s.feature.key}
-            tone={s.state === "billed" ? "neutral" : s.state === "trial" ? "warn" : "critical"}
-            size="sm"
-            dot={false}
-          >
-            {s.feature.name}
-          </Badge>
-        ))}
-      </span>
-    </div>
-  );
-}
-
 /* ---- filters --------------------------------------------------------------- */
 
 type StatusFilter = "any" | Tenant["status"];
 type TypeFilter = "any" | ClinicalTypeKey;
-type ModuleFilter = "any" | FeatureKey;
-type ModuleStateFilter = "enabled" | "trial" | "locked";
 type BillingFilter = "any" | AccountState;
 
 interface Filters {
   q: string;
   status: StatusFilter;
   type: TypeFilter;
-  module: ModuleFilter;
-  moduleState: ModuleStateFilter;
   billing: BillingFilter;
 }
 
 const NO_FILTERS: Filters = {
-  q: "", status: "any", type: "any", module: "any", moduleState: "enabled", billing: "any",
+  q: "", status: "any", type: "any", billing: "any",
 };
 
 const TENANT_STATUSES = ["active", "trial", "suspended"] as const;
-const MODULE_STATES = ["enabled", "trial", "locked"] as const;
-const ACCOUNT_STATES = ["billed", "trial", "held", "core_only"] as const;
+const ACCOUNT_STATES = ["billed", "trial", "held", "exempt"] as const;
 
 /**
  * Filters carried in the query string.
@@ -185,8 +158,6 @@ function seedFilters(params: { get(key: string): string | null }): Filters {
     q: params.get("q")?.slice(0, 80) ?? "",
     status: pick("status", TENANT_STATUSES, "any" as const),
     type: pick("type", CLINICAL_TYPES.map((c) => c.key), "any" as const),
-    module: pick("module", PAID_FEATURES.map((f) => f.key), "any" as const),
-    moduleState: pick("moduleState", MODULE_STATES, "enabled" as const),
     billing: pick("billing", ACCOUNT_STATES, "any" as const),
   };
 }
@@ -206,25 +177,16 @@ function applyFilters(rows: ConsoleRow[], f: Filters) {
     if (f.status !== "any" && t.status !== f.status) return false;
     if (f.type !== "any" && t.clinical_type !== f.type) return false;
     if (f.billing !== "any" && r.state !== f.billing) return false;
-
-    if (f.module !== "any") {
-      const line = r.subscriptions.find((s) => s.feature.key === f.module);
-      if (!line) return false;
-      if (f.moduleState === "enabled" && line.status !== "active") return false;
-      if (f.moduleState === "trial" && line.status !== "trial") return false;
-      if (f.moduleState === "locked" && line.status !== "inactive") return false;
-    }
     return true;
   });
 }
 
-/** How many of the six are doing something, so "Clear" can say so. */
+/** How many of the four are doing something, so "Clear" can say so. */
 function activeCount(f: Filters) {
   return [
     f.q.trim() !== "",
     f.status !== "any",
     f.type !== "any",
-    f.module !== "any",
     f.billing !== "any",
   ].filter(Boolean).length;
 }
@@ -234,10 +196,10 @@ function activeCount(f: Filters) {
 function TenantDirectory() {
   const router = useRouter();
   const params = useSearchParams();
-  const { data: snapshot, isPending: snapshotPending } = usePlatformSnapshot();
-  const { byTenant } = usePlatformEntitlements();
-  const catalog = usePlatformCatalog();
-  const isPending = snapshotPending || catalog.isPending;
+  const { data: snapshot, isPending } = usePlatformSnapshot();
+  /* The fee rides on the billing read, which the support desk may make too. */
+  const { data: billing } = usePlatformBilling();
+  const fee = billing?.fee_monthly ?? 0;
   const [filters, setFilters] = React.useState<Filters>(() => seedFilters(params));
   const [creating, setCreating] = React.useState(false);
 
@@ -249,11 +211,8 @@ function TenantDirectory() {
     if (query) setFilters(seedFilters(new URLSearchParams(query)));
   }, [query]);
 
-  const rows = React.useMemo(
-    () => consoleRows(snapshot?.tenants ?? [], byTenant, catalog.features),
-    [snapshot, byTenant, catalog.features],
-  );
-  const totals = React.useMemo(() => platformTotals(rows), [rows]);
+  const rows = React.useMemo(() => consoleRows(snapshot?.tenants ?? [], fee), [snapshot, fee]);
+  const totals = React.useMemo(() => platformTotals(rows, fee), [rows, fee]);
   const shown = React.useMemo(() => applyFilters(rows, filters), [rows, filters]);
 
   const set = <K extends keyof Filters>(key: K, value: Filters[K]) =>
@@ -279,19 +238,20 @@ function TenantDirectory() {
           hint={`${totals.active} active · ${totals.trial} trial · ${totals.suspended} suspended`}
         />
         <Stat
-          label="Paying clinics" value={totals.payingTenants} icon={<IconUsers size={16} />}
-          hint={totals.tenants ? `${Math.round((totals.payingTenants / totals.tenants) * 100)}% of the platform` : "—"}
+          label="Paying clinics" value={totals.billedTenants} icon={<IconUsers size={16} />}
+          hint={totals.tenants ? `${Math.round((totals.billedTenants / totals.tenants) * 100)}% of the platform` : "—"}
         />
         <Stat
-          label="Module revenue" value={currency(totals.mrr)} unit="/mo" icon={<IconReceipt size={16} />}
-          hint={`${pluralise(totals.billedSubscriptions, "billed subscription")}`}
+          label="Subscription revenue" value={billing ? currency(totals.mrr) : "…"} unit="/mo"
+          icon={<IconReceipt size={16} />}
+          hint={billing ? `${pluralise(totals.billedTenants, "clinic")} at ${currency(fee)}/mo` : "reading the fee…"}
         />
         <Stat
           label="Suspended" value={totals.suspended}
           tone={totals.suspended ? "critical" : "ink"} icon={<IconLock size={16} />}
           hint={
             totals.suspended
-              ? `${currency(totals.heldValue)}/mo on hold behind them`
+              ? `${currency(totals.heldValue)}/mo not collected while they are`
               : "Every clinic is reachable"
           }
         />
@@ -301,7 +261,7 @@ function TenantDirectory() {
         <CardHeader
           tone="neutral" icon={<IconFilter size={16} />}
           title="Filters"
-          hint="Narrow by what a clinic is, what it holds and what it pays."
+          hint="Narrow by what a clinic is and what it pays."
           actions={
             active > 0 && (
               <Button variant="ghost" size="sm" onClick={() => setFilters(NO_FILTERS)}>
@@ -335,35 +295,13 @@ function TenantDirectory() {
             </Select>
           </Field>
 
-          <Field label="Module">
-            <Select value={filters.module} onChange={(e) => set("module", e.target.value as ModuleFilter)}>
-              <option value="any">Any module</option>
-              {PAID_FEATURES.map((f) => <option key={f.key} value={f.key}>{f.name}</option>)}
-            </Select>
-          </Field>
-
-          <Field
-            label="Module state"
-            help={filters.module === "any" ? "Pick a module to use this." : undefined}
-          >
-            <Select
-              value={filters.moduleState}
-              disabled={filters.module === "any"}
-              onChange={(e) => set("moduleState", e.target.value as ModuleStateFilter)}
-            >
-              <option value="enabled">Enabled</option>
-              <option value="trial">On trial</option>
-              <option value="locked">Locked</option>
-            </Select>
-          </Field>
-
           <Field label="Payment status">
             <Select value={filters.billing} onChange={(e) => set("billing", e.target.value as BillingFilter)}>
               <option value="any">Any payment status</option>
               <option value="billed">Paying</option>
               <option value="trial">Trial, not billed</option>
               <option value="held">On hold (suspended)</option>
-              <option value="core_only">Core only, nothing billed</option>
+              <option value="exempt">Exempt from billing</option>
             </Select>
           </Field>
         </div>

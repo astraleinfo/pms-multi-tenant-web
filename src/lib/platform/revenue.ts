@@ -26,11 +26,10 @@ export interface RevenuePeriod {
   clinics: number;
 }
 
-export interface ModuleRevenue {
-  feature_key: string;
-  name: string;
+export interface ClinicRevenue {
+  tenant: Tenant;
   billed: number;
-  clinics: number;
+  collected: number;
 }
 
 export interface ChargeRow {
@@ -39,7 +38,8 @@ export interface ChargeRow {
   date: string;
   period: string;
   tenant: Tenant;
-  feature_key: string;
+  /** the line's own name — "Astrale PMS subscription", or a module's name on a
+      bill raised before every module was included */
   name: string;
   amount: number;
   /** never "void" — a withdrawn bill is not a charge */
@@ -143,33 +143,21 @@ export function revenueSeries(billing: PlatformBilling, months: number): Revenue
   return window;
 }
 
-/** What each module earned in one period — the latest, unless told otherwise. */
-export function moduleRevenue(billing: PlatformBilling, period?: string): ModuleRevenue[] {
+/** What each clinic was billed in one period — the latest, unless told otherwise. */
+export function clinicRevenue(billing: PlatformBilling, period?: string): ClinicRevenue[] {
   const target = period ?? latestPeriod(billing);
   if (target === null) return [];
 
-  const byModule = new Map<string, { name: string; billed: number; clinics: Set<string> }>();
-
+  const byClinic = new Map<string, ClinicRevenue>();
   for (const { tenant, invoice } of counted(billing)) {
     if (invoice.period_start !== target) continue;
-    for (const line of invoice.lines) {
-      let bucket = byModule.get(line.feature_key);
-      if (!bucket) {
-        /* The line's own name, never a catalogue lookup: a module dropped
-           from the catalogue after it was invoiced still has to render. */
-        bucket = { name: line.name, billed: 0, clinics: new Set() };
-        byModule.set(line.feature_key, bucket);
-      }
-      bucket.billed += line.amount;
-      bucket.clinics.add(tenant.id);
-    }
+    const row = byClinic.get(tenant.id) ?? { tenant, billed: 0, collected: 0 };
+    row.billed += invoice.amount;
+    if (invoice.status === "paid") row.collected += invoice.amount;
+    byClinic.set(tenant.id, row);
   }
 
-  return [...byModule.entries()]
-    .map(([feature_key, b]) => ({
-      feature_key, name: b.name, billed: b.billed, clinics: b.clinics.size,
-    }))
-    .sort((a, b) => b.billed - a.billed);
+  return [...byClinic.values()].sort((a, b) => b.billed - a.billed);
 }
 
 /** One row per invoice line: what was charged, to whom, for what, when. */
@@ -177,18 +165,17 @@ export function charges(billing: PlatformBilling): ChargeRow[] {
   const rows: ChargeRow[] = [];
 
   for (const { tenant, invoice } of counted(billing)) {
-    for (const line of invoice.lines) {
+    invoice.lines.forEach((line, i) => {
       rows.push({
-        id: `${invoice.id}:${line.feature_key}`,
+        id: `${invoice.id}:${i}`,
         date: invoice.issued_on,
         period: invoice.period_start,
         tenant,
-        feature_key: line.feature_key,
         name: line.name,
         amount: line.amount,
         status: invoice.status === "paid" ? "paid" : "open",
       });
-    }
+    });
   }
 
   return rows.sort((a, b) => b.date.localeCompare(a.date));

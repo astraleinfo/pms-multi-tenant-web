@@ -17,7 +17,7 @@ import { EmptyState, KV, Meter } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import { Field, Input, NumberInput, Select } from "@/components/ui/field";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
-import { FeatureGate, RoleGate } from "@/components/domain/gates";
+import { RoleGate } from "@/components/domain/gates";
 import { DEPARTMENT_LABEL, StatusPill } from "@/components/domain/status";
 import { PatientChip } from "@/components/domain/patient";
 import {
@@ -28,9 +28,7 @@ export default function InvoicePage(props: PageProps<"/billing/[id]">) {
   const { id } = React.use(props.params);
   return (
     <RoleGate allow={["receptionist"]}>
-      <FeatureGate feature="billing">
-        <Invoice id={id} />
-      </FeatureGate>
+      <Invoice id={id} />
     </RoleGate>
   );
 }

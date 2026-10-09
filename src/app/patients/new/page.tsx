@@ -8,17 +8,12 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardFooter, CardHeader } from "@/components/ui/card";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { DynamicForm, validateAgainstSchema, type FormValues } from "@/components/domain/dynamic-form";
-import { FeatureGate } from "@/components/domain/gates";
 import {
   IconArrowRight, IconCheck, IconPlus, IconUser,
 } from "@/components/ui/icons";
 
 export default function NewPatientPage() {
-  return (
-    <FeatureGate feature="patient">
-      <NewPatient />
-    </FeatureGate>
-  );
+  return <NewPatient />;
 }
 
 function NewPatient() {

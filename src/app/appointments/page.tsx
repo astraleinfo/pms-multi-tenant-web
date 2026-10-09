@@ -13,7 +13,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { Button, Segmented } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/misc";
 import { Select } from "@/components/ui/field";
-import { FeatureGate, RoleGate } from "@/components/domain/gates";
+import { RoleGate } from "@/components/domain/gates";
 import { StatusPill } from "@/components/domain/status";
 import { PatientRef } from "@/components/domain/patient";
 import { AppointmentModal } from "@/components/domain/quick-actions";
@@ -91,9 +91,7 @@ function ApptClinician({ id }: { id: string }) {
 export default function AppointmentsPage() {
   return (
     <RoleGate allow={["receptionist", "doctor"]}>
-      <FeatureGate feature="appointment">
-        <Appointments />
-      </FeatureGate>
+      <Appointments />
     </RoleGate>
   );
 }
@@ -274,6 +272,7 @@ function Appointments() {
                           : a.status === "cancelled" ? "border-line bg-surface-2 [&_*]:!text-ink-3"
                           : a.status === "completed" ? "border-ok-border bg-ok-soft"
                           : a.status === "checked_in" ? "border-accent-border bg-accent-soft"
+                          : a.status === "confirmed" ? "border-ok-border bg-surface"
                           : "border-info-border bg-info-soft";
 
                         return (

@@ -15,7 +15,7 @@ import { Badge, Numeral } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
 import { SearchInput } from "@/components/ui/field";
 import { DataTable, columnHelperFor } from "@/components/ui/data-table";
-import { FeatureGate, RoleGate } from "@/components/domain/gates";
+import { RoleGate } from "@/components/domain/gates";
 import { PatientRef } from "@/components/domain/patient";
 import { IconArrowRight, IconPlus, IconStethoscope } from "@/components/ui/icons";
 
@@ -91,9 +91,7 @@ function EncounterClinician({ id }: { id: string }) {
 export default function ConsultationsPage() {
   return (
     <RoleGate allow={["doctor"]}>
-      <FeatureGate feature="consultation">
-        <Consultations />
-      </FeatureGate>
+      <Consultations />
     </RoleGate>
   );
 }

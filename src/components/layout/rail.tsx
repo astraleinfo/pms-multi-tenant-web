@@ -4,12 +4,12 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
-import { NAV, ROLE_LABEL, modulePath, roleAllows } from "@/lib/nav";
+import { NAV, ROLE_LABEL, roleAllows } from "@/lib/nav";
 import { useApp, useTenant } from "@/lib/store/app-store";
 import { useClinicLogoUrl, useRailCounters, useSupportInfo } from "@/lib/query/hooks";
 import { telHref } from "@/lib/support";
 import {
-  IconChevronCircleLeft, IconChevronDown, IconInfo, IconLock, IconLogout, IconMail, IconPhone, IconSidebar, IconSpark,
+  IconChevronCircleLeft, IconChevronDown, IconInfo, IconLogout, IconMail, IconPhone, IconSidebar, IconSpark,
 } from "@/components/ui/icons";
 import { Tooltip } from "@/components/ui/info";
 import { Menu, MenuItem, MenuLabel, MenuSep } from "@/components/ui/modal";
@@ -65,7 +65,7 @@ export function Rail({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const { hasFeature, signOut, host, consoleUrl } = useApp();
+  const { signOut, host, consoleUrl } = useApp();
   const { tenant, user, role } = useTenant();
   const counters = useRailCounters();
   const logoUrl = useClinicLogoUrl();
@@ -178,14 +178,13 @@ export function Rail({
       >
         <ul className="space-y-px">
           {items.map((item) => {
-            const locked = item.feature ? !hasFeature(item.feature) : false;
             const active = pathname === item.href || pathname.startsWith(item.href + "/");
             const count = item.counter ? counters[item.counter] : 0;
             const Icon = item.icon;
 
             const link = (
               <Link
-                href={locked && item.feature ? modulePath(item.feature) : item.href}
+                href={item.href}
                 onClick={onNavigate}
                 aria-current={active ? "page" : undefined}
                 className={cn(
@@ -194,25 +193,18 @@ export function Rail({
                   collapsed ? "justify-center px-0" : "px-2.5",
                   active
                     ? "bg-accent-soft font-medium text-accent-text"
-                    : locked
-                      ? "font-normal text-rail-ink-dim hover:bg-rail-2 hover:text-rail-ink"
-                      : "font-normal text-rail-ink hover:bg-rail-2 hover:text-rail-ink-strong",
+                    : "font-normal text-rail-ink hover:bg-rail-2 hover:text-rail-ink-strong",
                 )}
               >
                 <Icon size={17} className="shrink-0" />
                 {!collapsed && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
-                {!collapsed && locked && <IconLock size={13} className="shrink-0 text-ink-3" />}
-                {!collapsed && !locked && count > 0 && (
+                {!collapsed && count > 0 && (
                   <span className="tnum shrink-0 rounded-[var(--r-pill)] bg-rail-3 px-1.5 py-px font-mono text-micro leading-[1.45] text-rail-ink">
                     {count}
                   </span>
                 )}
-                {/* collapsed: a padlock in the corner for a module this clinic
-                    has not been given, a dot for one with something waiting */}
-                {collapsed && locked && (
-                  <IconLock size={10} className="absolute bottom-1 right-1 text-ink-3" />
-                )}
-                {collapsed && !locked && count > 0 && (
+                {/* collapsed: a dot for a module with something waiting */}
+                {collapsed && count > 0 && (
                   <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" />
                 )}
               </Link>
@@ -221,7 +213,7 @@ export function Rail({
             return (
               <li key={item.href} className={cn(item.divide && "mt-1.5 border-t border-rail-line pt-1.5")}>
                 {collapsed ? (
-                  <Tooltip label={locked ? `${item.label} — not enabled` : item.label}>{link}</Tooltip>
+                  <Tooltip label={item.label}>{link}</Tooltip>
                 ) : (
                   link
                 )}

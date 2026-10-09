@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { FEATURES } from "@/lib/data/catalog";
+import { MODULES } from "@/lib/data/catalog";
 import { useSupportInfo } from "@/lib/query/hooks";
 import { cn } from "@/lib/cn";
 import { Spinner } from "@/components/ui/loader";
@@ -20,7 +20,7 @@ import { ModuleArt } from "./module-art";
    working tokens, so this reads as the application before sign-in rather
    than as a marketing page in front of it.
 
-   The carousel reads `FEATURES` straight from the catalogue rather than
+   The carousel reads `MODULES` straight from the catalogue rather than
    keeping a list of its own. That is the point of it: a module added to the
    catalogue appears here — slide, description and one more pagination dot —
    with no edit to this file.
@@ -29,9 +29,9 @@ import { ModuleArt } from "./module-art";
 const ROTATE_MS = 5500;
 
 /**
- * The line each module is introduced with. Written for somebody who does not
- * have the module yet, which is a different job from the catalogue's own
- * `summary` (written for somebody deciding whether to buy it).
+ * The line each module is introduced with. Written for somebody who has not
+ * signed in yet, which is a different job from the catalogue's own `summary`
+ * (written for somebody already using it).
  *
  * A module with no line here falls back to its catalogue summary, so nothing
  * has to be added when a module is.
@@ -79,7 +79,7 @@ export interface ShowcaseSlide {
 }
 
 /** The clinic's own showcase: every module in the catalogue, in its order. */
-export const MODULE_SLIDES: ShowcaseSlide[] = FEATURES.map((f) => ({
+export const MODULE_SLIDES: ShowcaseSlide[] = MODULES.map((f) => ({
   key: f.key,
   name: f.name,
   blurb: BLURB[f.key] ?? f.summary,

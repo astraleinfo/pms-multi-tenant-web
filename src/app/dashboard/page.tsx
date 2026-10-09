@@ -9,6 +9,7 @@ import {
   lowStock, nearExpiry, selectAppointments, selectLabOrders, selectQueue,
 } from "@/lib/data/repository";
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
+import { isBooked } from "@/lib/types";
 import { compactCurrency, currency, duration, formatDate, formatTime12, pluralise } from "@/lib/format";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader, CardLink } from "@/components/ui/card";
@@ -36,7 +37,7 @@ import {
    ========================================================================== */
 
 export default function DashboardPage() {
-  const { session, today, hasFeature, config } = useApp();
+  const { session, today, config } = useApp();
   const db = useClinicDb();
   const { tenant, user, role } = useTenant();
   const t = session.tenantId;
@@ -57,7 +58,7 @@ export default function DashboardPage() {
     .sort((a, b) => (a.priority === b.priority ? a.token_no - b.token_no : a.priority === "urgent" ? -1 : 1));
 
   const upcoming = selectAppointments(db, t)
-    .filter((a) => a.date === today && (a.status === "scheduled" || a.status === "checked_in"))
+    .filter((a) => a.date === today && (isBooked(a.status) || a.status === "checked_in"))
     .sort((a, b) => a.time.localeCompare(b.time))
     .slice(0, 5);
 
@@ -74,33 +75,29 @@ export default function DashboardPage() {
       rows.push({ id: `ns-${a.id}`, tone: "critical", title: `${a.patient_name} did not arrive`,
         detail: `${formatTime12(a.time)} · ${a.reason}`, href: "/appointments" });
     }
-    if (hasFeature("lab")) {
-      const waiting = selectLabOrders(db, t).filter((x) => x.status === "resulted");
-      if (waiting.length) {
-        rows.push({ id: "lab", tone: "warn",
-          title: `${pluralise(waiting.length, "lab result")} to verify`,
-          detail: waiting.length === 1
-            ? `${waiting[0].test_name} · ${waiting[0].patient_name}`
-            : `${waiting[0].test_name} and ${waiting.length - 1} more`,
-          href: "/lab" });
-      }
+    const waiting = selectLabOrders(db, t).filter((x) => x.status === "resulted");
+    if (waiting.length) {
+      rows.push({ id: "lab", tone: "warn",
+        title: `${pluralise(waiting.length, "lab result")} to verify`,
+        detail: waiting.length === 1
+          ? `${waiting[0].test_name} · ${waiting[0].patient_name}`
+          : `${waiting[0].test_name} and ${waiting.length - 1} more`,
+        href: "/lab" });
     }
-    if (hasFeature("inventory")) {
-      const low = lowStock(db, t);
-      if (low.length) {
-        rows.push({ id: "stock", tone: "warn",
-          title: `${pluralise(low.length, "item")} running low`,
-          detail: low.slice(0, 2).map((x) => x.item.name).join(", ") + (low.length > 2 ? "…" : ""),
-          href: "/inventory" });
-      }
-      const expiring = nearExpiry(db, t, today, config.expiry_alert_days);
-      if (expiring.length) {
-        const soonest = Math.min(...expiring.map((b) => b.daysLeft));
-        rows.push({ id: "expiry", tone: "critical",
-          title: `${pluralise(expiring.length, "batch", "batches")} expiring soon`,
-          detail: soonest <= 0 ? "At least one has already expired" : `The first in ${pluralise(soonest, "day")}`,
-          href: "/inventory" });
-      }
+    const low = lowStock(db, t);
+    if (low.length) {
+      rows.push({ id: "stock", tone: "warn",
+        title: `${pluralise(low.length, "item")} running low`,
+        detail: low.slice(0, 2).map((x) => x.item.name).join(", ") + (low.length > 2 ? "…" : ""),
+        href: "/inventory" });
+    }
+    const expiring = nearExpiry(db, t, today, config.expiry_alert_days);
+    if (expiring.length) {
+      const soonest = Math.min(...expiring.map((b) => b.daysLeft));
+      rows.push({ id: "expiry", tone: "critical",
+        title: `${pluralise(expiring.length, "batch", "batches")} expiring soon`,
+        detail: soonest <= 0 ? "At least one has already expired" : `The first in ${pluralise(soonest, "day")}`,
+        href: "/inventory" });
     }
     if (money && money.unpaid > 0) {
       rows.push({ id: "bill", tone: "info", title: `${pluralise(money.unpaid, "invoice")} unpaid`,
@@ -113,7 +110,7 @@ export default function DashboardPage() {
         detail: "Waiting to be dispensed", href: "/pharmacy" });
     }
     return rows;
-  }, [db, t, today, hasFeature, money, pharm, config]);
+  }, [db, t, today, money, pharm, config]);
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
@@ -228,7 +225,7 @@ export default function DashboardPage() {
             <CardHeader
               tone={attention.length ? "warn" : "accent"} icon={<IconAlert size={16} />}
               title="Needs attention"
-              hint="Anything that needs a person before the day ends, from every module this clinic has switched on."
+              hint="Anything that needs a person before the day ends, from every module."
             />
             <CardBody className="pt-0">
               {attention.length === 0 ? (

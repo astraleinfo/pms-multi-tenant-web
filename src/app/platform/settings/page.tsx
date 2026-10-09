@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useApp } from "@/lib/store/app-store";
-import { usePlatformSettings } from "@/lib/query/hooks";
+import { usePlatformBilling, usePlatformSettings } from "@/lib/query/hooks";
 import type { PlatformSettings } from "@/lib/api";
 import { daysToSeconds, hoursToSeconds, secondsToDays, secondsToHours } from "@/lib/platform/timings";
 import { ConsolePage } from "@/components/platform/chrome";
@@ -28,7 +28,7 @@ function SettingsConsole() {
       <PageHeader
         eyebrow="Platform"
         title="Settings"
-        description="What every new clinic starts with, and who a clinic that can't self-serve should write to."
+        description="What every clinic pays, what every new clinic starts with, and who a clinic that can't self-serve should write to."
       />
       {isPending || !data ? (
         <StageLoader label="Reading platform settings…" />
@@ -41,6 +41,8 @@ function SettingsConsole() {
 
 function SettingsForm({ settings }: { settings: PlatformSettings }) {
   const { updatePlatformSettings, notify } = useApp();
+  /* Bills are raised in the API's own currency, which the billing read says. */
+  const { data: billing } = usePlatformBilling();
   const [draft, setDraft] = React.useState(settings);
   const [saving, setSaving] = React.useState(false);
   const dirty = JSON.stringify(draft) !== JSON.stringify(settings);
@@ -52,7 +54,7 @@ function SettingsForm({ settings }: { settings: PlatformSettings }) {
     setSaving(true);
     try {
       await updatePlatformSettings(draft);
-      notify({ tone: "ok", title: "Settings saved", body: "New clinics pick this up right away; the support menu within a few minutes." });
+      notify({ tone: "ok", title: "Settings saved", body: "New clinics and the next billing run pick this up right away; the support menu within a few minutes." });
     } catch (error) {
       notify({ tone: "critical", title: "Not saved", body: error instanceof Error ? error.message : "Try again." });
     }
@@ -61,7 +63,23 @@ function SettingsForm({ settings }: { settings: PlatformSettings }) {
 
   return (
     <div className="mt-5 space-y-5">
-      <SettingsSection title="Support desk" hint="Shown in every clinic's Help menu and prefilled into module-request emails.">
+      <SettingsSection
+        title="Subscription"
+        hint="Every clinic has every module. A clinic that is active and not exempt is billed this one fee each month; a clinic on trial is not billed. A change applies from the next bill raised — bills already raised keep the fee they were raised at."
+      >
+        <SettingRow label="Monthly fee per clinic" htmlFor="cfg-fee" suffix={billing?.currency ?? "INR"} width="sm">
+          <NumberInput id="cfg-fee" min={0} max={99999999.99} step="0.01" value={draft.subscription_fee_monthly}
+                       onChange={(n) => set("subscription_fee_monthly", n)} />
+        </SettingRow>
+        <SettingsActions note={dirty ? "Unsaved changes." : "Everything here matches the server."}>
+          <Button variant="ghost" disabled={!dirty || saving} onClick={() => setDraft(settings)}>Discard</Button>
+          <Button variant="primary" disabled={!dirty || saving} onClick={() => void save()}>
+            {saving ? "Saving…" : "Save changes"}
+          </Button>
+        </SettingsActions>
+      </SettingsSection>
+
+      <SettingsSection title="Support desk" hint="Shown in every clinic's Help menu.">
         <SettingRow label="Email" htmlFor="cfg-support-email">
           <Input id="cfg-support-email" type="email" value={draft.support_email}
                  onChange={(e) => set("support_email", e.target.value)} />
