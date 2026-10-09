@@ -1,18 +1,20 @@
 "use client";
 
 import type {
-  AccountStatus, Appointment, BillingDepartment, CatalogFeature, ClinicalTypeKey, Encounter,
-  FeatureKey,
-  Charge, FieldDefinition, HistoryEvent, Id, InventoryBatch, InventoryItem, InventoryItemPatch,
+  AccountStatus, Appointment, BillingDepartment, ClinicalTypeKey, Encounter,
+  Charge, FieldDefinition, FollowUp, PatientNote, FollowUpCall, FollowUpOutcome, FollowUpStatus, HistoryEvent, Id, InventoryBatch, InventoryItem, InventoryItemPatch,
   InventoryTransaction, InventoryTxType, Invoice, InvoiceLineItem, LabAttachment, LabOrder,
   LabResultLine, NewAppointment, NewEncounter, NewInventoryItem, NewServicePrice, Patient,
   PatientAccount, Payment, Prescription, PrescriptionItem, PricingMode, QueueEntry, Role,
   ServiceKind,
   ServicePrice, ServicePricePatch, Subscription, SubscriptionInvoice, SubscriptionSummary,
-  SuggestedLinesResponse, SupportRequest, SupportRequestKind, Tenant,
-  TenantConfig, TenantFeature,
+  SuggestedLinesResponse, SupportRequest, Tenant,
+  TenantConfig,
   User,
 } from "@/lib/types";
+import type {
+  ConsentContent, ConsentForm, ConsentTemplate, ConsentVersion, PatientConsent,
+} from "@/lib/consent";
 import {
   ApiError, del, get, patch as patch_, post, put as put_, requestBlob, setAccessToken, upload,
 } from "./client";
@@ -183,7 +185,6 @@ export interface Me {
   tenant_id: string | null;
   role: string | null;
   permissions: string[];
-  features: FeatureKey[];
   preferences: UserPreferences;
 }
 
@@ -218,7 +219,6 @@ export const listDoctors = () => get<User[]>("/v1/users/doctors");
 export const setDoctorConsultationFee = (doctorId: Id, fee: number | null) =>
   patch_<User>(`/v1/pricing/doctors/${doctorId}`, { consultation_fee: fee });
 
-export const listFeatures = () => get<TenantFeature[]>("/v1/tenant/features");
 export const getConfig = () => get<TenantConfig>("/v1/tenant/config");
 
 export const listFieldDefinitions = () => get<FieldDefinition[]>("/v1/tenant/fields");
@@ -235,9 +235,6 @@ export interface MedicineSuggestionOut {
   duration: string;
 }
 export const getMedicines = () => get<MedicineSuggestionOut[]>("/v1/catalog/medicines");
-
-/** The module catalogue with today's prices, as a clinic is quoted them. */
-export const listCatalogFeatures = () => get<CatalogFeature[]>("/v1/catalog/features");
 
 export interface PatientPage {
   items: Patient[];
@@ -279,6 +276,13 @@ export const listPatients = (query: PatientQuery = {}) =>
 export const searchPatients = async (term: string, limit = 8) =>
   (await listPatients({ search: term, limit, sort: "full_name", order: "asc" })).items;
 export const getPatient = (id: Id) => get<Patient>(`/v1/patients/${id}`);
+/** Every note on a patient, newest first — corrections included. */
+export const listPatientNotes = (patientId: Id) => get<PatientNote[]>(`/v1/patients/${patientId}/notes`);
+
+/** Add a note. With `amends_id` it is a correction to an earlier note of your own. */
+export const addPatientNote = (patientId: Id, note: { body: string; amends_id?: Id }) =>
+  post<PatientNote>(`/v1/patients/${patientId}/notes`, note);
+
 export const getPatientHistory = (id: Id) => get<HistoryEvent[]>(`/v1/patients/${id}/history`);
 
 /* ---- the paged lists -------------------------------------------------------
@@ -347,6 +351,55 @@ export const getAppointment = (id: Id) => get<Appointment>(`/v1/appointments/${i
 
 export const listQueue = () => get<QueueEntry[]>("/v1/queue");
 
+/* ---- follow-up calls ----------------------------------------------------------- */
+
+export interface FollowUpQuery {
+  /** how far ahead, counting today */
+  days: number;
+  /** the Today tab: one date rather than the window */
+  date?: string;
+  status?: FollowUpStatus;
+  doctor_id?: Id;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/** A page of the call list. `counts` (by status) and `today` cover the whole
+    window, before the tab's own filter, so every tab's number stays true. */
+export interface FollowUpPage extends Page<FollowUp> {
+  counts: Record<FollowUpStatus, number>;
+  today: number;
+}
+
+export const listFollowUps = (query: FollowUpQuery) =>
+  get<FollowUpPage>("/v1/follow-ups", {
+    days: query.days,
+    date: query.date,
+    status: query.status,
+    doctor_id: query.doctor_id,
+    search: query.search,
+    limit: query.limit ?? 25,
+    offset: query.offset ?? 0,
+  });
+
+export const listFollowUpCalls = (appointmentId: Id) =>
+  get<FollowUpCall[]>(`/v1/follow-ups/${appointmentId}/calls`);
+
+export interface NewFollowUpCall {
+  outcome: FollowUpOutcome;
+  notes?: string;
+  /** `rescheduled` only — where the booking moves to */
+  new_slot?: { date: string; time: string; doctor_id?: Id; duration_min?: number };
+  /** `declined` only — cancel the booking as well */
+  cancel_appointment?: boolean;
+}
+
+/** Log a call and act on it. A move is checked against the diary again on the
+    server, under a lock, and answers 409 if the slot went in the meantime. */
+export const recordFollowUpCall = (appointmentId: Id, call: NewFollowUpCall) =>
+  post<FollowUp>(`/v1/follow-ups/${appointmentId}/calls`, call);
+
 export interface EncounterQuery extends PageQuery {
   patient_id?: Id;
 }
@@ -362,6 +415,10 @@ export const getEncounter = (id: Id) => get<Encounter>(`/v1/encounters/${id}`);
 /** The printable consultation record — encounter, prescription and patient,
  *  rendered server-side as a PDF. */
 export const getConsultationPdf = (id: Id) => requestBlob(`/v1/encounters/${id}/consultation-pdf`);
+
+/** The patient's file as a printable document on the clinic's letterhead —
+ *  clinical only, no billing; the lab section follows the reader's role. */
+export const getPatientRecordPdf = (id: Id) => requestBlob(`/v1/patients/${id}/record.pdf`);
 
 export interface PrescriptionQuery extends PageQuery {
   status?: Prescription["status"];
@@ -549,34 +606,6 @@ function stripReadOnly(config: Partial<TenantConfig>) {
     config as Partial<TenantConfig> & { tenant_id?: string; timezone?: string; has_logo?: boolean };
   return rest;
 }
-
-/* ---- entitlements (§3.2) ----------------------------------------------------
- *
- * Nothing in the app calls these two any more: a clinic asks the support desk
- * for a module and a super admin grants it with `setTenantFeature`. They stay
- * because the endpoints do — if the API withdraws the clinic-side purchase,
- * withdraw them with it.
- */
-
-/* ---- support desk ------------------------------------------------------------
- *
- * How a clinic asks for a module. The API stores the request and a background
- * worker emails the desk, so "sent" here means "the platform has it" — not
- * that the email has already left.
- */
-
-export const listSupportRequests = () => get<SupportRequest[]>("/v1/tenant/support-requests");
-
-export const createSupportRequest = (input: {
-  kind: SupportRequestKind;
-  feature_key?: FeatureKey;
-  message?: string;
-}) => post<SupportRequest>("/v1/tenant/support-requests", input);
-
-export const purchaseFeature = (key: FeatureKey) =>
-  post<TenantFeature>(`/v1/tenant/features/${key}/purchase`, {});
-export const deactivateFeature = (key: FeatureKey) =>
-  post<TenantFeature>(`/v1/tenant/features/${key}/deactivate`);
 
 export const addFieldDefinition = (input: Omit<FieldDefinition, "id" | "tenant_id" | "scope" | "clinical_type">) =>
   post<FieldDefinition>("/v1/tenant/fields", input);
@@ -985,25 +1014,25 @@ export interface Analytics {
     top_diagnoses: Labelled[];
   };
   modules: {
-    pharmacy?: {
+    pharmacy: {
       dispensed_units: number; dispensed_value?: number;
       prescriptions_waiting: number; fully_dispensed: number;
     };
-    lab?: {
+    lab: {
       total: number; ordered: number; pending: number;
       resulted: number; verified: number; abnormal: number;
     };
-    inventory?: {
+    inventory: {
       items: number;
       below_reorder: Array<{ item_id: Id; name: string; on_hand: number; reorder_level: number }>;
       expiring_soon: Array<{ batch_no: string; expiry: string; qty: number; item: string; days_left: number }>;
     };
-    billing?: {
+    billing: {
       billed?: number; paid?: number; outstanding?: number;
       count: number; unpaid: number; drafts: number;
       revenue_mix?: Labelled[];
     };
-    advanced_reports?: {
+    advanced_reports: {
       age_cohort: Labelled[];
       sex_split: Labelled[];
       clinicians: Array<{
@@ -1021,9 +1050,9 @@ export interface Analytics {
 
 /**
  * §3.14 — every figure the dashboard and reports show, aggregated in the
- * database. The client renders what it is given: a module a clinic never bought
- * simply has no key here, which is why nothing needs a feature check to decide
- * what to compute.
+ * database. Every clinic has every module, so every panel is always present;
+ * only the money figures inside them are withheld from a role without
+ * `revenue:read` (`revenue_visible`).
  */
 export const getAnalytics = (days: number) => get<Analytics>("/v1/analytics/dashboard", { days });
 
@@ -1035,7 +1064,6 @@ export const getReportPdf = (days: number) =>
 
 export interface PlatformTenantRow {
   tenant: Tenant;
-  active_features: FeatureKey[];
   users: number;
   patients: number;
   appointments: number;
@@ -1146,22 +1174,6 @@ export const tenantUsers = (tenantId: Id) =>
 export const tenantSupportRequests = (tenantId: Id) =>
   get<SupportRequest[]>(`/v1/platform/tenants/${tenantId}/support-requests`);
 
-/** The module catalogue with today's prices, as the console sells it. */
-export const listPlatformCatalogFeatures = () =>
-  get<CatalogFeature[]>("/v1/platform/catalog/features");
-
-/**
- * Set what a module costs per month, for every clinic at once.
- *
- * Super admin only: the API answers 403 to the support desk, so hiding the
- * control from `support` is presentation, not protection. A core module
- * carries no price and is refused with a 409.
- */
-export const setFeaturePrice = (featureKey: FeatureKey, priceMonthly: number) =>
-  patch_<CatalogFeature>(`/v1/platform/catalog/features/${featureKey}`, {
-    price_monthly: priceMonthly,
-  });
-
 /* ---- platform settings (§ platform settings) --------------------------------- */
 
 export interface PlatformSettings {
@@ -1182,6 +1194,8 @@ export interface PlatformSettings {
   rent_due_days: number;
   rent_grace_days: number;
   rent_reminder_days_before_due: number;
+  /** the one monthly fee every billed clinic pays, for the whole product */
+  subscription_fee_monthly: number;
 }
 
 export const getPlatformSettings = () => get<PlatformSettings>("/v1/platform/settings");
@@ -1214,6 +1228,9 @@ export interface PlatformBilling {
   due_days: number;
   grace_days: number;
   reminder_days_before_due: number;
+  /** the flat monthly fee, as `PlatformSettings.subscription_fee_monthly` —
+   *  repeated here because the support desk can read this and not settings */
+  fee_monthly: number;
   clinics: PlatformBillingRow[];
 }
 
@@ -1272,22 +1289,6 @@ export const runImport = (tenantId: Id, kind: ImportKind, file: File, commit: bo
     `/v1/platform/tenants/${tenantId}/imports/${kind}?commit=${commit ? "true" : "false"}`, form,
   );
 };
-
-export const tenantFeatures = (tenantId: Id) =>
-  get<TenantFeature[]>(`/v1/platform/tenants/${tenantId}/features`);
-
-/**
- * Switch a module on or off for one clinic.
- *
- * The clinic-side call records a clinic buying something; this is the
- * platform's own hand on the switch. Both write the same row, so the feature
- * guard reads one answer either way.
- */
-export const setTenantFeature = (
-  tenantId: Id,
-  featureKey: FeatureKey,
-  status: TenantFeature["status"],
-) => put_<TenantFeature>(`/v1/platform/tenants/${tenantId}/features/${featureKey}`, { status });
 
 /**
  * Open a support session inside a clinic.
@@ -1435,3 +1436,41 @@ export const openFlowerSession = () =>
 
 export const closeFlowerSession = () =>
   del<void>("/v1/platform/jobs/flower-session").catch(() => undefined);
+
+/* ---- consent forms ----------------------------------------------------------
+   The clinic's forms are versioned on the server: edits go to the one draft,
+   publishing turns it into the published version and archives the last, and
+   a patient's consent copies the exact version it was asked against. */
+
+export const listConsentTemplates = () => get<ConsentTemplate[]>("/v1/consent/templates");
+export const listConsentForms = () => get<ConsentForm[]>("/v1/consent/forms");
+export const getConsentForm = (id: Id) => get<ConsentForm>(`/v1/consent/forms/${id}`);
+export const createConsentForm = (template_key: string) =>
+  post<ConsentForm>("/v1/consent/forms", { template_key });
+export const getConsentVersion = (formId: Id, n: number) =>
+  get<ConsentVersion>(`/v1/consent/forms/${formId}/versions/${n}`);
+/** Begin editing — or, with `fromVersion`, copy an older version into the draft. */
+export const startConsentDraft = (formId: Id, fromVersion?: number) =>
+  post<ConsentForm>(`/v1/consent/forms/${formId}/draft`, fromVersion ? { from_version: fromVersion } : {});
+export const saveConsentDraft = (formId: Id, content: ConsentContent) =>
+  put_<ConsentForm>(`/v1/consent/forms/${formId}/draft`, { content });
+export const discardConsentDraft = (formId: Id) => del<ConsentForm>(`/v1/consent/forms/${formId}/draft`);
+export const publishConsentForm = (formId: Id) => post<ConsentForm>(`/v1/consent/forms/${formId}/publish`);
+export const resetConsentForm = (formId: Id) => post<ConsentForm>(`/v1/consent/forms/${formId}/reset`);
+/** One version as its printed document — the preview, the print and the blank form are this file. */
+export const consentVersionPdf = (formId: Id, n: number) =>
+  requestBlob(`/v1/consent/forms/${formId}/versions/${n}/document.pdf`);
+
+export const listPatientConsents = (patientId: Id) =>
+  get<PatientConsent[]>("/v1/consent/records", { patient_id: patientId });
+export const getPatientConsent = (id: Id) => get<PatientConsent>(`/v1/consent/records/${id}`);
+export const requestPatientConsent = (body: {
+  patient_id: Id; form_id: Id; provider_id?: Id | null; field_values: Record<string, string>;
+}) => post<PatientConsent>("/v1/consent/records", body);
+export const signPatientConsent = (id: Id, body: {
+  signer_name: string; signer_relationship: string; acknowledged: string[];
+  patient_signature: string; provider_signature: string | null;
+}) => post<PatientConsent>(`/v1/consent/records/${id}/sign`, body);
+export const declinePatientConsent = (id: Id, reason: string) =>
+  post<PatientConsent>(`/v1/consent/records/${id}/decline`, { reason });
+export const patientConsentPdf = (id: Id) => requestBlob(`/v1/consent/records/${id}/document.pdf`);

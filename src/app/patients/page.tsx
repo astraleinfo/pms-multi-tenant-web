@@ -15,7 +15,6 @@ import { Badge } from "@/components/ui/badge";
 import { SearchInput, Select } from "@/components/ui/field";
 import { EmptyState } from "@/components/ui/misc";
 import { CardsSkeleton } from "@/components/ui/loader";
-import { FeatureGate } from "@/components/domain/gates";
 import { PatientChip, AllergyFlag } from "@/components/domain/patient";
 import {
   IconArrowRight, IconChevronLeft, IconChevronRight, IconGrid, IconList, IconPlus, IconUser, IconUsers,
@@ -74,11 +73,7 @@ const patientColumns = col.columns([
 ]);
 
 export default function PatientsPage() {
-  return (
-    <FeatureGate feature="patient">
-      <PatientList />
-    </FeatureGate>
-  );
+  return <PatientList />;
 }
 
 type Filter = "all" | "seen_today" | "new" | "allergies";

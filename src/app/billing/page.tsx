@@ -17,7 +17,7 @@ import { EmptyState, Meter } from "@/components/ui/misc";
 import { Stat } from "@/components/ui/stat";
 import { SearchInput } from "@/components/ui/field";
 import { Tabs } from "@/components/ui/tabs";
-import { FeatureGate, RoleGate } from "@/components/domain/gates";
+import { RoleGate } from "@/components/domain/gates";
 import { DEPARTMENT_LABEL, StatusPill } from "@/components/domain/status";
 import { PatientRef } from "@/components/domain/patient";
 import { InvoiceComposer } from "@/components/domain/invoice-composer";
@@ -108,9 +108,7 @@ function InvoicePatient({ invoice }: { invoice: Invoice }) {
 export default function BillingPage() {
   return (
     <RoleGate allow={["receptionist"]}>
-      <FeatureGate feature="billing">
-        <Billing />
-      </FeatureGate>
+      <Billing />
     </RoleGate>
   );
 }

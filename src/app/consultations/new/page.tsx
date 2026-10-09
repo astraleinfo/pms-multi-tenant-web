@@ -6,15 +6,14 @@ import { useApp, useTenant } from "@/lib/store/app-store";
 import { useClinicDb, useSchema, usePatient } from "@/lib/query/hooks";
 import { selectDoctors, selectEncounters, selectQueue } from "@/lib/data/repository";
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
-import { modulePath } from "@/lib/nav";
 import { age, formatDate, relativeDay } from "@/lib/format";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader, Legend } from "@/components/ui/card";
-import { Button, ButtonLink } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Badge, Numeral } from "@/components/ui/badge";
-import { EmptyState, KV } from "@/components/ui/misc";
+import { KV } from "@/components/ui/misc";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
-import { FeatureGate, RoleGate } from "@/components/domain/gates";
+import { RoleGate } from "@/components/domain/gates";
 import { DynamicField } from "@/components/domain/dynamic-form";
 import { AllergyFlag, PatientChip, PatientPicker } from "@/components/domain/patient";
 import { ClinicalExamPanel } from "@/components/domain/clinical-exam";
@@ -35,9 +34,7 @@ export default function NewConsultationPage(props: PageProps<"/consultations/new
   const focus = sp.focus === "prescription" || sp.focus === "lab" ? sp.focus : undefined;
   return (
     <RoleGate allow={["doctor"]}>
-      <FeatureGate feature="consultation">
-        <Workspace queueId={queueId} patientId={patientId} focus={focus} />
-      </FeatureGate>
+      <Workspace queueId={queueId} patientId={patientId} focus={focus} />
     </RoleGate>
   );
 }
@@ -50,7 +47,7 @@ function Workspace({
   focus?: "prescription" | "lab";
 }) {
   const router = useRouter();
-  const { session, today, hasFeature, notify, createEncounter, createPrescription, createLabOrder } = useApp();
+  const { session, today, notify, createEncounter, createPrescription, createLabOrder } = useApp();
   const db = useClinicDb();
   const { tenant, user, role } = useTenant();
   const t = session.tenantId;
@@ -118,7 +115,7 @@ function Workspace({
       })));
     }
 
-    if (tests.length && hasFeature("lab")) {
+    if (tests.length) {
       createLabOrder(encounterId, patient, doctor, tests.map((x) => ({ ...x, note: labNote.trim() || undefined })));
     }
 
@@ -127,7 +124,7 @@ function Workspace({
       title: sign ? "Encounter signed" : "Draft saved",
       body: [
         usableRx.length ? `${usableRx.length} prescription line${usableRx.length === 1 ? "" : "s"}` : null,
-        tests.length && hasFeature("lab") ? `${tests.length} lab order${tests.length === 1 ? "" : "s"}` : null,
+        tests.length ? `${tests.length} lab order${tests.length === 1 ? "" : "s"}` : null,
         sign && queueEntry ? "queue token closed" : null,
       ].filter(Boolean).join(" · ") || undefined,
     });
@@ -272,27 +269,13 @@ function Workspace({
             </CardBody>
           </Card>
 
-          {hasFeature("lab") ? (
-            <Card id="lab" className="scroll-mt-20">
-              <CardHeader tone="info" icon={<IconFlask size={16} />} title="Lab orders"
-                          hint="Tests are ordered from the encounter and travel with it." />
-              <CardBody className="pt-0">
-                <LabOrderPicker selected={tests} onChange={setTests} note={labNote} onNote={setLabNote} />
-              </CardBody>
-            </Card>
-          ) : (
-            <Card className="border-dashed">
-              <CardBody className="pt-5">
-                <EmptyState
-                  compact
-                  icon={<IconFlask size={20} />}
-                  title="Lab is not enabled"
-                  body="Tests cannot be ordered from this encounter until the module is switched on. Nothing else about the consultation changes."
-                  action={<ButtonLink href={modulePath("lab")} size="sm" variant="secondary">See what Lab does</ButtonLink>}
-                />
-              </CardBody>
-            </Card>
-          )}
+          <Card id="lab" className="scroll-mt-20">
+            <CardHeader tone="info" icon={<IconFlask size={16} />} title="Lab orders"
+                        hint="Tests are ordered from the encounter and travel with it." />
+            <CardBody className="pt-0">
+              <LabOrderPicker selected={tests} onChange={setTests} note={labNote} onNote={setLabNote} />
+            </CardBody>
+          </Card>
         </div>
 
         {/* context rail */}
@@ -311,7 +294,7 @@ function Workspace({
                   {rx.filter((r) => r.medicine.trim()).length > 0 && (
                     <li>· Prescription with {rx.filter((r) => r.medicine.trim()).length} line{rx.filter((r) => r.medicine.trim()).length === 1 ? "" : "s"}.</li>
                   )}
-                  {tests.length > 0 && hasFeature("lab") && <li>· {tests.length} lab order{tests.length === 1 ? "" : "s"} raised.</li>}
+                  {tests.length > 0 && <li>· {tests.length} lab order{tests.length === 1 ? "" : "s"} raised.</li>}
                   {queueEntry && <li>· Token {String(queueEntry.token_no).padStart(2, "0")} marked completed on sign.</li>}
                 </ul>
               </CardBody>

@@ -5,17 +5,17 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as api from "@/lib/api";
 import { qk } from "@/lib/query/keys";
 import {
-  useAppointments, useConfig, useFeatures, useHostTenant, useTenant as useTenantQuery, useUsers,
+  useAppointments, useConfig, useHostTenant, useTenant as useTenantQuery, useUsers,
 } from "@/lib/query/hooks";
 import { SessionProvider, useSession } from "@/lib/store/session";
 import { useQueueStream, type ConnectionState } from "@/lib/realtime";
 import { setActiveCurrency, setToday, TODAY } from "@/lib/format";
 import type {
-  AccountStatus, Appointment, BillingDepartment, CatalogFeature, ClinicalTypeKey, Encounter,
-  FeatureKey, FieldDefinition, Id, InventoryItem, InventoryItemPatch, Invoice, InvoiceLineItem, LabAttachment,
+  AccountStatus, Appointment, BillingDepartment, ClinicalTypeKey, Encounter,
+  FieldDefinition, FollowUp, Id, PatientNote, InventoryItem, InventoryItemPatch, Invoice, InvoiceLineItem, LabAttachment,
   LabResultLine, NewAppointment, NewEncounter, NewInventoryItem, NewServicePrice, Payment,
   PrescriptionItem, QueueEntry, ServicePrice, ServicePricePatch, Tenant, TenantConfig,
-  TenantFeature, User,
+  User,
 } from "@/lib/types";
 import type { AuthResult, PlatformStaff } from "@/lib/api";
 
@@ -60,7 +60,6 @@ interface AppContextValue {
   clinicUrl: (slug: string, path?: string) => string;
   consoleUrl: () => string;
 
-  hasFeature: (key: FeatureKey) => boolean;
   can: (permission: string) => boolean;
 
   signIn: (email: string, password: string) => Promise<AuthResult>;
@@ -79,20 +78,21 @@ interface AppContextValue {
   /** awaited: the settings page shows the new mark as soon as this resolves */
   uploadClinicLogo: (file: File) => Promise<TenantConfig>;
   removeClinicLogo: () => void;
-  /** Unused by the UI — a module is granted by a super admin, not bought from
-      inside the clinic. See the note in `lib/api`. */
-  purchaseFeature: (key: FeatureKey) => void;
-  deactivateFeature: (key: FeatureKey) => void;
   addFieldDefinition: (d: Omit<FieldDefinition, "id" | "tenant_id" | "scope" | "clinical_type">) => void;
   removeFieldDefinition: (id: Id) => void;
 
   createPatient: (values: Record<string, unknown>) => Promise<Id>;
+  /** Awaited, so the composer keeps what was typed if the note is refused. */
+  addPatientNote: (patientId: Id, note: { body: string; amends_id?: Id }) => Promise<PatientNote>;
   updatePatient: (id: Id, values: Record<string, unknown>) => void;
 
   createAppointment: (a: NewAppointment) => Promise<Id>;
   setAppointmentStatus: (id: Id, status: Appointment["status"]) => void;
   conflictsFor: (doctorId: Id, date: string, time: string, duration: number, ignoreId?: Id) => Appointment[];
   checkIn: (appointmentId: Id) => void;
+  /** Awaited: the call sheet stays open on a refusal — a slot that went while
+      the patient was deciding — so another can be offered with them still on the line. */
+  recordFollowUpCall: (appointmentId: Id, call: api.NewFollowUpCall) => Promise<FollowUp>;
   addWalkIn: (input: { patient_id: Id; doctor_id: Id; reason: string; priority: QueueEntry["priority"] }) => void;
   setQueueStatus: (id: Id, status: QueueEntry["status"]) => void;
 
@@ -167,11 +167,6 @@ interface AppContextValue {
   }) => Promise<api.TenantCreated>;
   setTenantStatus: (tenantId: Id, status: Tenant["status"]) => void;
   updateTenant: (tenantId: Id, changes: api.TenantEdit) => Promise<Tenant>;
-  setTenantFeature: (
-    tenantId: Id, featureKey: FeatureKey, status: TenantFeature["status"],
-  ) => Promise<TenantFeature>;
-  /** Set a module's monthly price for every clinic. Super admin only. */
-  setFeaturePrice: (featureKey: FeatureKey, priceMonthly: number) => Promise<CatalogFeature>;
   updatePlatformSettings: (changes: Partial<api.PlatformSettings>) => Promise<api.PlatformSettings>;
   resendTenantInvitation: (tenantId: Id, userId: Id) => Promise<api.TenantCreated>;
   openSupportSession: (tenantId: Id) => Promise<api.SupportSession>;
@@ -197,7 +192,6 @@ function AppFacade({ children }: { children: React.ReactNode }) {
 
   const { tenant: hostTenant, isPending: hostTenantPending } = useHostTenant();
   const { tenant } = useTenantQuery();
-  const { data: features } = useFeatures();
   const { data: config } = useConfig();
   const { data: appointments } = useAppointments();
   useUsers();
@@ -219,9 +213,8 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     () => { void qc.invalidateQueries({ queryKey: qk.tenant(tenantId) }); },
     [qc, tenantId],
   );
-  /* The console reads a snapshot *and* per-clinic entitlement rows, so a grant
-     has to refresh both — invalidating only the snapshot would leave the module
-     screen insisting the switch is still where it was. */
+  /* Everything the console reads hangs off `["platform"]`, so one write
+     refreshes every view of the clinics together. */
   const invalidatePlatform = React.useCallback(
     () => { void qc.invalidateQueries({ queryKey: qk.platformRoot() }); },
     [qc],
@@ -246,10 +239,14 @@ function AppFacade({ children }: { children: React.ReactNode }) {
   }
 
   const mCreatePatient = useTenantMutation((v: Record<string, unknown>) => api.createPatient(v));
+  const mPatientNote = useTenantMutation((a: { patientId: Id; note: { body: string; amends_id?: Id } }) =>
+    api.addPatientNote(a.patientId, a.note));
   const mUpdatePatient = useTenantMutation((a: { id: Id; values: Record<string, unknown> }) => api.updatePatient(a.id, a.values));
   const mCreateAppointment = useTenantMutation((a: NewAppointment) => api.createAppointment(a));
   const mAppointmentStatus = useTenantMutation((a: { id: Id; status: Appointment["status"] }) => api.setAppointmentStatus(a.id, a.status));
   const mCheckIn = useTenantMutation((id: Id) => api.checkIn(id));
+  const mFollowUpCall = useTenantMutation((a: { id: Id; call: api.NewFollowUpCall }) =>
+    api.recordFollowUpCall(a.id, a.call));
   const mWalkIn = useTenantMutation((i: Parameters<typeof api.addWalkIn>[0]) => api.addWalkIn(i));
   const mQueueStatus = useTenantMutation((a: { id: Id; status: QueueEntry["status"] }) => api.setQueueStatus(a.id, a.status));
   const mCreateEncounter = useTenantMutation((a: { e: NewEncounter; sign: boolean }) => api.createEncounter(a.e, a.sign));
@@ -293,8 +290,6 @@ function AppFacade({ children }: { children: React.ReactNode }) {
   const mUpdateConfig = useTenantMutation((p: Partial<TenantConfig>) => api.updateConfig(p));
   const mUploadLogo = useTenantMutation((file: File) => api.uploadClinicLogo(file));
   const mRemoveLogo = useTenantMutation<void, TenantConfig>(() => api.deleteClinicLogo());
-  const mPurchase = useTenantMutation((k: FeatureKey) => api.purchaseFeature(k));
-  const mDeactivate = useTenantMutation((k: FeatureKey) => api.deactivateFeature(k));
   const mAddField = useTenantMutation((d: Omit<FieldDefinition, "id" | "tenant_id" | "scope" | "clinical_type">) => api.addFieldDefinition(d));
   const mRemoveField = useTenantMutation((id: Id) => api.removeFieldDefinition(id));
   const mUserStatus = useTenantMutation((a: { id: Id; status: AccountStatus }) => api.setUserStatus(a.id, a.status));
@@ -330,20 +325,11 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     mutationFn: (a: { id: Id; changes: api.TenantEdit }) => api.updateTenant(a.id, a.changes),
     onSuccess: invalidatePlatform,
   });
-  const mTenantFeature = useMutation({
-    mutationFn: (a: { id: Id; key: FeatureKey; status: TenantFeature["status"] }) =>
-      api.setTenantFeature(a.id, a.key, a.status),
-    onSuccess: invalidatePlatform,
-  });
-  /* The catalogue sits under `["platform"]`, so the one invalidation redraws
-     the price and every revenue figure computed from it together. */
-  const mFeaturePrice = useMutation({
-    mutationFn: (a: { key: FeatureKey; price: number }) => api.setFeaturePrice(a.key, a.price),
-    onSuccess: invalidatePlatform,
-  });
+  /* The subscription fee is a platform setting, and every bill, plan and run
+     rate in the console is computed from it — so a save refreshes the lot. */
   const mPlatformSettings = useMutation({
     mutationFn: (changes: Partial<api.PlatformSettings>) => api.updatePlatformSettings(changes),
-    onSuccess: () => qc.invalidateQueries({ queryKey: qk.platformSettings() }),
+    onSuccess: invalidatePlatform,
   });
   const mResendTenantInvite = useMutation({
     mutationFn: (a: { id: Id; userId: Id }) => api.resendTenantInvitation(a.id, a.userId),
@@ -377,9 +363,7 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     clinicUrl: s.clinicUrl,
     consoleUrl: s.consoleUrl,
 
-    /* UX only. The server's feature guard is the enforcement — a module that
-       was never bought answers 403 whatever the nav shows. */
-    hasFeature: (key) => features.some((f) => f.feature_key === key && f.status === "active"),
+    /* UX only. The server's permission guard is the enforcement. */
     can: (permission) => s.permissions.includes(permission),
 
     signIn: s.signIn,
@@ -395,13 +379,12 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     updateConfig: (patch) => mUpdateConfig.mutate(patch),
     uploadClinicLogo: (file) => mUploadLogo.mutateAsync(file),
     removeClinicLogo: () => mRemoveLogo.mutate(),
-    purchaseFeature: (key) => mPurchase.mutate(key),
-    deactivateFeature: (key) => mDeactivate.mutate(key),
     addFieldDefinition: (d) => mAddField.mutate(d),
     removeFieldDefinition: (id) => mRemoveField.mutate(id),
 
     createPatient: (values) => mCreatePatient.mutateAsync(values),
     updatePatient: (id, values) => mUpdatePatient.mutate({ id, values }),
+    addPatientNote: (patientId, note) => mPatientNote.mutateAsync({ patientId, note }),
 
     createAppointment: (a) => mCreateAppointment.mutateAsync(a),
     setAppointmentStatus: (id, status) => mAppointmentStatus.mutate({ id, status }),
@@ -411,6 +394,7 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     conflictsFor: (doctorId, date, time, duration, ignoreId) =>
       api.conflictsIn(appointments ?? [], doctorId, date, time, duration, ignoreId),
     checkIn: (id) => mCheckIn.mutate(id),
+    recordFollowUpCall: (id, call) => mFollowUpCall.mutateAsync({ id, call }),
     addWalkIn: (input) => mWalkIn.mutate(input),
     setQueueStatus: (id, status) => mQueueStatus.mutate({ id, status }),
 
@@ -452,15 +436,13 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     createTenant: (input) => mCreateTenant.mutateAsync(input),
     setTenantStatus: (id, status) => mTenantStatus.mutate({ id, status }),
     updateTenant: (id, changes) => mUpdateTenant.mutateAsync({ id, changes }),
-    setTenantFeature: (id, key, status) => mTenantFeature.mutateAsync({ id, key, status }),
-    setFeaturePrice: (key, price) => mFeaturePrice.mutateAsync({ key, price }),
     updatePlatformSettings: (changes) => mPlatformSettings.mutateAsync(changes),
     resendTenantInvitation: (id, userId) => mResendTenantInvite.mutateAsync({ id, userId }),
     openSupportSession: (id) => api.openSupportSession(id),
     resendInvitation: (userId) => mResendInvite.mutateAsync(userId),
     changeOwnPassword: (current, next) => mChangePassword.mutateAsync({ current, next }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [s, hostTenant, hostTenantPending, tenant, features, config, appointments, connection, qc]);
+  }), [s, hostTenant, hostTenantPending, tenant, config, appointments, connection, qc]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

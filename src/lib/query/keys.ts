@@ -6,9 +6,8 @@ import type { FieldDefinition, Id } from "@/lib/types";
  * with one call and nothing else is disturbed.
  *
  * The console gets the same treatment one level up: everything it reads across
- * clinics hangs off `["platform"]`, so granting a module refreshes the snapshot
- * and that clinic's entitlement rows together rather than leaving the console
- * showing two different answers.
+ * clinics hangs off `["platform"]`, so one console write refreshes every view
+ * of the clinics together rather than leaving two different answers on screen.
  */
 export const qk = {
   tenants: () => ["tenants"] as const,
@@ -16,11 +15,7 @@ export const qk = {
   /** the whole console subtree — what a platform write invalidates */
   platformRoot: () => ["platform"] as const,
   platform: () => ["platform", "snapshot"] as const,
-  /** one clinic as the console sees it, not as the clinic sees itself */
-  platformFeatures: (t: Id) => ["platform", "tenants", t, "features"] as const,
   platformUsers: (t: Id) => ["platform", "tenants", t, "users"] as const,
-  /** The module catalogue and its prices, as the console sells it. */
-  platformCatalog: () => ["platform", "catalog", "features"] as const,
   platformSettings: () => ["platform", "settings"] as const,
   publicSettings: () => ["public", "settings"] as const,
   /** Every clinic's subscription bills, and one clinic's. */
@@ -33,16 +28,12 @@ export const qk = {
 
   users: (t: Id) => ["tenant", t, "users"] as const,
   doctors: (t: Id) => ["tenant", t, "users", "doctors"] as const,
-  features: (t: Id) => ["tenant", t, "features"] as const,
-  supportRequests: (t: Id) => ["tenant", t, "support-requests"] as const,
   config: (t: Id) => ["tenant", t, "config"] as const,
   logo: (t: Id) => ["tenant", t, "config", "logo"] as const,
   fields: (t: Id) => ["tenant", t, "fields"] as const,
   schema: (t: Id, entity: FieldDefinition["entity"], clinicalType: string) =>
     ["tenant", t, "fields", "schema", entity, clinicalType] as const,
   medicines: (t: Id) => ["tenant", t, "catalog", "medicines"] as const,
-  /** The module catalogue with the prices this clinic is quoted. */
-  catalogFeatures: (t: Id) => ["tenant", t, "catalog", "features"] as const,
   /** What this clinic owes the platform. */
   subscription: (t: Id) => ["tenant", t, "subscription"] as const,
 
@@ -53,7 +44,13 @@ export const qk = {
     ["tenant", t, "patients", "page", query] as const,
   patientSearch: (t: Id, term: string) => ["tenant", t, "patients", "search", term] as const,
   patient: (t: Id, id: Id) => ["tenant", t, "patients", id] as const,
+  consentForms: (t: Id) => ["tenant", t, "consent", "forms"] as const,
+  consentForm: (t: Id, id: Id) => ["tenant", t, "consent", "forms", id] as const,
+  consentTemplates: (t: Id) => ["tenant", t, "consent", "templates"] as const,
+  patientConsents: (t: Id, patientId: Id) => ["tenant", t, "consent", "records", patientId] as const,
+  patientConsent: (t: Id, id: Id) => ["tenant", t, "consent", "record", id] as const,
   patientHistory: (t: Id, id: Id) => ["tenant", t, "patients", id, "history"] as const,
+  patientNotes: (t: Id, id: Id) => ["tenant", t, "patients", id, "notes"] as const,
 
   appointments: (t: Id) => ["tenant", t, "appointments"] as const,
   appointment: (t: Id, id: Id) => ["tenant", t, "appointments", "one", id] as const,
@@ -61,6 +58,11 @@ export const qk = {
       instant and a write still invalidates the whole clinic subtree. */
   appointmentPage: (t: Id, query: Record<string, unknown>) =>
     ["tenant", t, "appointments", "page", query] as const,
+  /** Under the diary's key, so anything that touches a booking refreshes the call list too. */
+  followUpPage: (t: Id, query: Record<string, unknown>) =>
+    ["tenant", t, "appointments", "follow-ups", query] as const,
+  followUpCalls: (t: Id, appointmentId: Id) =>
+    ["tenant", t, "appointments", "follow-ups", "calls", appointmentId] as const,
   queue: (t: Id) => ["tenant", t, "queue"] as const,
   encounters: (t: Id) => ["tenant", t, "encounters"] as const,
   encounterPage: (t: Id, query: Record<string, unknown>) =>

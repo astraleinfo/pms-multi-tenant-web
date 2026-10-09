@@ -22,7 +22,7 @@ export function PrescriptionDetailModal({ prescription: opened, onClose }: {
   prescription: Prescription | null;
   onClose: () => void;
 }) {
-  const { hasFeature, notify } = useApp();
+  const { notify } = useApp();
   const { data: users = [] } = useUsers();
   const { data: fresh, isPending } = usePrescription(opened?.id ?? "");
   const rx = fresh ?? opened;
@@ -56,7 +56,7 @@ export function PrescriptionDetailModal({ prescription: opened, onClose }: {
             <Button variant="ghost" onClick={() => void print(rx.encounter_id)} disabled={printing}>
               <IconPrint size={14} /> {printing ? "Preparing…" : "Print"}
             </Button>
-            {hasFeature("pharmacy") && rx.status !== "dispensed" && (
+            {rx.status !== "dispensed" && (
               <ButtonLink href="/pharmacy" variant="primary">
                 Dispense at the counter <IconArrowRight size={14} />
               </ButtonLink>

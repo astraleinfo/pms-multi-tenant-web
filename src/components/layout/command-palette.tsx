@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "@/lib/navigation";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/cn";
-import { useApp, useTenant } from "@/lib/store/app-store";
+import { useTenant } from "@/lib/store/app-store";
 import { usePatientSearch } from "@/lib/query/hooks";
 import { ALL_NAV_ITEMS, roleAllows } from "@/lib/nav";
 import { age } from "@/lib/format";
@@ -23,7 +23,6 @@ interface Row {
 
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter();
-  const { hasFeature } = useApp();
   const { role } = useTenant();
   const [q, setQ] = React.useState("");
   const [cursor, setCursor] = React.useState(0);
@@ -43,7 +42,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const rows = React.useMemo<Row[]>(() => {
     const term = q.trim().toLowerCase();
     const navRows: Row[] = ALL_NAV_ITEMS
-      .filter((i) => roleAllows(i, role) && (!i.feature || hasFeature(i.feature)))
+      .filter((i) => roleAllows(i, role))
       .filter((i) => !term || i.label.toLowerCase().includes(term) || i.description.toLowerCase().includes(term))
       .map((i) => ({
         id: i.href, title: i.label, sub: i.description, href: i.href, group: "Go to",
@@ -61,7 +60,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       }));
 
     return [...patientRows, ...navRows].slice(0, 12);
-  }, [q, matches, role, hasFeature]);
+  }, [q, matches, role]);
 
   React.useEffect(() => { setCursor(0); }, [q]);
 

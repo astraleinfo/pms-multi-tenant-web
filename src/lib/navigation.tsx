@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { usePathname, useRouter as useNextRouter, useSearchParams } from "next/navigation";
+import { PageSkeleton } from "@/components/ui/loader";
 
 /* ==========================================================================
    Navigation feedback.
@@ -9,8 +10,9 @@ import { usePathname, useRouter as useNextRouter, useSearchParams } from "next/n
    A click on a link, a `router.push` after a save, a redirect to sign-in —
    each is a moment where the screen has been asked to change and has not yet.
    Most of them are instant, and some are not: a route compiling, a guard
-   deciding where to send somebody, a slow network. The bar across the top
-   says "it heard you" for those, and stays out of the way for the rest.
+   deciding where to send somebody, a slow network. A loader in the page's
+   own content area says "it heard you" for those, and stays out of the way
+   for the rest.
 
    It starts from three places — any same-origin link clicked, the router
    below, and the browser's own back and forward — and finishes when the
@@ -32,7 +34,7 @@ function set(next: State) {
 export function startNavigation() {
   clearTimeout(safety);
   /* a navigation that never lands — refused, or to where we already are —
-     must not leave the bar crawling forever */
+     must not leave the loader up forever */
   safety = setTimeout(() => finishNavigation(), 12_000);
   set("loading");
 }
@@ -64,7 +66,7 @@ function isElsewhere(href: string) {
 }
 
 /**
- * `useRouter` from `next/navigation`, with the bar started on the way out.
+ * `useRouter` from `next/navigation`, with the loader started on the way out.
  * Import this one instead of Next's — the API is the same.
  */
 export function useRouter(): ReturnType<typeof useNextRouter> {
@@ -84,9 +86,9 @@ export function useRouter(): ReturnType<typeof useNextRouter> {
   }), [router]);
 }
 
-/* ---- the bar --------------------------------------------------------------- */
+/* ---- the loader ------------------------------------------------------------- */
 
-/** Finishes the bar when the address changes. Needs a Suspense boundary. */
+/** Finishes the navigation when the address changes. Needs a Suspense boundary. */
 function RouteWatcher() {
   const pathname = usePathname();
   const search = useSearchParams();
@@ -97,11 +99,48 @@ function RouteWatcher() {
 /** How long a navigation may take before it is worth showing at all. */
 const SHOW_AFTER_MS = 120;
 
-export function NavigationProgress() {
+/**
+ * Whether a navigation has been going long enough to show. Quick ones finish
+ * inside the delay and never flash a loader.
+ */
+export function useNavigationPending() {
   const current = React.useSyncExternalStore(subscribe, () => state, () => "idle" as State);
-  const [width, setWidth] = React.useState(0);
-  const [visible, setVisible] = React.useState(false);
+  const [pending, setPending] = React.useState(false);
 
+  React.useEffect(() => {
+    if (current !== "loading") { setPending(false); return; }
+    const show = setTimeout(() => setPending(true), SHOW_AFTER_MS);
+    return () => clearTimeout(show);
+  }, [current]);
+
+  return pending;
+}
+
+/**
+ * Covers a shell's content area with the page skeleton while a navigation is
+ * on its way — the rail and topbar stay put, and the page under it stays
+ * mounted so a navigation that never lands leaves it as it was. The parent
+ * must be positioned; `className` is the shell's own content container, so
+ * the skeleton sits exactly where the page will.
+ */
+export function NavigationPending({ className }: { className?: string }) {
+  const pending = useNavigationPending();
+  if (!pending) return null;
+  return (
+    <div className="absolute inset-0 z-20 bg-ground">
+      <div className={className}>
+        <PageSkeleton />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Starts navigations from links and history, and finishes them when the
+ * address changes. Renders nothing visible — `NavigationPending` does that,
+ * inside each shell.
+ */
+export function NavigationProgress() {
   /* Links and history. A click is caught before Next handles it, on the
      capture phase; anything that is not a plain, same-tab, in-app link is
      left to the browser, which shows its own progress for a full load. */
@@ -121,50 +160,9 @@ export function NavigationProgress() {
     };
   }, []);
 
-  React.useEffect(() => {
-    if (current === "loading") {
-      /* a second navigation while the last one's bar is still leaving starts
-         the bar again from the left, not from the far end */
-      setWidth((w) => (w >= 92 ? 0 : w));
-      /* quick navigations finish inside the delay and never show a bar */
-      const show = setTimeout(() => { setVisible(true); setWidth(18); }, SHOW_AFTER_MS);
-      /* then it creeps, more slowly the further it gets, and never arrives —
-         only the navigation landing takes it to the end */
-      const creep = setInterval(() => setWidth((w) => (w < 18 ? w : Math.min(92, w + (92 - w) * 0.08))), 200);
-      return () => { clearTimeout(show); clearInterval(creep); };
-    }
-    if (current === "done") {
-      if (!visible) { set("idle"); return; }
-      setWidth(100);
-      const hide = setTimeout(() => { setVisible(false); }, 220);
-      const reset = setTimeout(() => { setWidth(0); set("idle"); }, 480);
-      return () => { clearTimeout(hide); clearTimeout(reset); };
-    }
-    /* `visible` is read at the moment the navigation finishes, not tracked */
-  }, [current]);
-
   return (
-    <>
-      <React.Suspense fallback={null}>
-        <RouteWatcher />
-      </React.Suspense>
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-x-0 top-0 z-[80] h-[2.5px]"
-        style={{ opacity: visible ? 1 : 0, transition: "opacity 220ms var(--ease)" }}
-      >
-        <div
-          className="h-full bg-accent shadow-[0_0_8px_var(--accent)]"
-          style={{
-            width: `${width}%`,
-            transition: width === 0 ? "none" : "width 260ms var(--ease-out)",
-          }}
-        />
-      </div>
-      {/* read by assistive technology as a status, not as the bar itself */}
-      <span role="status" aria-live="polite" className="sr-only">
-        {visible && current === "loading" ? "Loading" : ""}
-      </span>
-    </>
+    <React.Suspense fallback={null}>
+      <RouteWatcher />
+    </React.Suspense>
   );
 }

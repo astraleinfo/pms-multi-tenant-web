@@ -156,7 +156,7 @@ function StatusConsequences({ tenant, next }: Pending) {
             <strong className="font-medium text-ink">{tenant.slug}</strong> stops serving the app and
             serves a notice instead. Everyone signed in is signed out at their next request.
           </>,
-          <>Every module it holds goes on hold — nothing is collected while it stays suspended.</>,
+          <>Its subscription goes on hold — no bill is raised while it stays suspended.</>,
           <>
             <strong className="font-medium text-ink">No data is touched.</strong> Patients, records
             and invoices are exactly where they were, and reactivating puts the clinic back as it was.

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { usePathname } from "next/navigation";
-import { useRouter } from "@/lib/navigation";
+import { NavigationPending, useRouter } from "@/lib/navigation";
 import { cn } from "@/lib/cn";
 import { useApp } from "@/lib/store/app-store";
 import { useQueryClient } from "@tanstack/react-query";
@@ -72,8 +72,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  /* The waiting-room screen is a public display: no rail, no topbar. */
-  const bare = pathname === "/display";
+  /* The waiting-room screen is a public display, and the consent signing
+     screen is handed to a patient: neither has a rail or a topbar, so there is
+     nothing on them to wander into. Both still need a staff session. */
+  const bare = pathname === "/display" || pathname.startsWith("/consent/sign/");
 
   /* Screens for somebody who has no session and is not supposed to have one
      yet. They live on a clinic's address because the clinic is the address,
@@ -119,9 +121,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
      platform looks into a clinic in exactly this state. */
   if (tenantRecord?.billing_hold && !session.impersonated) return <OnHoldStage />;
 
-  /* the shell decides what to render from what this clinic bought and how it is
-     configured — hold the chrome until those have arrived rather than flashing
-     a nav that is about to change */
+  /* the shell renders from the clinic record and how it is configured — hold
+     the chrome until those have arrived rather than flashing a rail that is
+     about to change */
   if (!shellReady) {
     return <StageLoader label="Opening the clinic…" />;
   }
@@ -167,10 +169,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           onOpenSearch={() => setSearch(true)}
           onOpenMobileNav={() => setMobileNav(true)}
         />
-        <main className="min-w-0 flex-1">
+        <main className="relative min-w-0 flex-1">
           <div className="mx-auto w-full max-w-[var(--page-max)] px-4 py-6 sm:px-6 sm:py-7">
             {children}
           </div>
+          <NavigationPending className="mx-auto w-full max-w-[var(--page-max)] px-4 py-6 sm:px-6 sm:py-7" />
         </main>
       </div>
 

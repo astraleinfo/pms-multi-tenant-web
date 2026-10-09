@@ -6,13 +6,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import * as api from "@/lib/api";
 import { useApp, useTenant } from "@/lib/store/app-store";
 import {
-  useClinicDb, useClinicLogoUrl, useFeatureCatalog, useSchema, useSubscription, useUsers,
+  useClinicDb, useClinicLogoUrl, useSchema, useSubscription, useUsers,
 } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { cn } from "@/lib/cn";
-import { CLINICAL_TYPES, FEATURES } from "@/lib/data/catalog";
-import { activeFeatureKeys, selectUsers } from "@/lib/data/repository";
-import { ROLE_LABEL, modulePath } from "@/lib/nav";
+import { CLINICAL_TYPES } from "@/lib/data/catalog";
+import { selectUsers } from "@/lib/data/repository";
+import { ROLE_LABEL } from "@/lib/nav";
 import { currency, formatDate, formatTime12, pluralise, titleCase } from "@/lib/format";
 import type { AppointmentType, FieldDefinition, FieldType, Role, User } from "@/lib/types";
 import {
@@ -20,7 +20,7 @@ import {
 } from "@/lib/appointment-types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader, Legend } from "@/components/ui/card";
-import { Button, ButtonLink, Segmented } from "@/components/ui/button";
+import { Button, Segmented } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, EmptyState } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
@@ -31,22 +31,26 @@ import {
   SettingLinkRow, SettingRow, SettingToggleRow, SettingValueRow, SettingsActions, SettingsSection,
 } from "@/components/ui/settings";
 import { Tabs } from "@/components/ui/tabs";
+import { ConsentFormsPanel } from "@/components/consent/forms-panel";
 import { DataTable, columnHelperFor } from "@/components/ui/data-table";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { RoleGate } from "@/components/domain/gates";
 import { useTour } from "@/components/onboarding/tour";
 import { Monogram } from "@/components/layout/rail";
 import {
-  IconAlert, IconCheck, IconChevronRight, IconEdit, IconGrid, IconKey, IconLayers, IconList, IconLock, IconMail,
+  IconAlert, IconCheck, IconEdit, IconGrid, IconKey, IconLayers, IconList, IconLock, IconMail,
   IconPlus, IconReceipt, IconRefresh, IconSettings, IconShield, IconSpark, IconTrash, IconUnlock,
   IconUser, IconUsers
 } from "@/components/ui/icons";
-import { HowToPay, SubscriptionBills, SubscriptionPlan, rentMoney } from "@/components/domain/subscription";
+import {
+  HowToPay, NOT_BILLED_LABEL, SubscriptionBills, SubscriptionPlan, rentMoney,
+} from "@/components/domain/subscription";
 import { SheetExportButton, SheetImportButton, type SheetSource } from "@/components/domain/sheet-io";
 import { Stat } from "@/components/ui/stat";
-import { InfoHint, Tooltip } from "@/components/ui/info";
+import { Tooltip } from "@/components/ui/info";
 
-type Tab = "practice" | "config" | "features" | "subscription" | "fields" | "team";
+type Tab = "practice" | "config" | "consent" | "subscription" | "fields" | "team";
+const TABS: readonly Tab[] = ["practice", "config", "consent", "subscription", "fields", "team"];
 
 const userCol = columnHelperFor<User>();
 
@@ -380,7 +384,9 @@ function LockControl({ user }: { user: User }) {
 
 export default function SettingsPage(props: PageProps<"/settings">) {
   const sp = React.use(props.searchParams);
-  const initial = (typeof sp.tab === "string" ? sp.tab : "practice") as Tab;
+  /* An old link (`?tab=features`, from when there was a Modules tab) lands on
+     the first tab rather than on a page with no tab open. */
+  const initial = TABS.find((t) => t === sp.tab) ?? "practice";
   return (
     <RoleGate allow={[]}>
       <Settings initial={initial} />
@@ -391,12 +397,11 @@ export default function SettingsPage(props: PageProps<"/settings">) {
 function Settings({ initial }: { initial: Tab }) {
   const router = useRouter();
   const {
-    session, can, hasFeature,
+    session, can,
     removeFieldDefinition, notify,
     uploadClinicLogo, removeClinicLogo,
   } = useApp();
   const db = useClinicDb();
-  const catalog = useFeatureCatalog();
   const { tenant } = useTenant();
   const logoUrl = useClinicLogoUrl();
   const logoInput = React.useRef<HTMLInputElement>(null);
@@ -435,7 +440,6 @@ function Settings({ initial }: { initial: Tab }) {
   const clinical = CLINICAL_TYPES.find((c) => c.key === tenant.clinical_type)!;
   const staff = selectUsers(db, t);
   const { isPending: usersPending } = useUsers();
-  const active = activeFeatureKeys(db, t);
   const customFields = db.fieldDefinitions.filter((f) => f.scope === "tenant" && f.tenant_id === t);
 
   const setTabAndUrl = (next: Tab) => {
@@ -448,7 +452,7 @@ function Settings({ initial }: { initial: Tab }) {
       <PageHeader
         eyebrow="Practice admin"
         title="Settings"
-        description="The four axes are managed separately here on purpose: what the clinic treats, what it has bought, what it added itself, and who works there."
+        description="Kept apart here on purpose: what the clinic treats, how it has set the product up, the fields it added itself, and who works there. Every module is available to every clinic — nothing here switches one on or off."
         meta={
           <>
             <Badge tone="accent" size="sm">{clinical.label}</Badge>
@@ -465,7 +469,7 @@ function Settings({ initial }: { initial: Tab }) {
         tabs={[
           { value: "practice", label: "Practice", icon: <IconGrid size={15} /> },
           { value: "config", label: "Configuration", icon: <IconSettings size={15} /> },
-          { value: "features", label: "Modules", icon: <IconLayers size={15} />, count: active.filter((k) => !FEATURES.find((f) => f.key === k)?.is_core).length },
+          { value: "consent", label: "Consent forms", icon: <IconShield size={15} /> },
           { value: "subscription", label: "Subscription", icon: <IconReceipt size={15} /> },
           { value: "fields", label: "Custom fields", icon: <IconList size={15} />, count: customFields.length },
           { value: "team", label: "Team", icon: <IconUsers size={15} />, count: staff.length },
@@ -543,7 +547,7 @@ function Settings({ initial }: { initial: Tab }) {
             <SettingsSection title="This workspace">
               <SettingLinkRow
                 label="Guided tour"
-                hint="Six stops through the four ideas this product is built on. Everyone here sees it once; you can run it again whenever you like."
+                hint="A few stops through the ideas this product is built on. Everyone here sees it once; you can run it again whenever you like."
               >
                 <Button variant="secondary" size="sm" onClick={() => tour.start()}>
                   <IconSpark size={14} /> Take the tour
@@ -563,7 +567,7 @@ function Settings({ initial }: { initial: Tab }) {
           <aside className="space-y-block">
             <SettingsSection
               title="Clinical type"
-              hint={`${clinical.blurb} A clinical type never gates a module: a dental clinic without a pharmacy still prescribes, and an eye clinic with a lab still uses the same encounter table.`}
+              hint={`${clinical.blurb} A clinical type never decides which modules exist — every clinic has all of them. It decides what is recorded inside them: the exam fields, the chart widget, the clinical analytics.`}
             >
               <SettingValueRow label="Workflow" value={clinical.label} />
               <SettingValueRow label="Exam" value={clinical.examLabel} />
@@ -582,73 +586,11 @@ function Settings({ initial }: { initial: Tab }) {
 
       {tab === "config" && <ConfigurationTab />}
 
-      {tab === "features" && (
-        <div className="space-y-block">
-          {/* One row per module rather than one card per module. Twenty-odd
-              cards in a grid is a page you read; a list with a state badge and
-              a price on a shared right edge is a page you scan. */}
-          <SettingsSection
-            title="Modules"
-            hint="Core modules ship with every tenant. The rest are entitlements the Astrale team grants — open a locked one to see what it does, what it costs, and how to ask for it."
-            className="[&>div]:divide-line-soft"
-          >
-            <div data-tour="settings-features" className="divide-y divide-line-soft">
-              {FEATURES.map((f) => {
-                const on = hasFeature(f.key);
-                return (
-                  <div key={f.key} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-row">
-                    <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                      <span className="truncate text-label font-medium text-ink">{f.name}</span>
-                      <InfoHint label={`About ${f.name}`}>
-                        {f.summary}
-                        {f.unlocks.length > 0 && (
-                          <span className="mt-1.5 block text-ink-3">Unlocks {f.unlocks.join(", ")}.</span>
-                        )}
-                      </InfoHint>
-                      {f.is_core && <Badge tone="neutral" size="sm">Core</Badge>}
-                    </div>
-                    <span className="tnum shrink-0 font-mono text-caption text-ink-3">
-                      {f.is_core
-                        ? "included"
-                        : catalog.priced ? `${currency(catalog.byKey[f.key].price_monthly)}/mo` : "…"}
-                    </span>
-                    <span className="w-[5.5rem] shrink-0 text-right">
-                      {on ? (
-                        <Badge tone="ok" size="sm" dot>On</Badge>
-                      ) : (
-                        <Badge tone="neutral" size="sm"><IconLock size={11} /> Locked</Badge>
-                      )}
-                    </span>
-                    <span className="w-[5.5rem] shrink-0 text-right">
-                      {!f.is_core && (
-                        <ButtonLink href={modulePath(f.key)} size="sm" variant="ghost">
-                          Details <IconChevronRight size={13} />
-                        </ButtonLink>
-                      )}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </SettingsSection>
-
-          <SettingsSection
-            title="What the guard actually does"
-            hint="Hiding a nav item is a courtesy; the server check is the enforcement, which is why every gated page renders through the same FeatureGate rather than each module inventing its own locked state. Which row exists is not a practice admin's decision — a module is switched on for this clinic by a super admin in the platform console, and a padlock leads to that module's page, where support can be asked for it."
-          >
-            <div className="px-4 py-3">
-              <pre className="overflow-x-auto rounded-[var(--r-sm)] border border-line bg-surface-inset p-3 font-mono text-caption leading-relaxed text-ink-2">
-{`if not TenantFeature.is_active(tenant_id, feature_key):
-    return 403 "Feature not enabled"`}
-              </pre>
-            </div>
-          </SettingsSection>
-        </div>
-      )}
+      {tab === "consent" && <ConsentFormsPanel />}
 
       {tab === "fields" && (
         <div className="grid grid-cols-1 gap-block lg:grid-cols-[minmax(0,1fr)_20rem]">
-          <Card className="overflow-hidden">
+          <Card data-tour="settings-fields" className="overflow-hidden">
             <CardHeader
               icon={<IconLayers size={15} />} tone="violet" title="Custom fields"
               hint="Added by this clinic, layered on top of the common and clinical-type sets."
@@ -738,8 +680,8 @@ function Settings({ initial }: { initial: Tab }) {
 /**
  * What the clinic pays the platform, and every bill it has been sent.
  *
- * One bill a month for the paid modules switched on, due a few days after it
- * is raised. Left unpaid past the grace period, the clinic goes on hold until
+ * One bill a month for the platform's flat fee — every module included — due
+ * a few days after it is raised. Left unpaid past the grace period, the clinic goes on hold until
  * it is settled — this tab says exactly when, so nobody finds out by being
  * locked out.
  */
@@ -750,16 +692,19 @@ function SubscriptionTab({ today }: { today: string }) {
   if (isError || !data) {
     return <p className="py-10 text-center text-label text-ink-3">The bills could not be read. Try again in a moment.</p>;
   }
-  const { summary } = data;
-  const paidModules = data.plan?.modules.filter((m) => m.billed).length ?? 0;
+  const { summary, plan } = data;
 
   return (
     <div className="space-y-block">
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Stat
-          label="Monthly" value={rentMoney(data.plan?.monthly_total ?? 0, summary.currency)}
+          label="Monthly" value={rentMoney(plan?.monthly_total ?? 0, summary.currency)}
           icon={<IconLayers size={16} />}
-          hint={summary.exempt ? "Not billed by the platform" : pluralise(paidModules, "paid module")}
+          hint={
+            plan && !plan.billed && plan.not_billed_reason
+              ? NOT_BILLED_LABEL[plan.not_billed_reason]
+              : "Every module included"
+          }
         />
         <Stat
           label="Outstanding" value={rentMoney(summary.outstanding, summary.currency)}
@@ -786,14 +731,14 @@ function SubscriptionTab({ today }: { today: string }) {
 
       <SettingsSection
         title="Your plan"
-        hint="Every module switched on for this clinic, what each costs a month today, and whether the next bill charges for it. Core modules are included; a module on trial is not billed until the trial ends."
+        hint="One monthly fee for the whole product — every module is included, for every clinic. A clinic on trial is not billed until it becomes active."
       >
         <SubscriptionPlan subscription={data} />
       </SettingsSection>
 
       <SettingsSection
         title="Bills"
-        hint="Raised at the start of each month for the paid modules switched on that day, at that day's price."
+        hint="Raised at the start of each month, at that day's fee."
       >
         <SubscriptionBills subscription={data} today={today} />
       </SettingsSection>
@@ -804,9 +749,9 @@ function SubscriptionTab({ today }: { today: string }) {
 }
 
 /**
- * §3.3 — tenant configuration. Not entitlements (what the clinic may use) and
- * not custom fields (what it collects): this is how it has set the product up,
- * and every value below changes behaviour elsewhere in the app.
+ * §3.3 — tenant configuration. Not custom fields (what it collects): this is
+ * how the clinic has set the product up, and every value below changes
+ * behaviour inside a module — none of them hides one.
  *
  * Laid out as a list rather than as a form of stacked cards: five sections,
  * each a run of rows, each row a label on the left and its control on a shared
@@ -1043,9 +988,9 @@ function ConfigurationTab() {
         <SettingsSection title="Not configuration">
           <div className="px-4 py-row">
             <p className="text-caption leading-relaxed text-ink-2">
-              What {tenant.name} is <em>allowed</em> to use is an entitlement, and what it <em>collects</em> is a
-              field definition. Both are deliberately separate tabs — conflating them is what makes multi-tenant
-              products hard to reason about.
+              What {tenant.name} <em>collects</em> is a field definition, on its own tab. Neither that nor anything
+              here decides which modules the clinic has — every clinic has all of them, and who may use each one is
+              a matter of each person&rsquo;s role.
             </p>
           </div>
         </SettingsSection>

@@ -1,15 +1,13 @@
 "use client";
 
 import { useMemo } from "react";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import * as api from "@/lib/api";
 import { qk } from "./keys";
 import { useSession } from "@/lib/store/session";
 import { defaultConfig } from "@/lib/data/repository";
-import { withPrices } from "@/lib/data/catalog";
 import type {
-  Feature, FieldDefinition, FeatureKey, Id, Patient, ServiceKind, ServicePrice, SupportRequest, Tenant, TenantConfig,
-  TenantFeature, User,
+  FieldDefinition, Id, Patient, ServiceKind, ServicePrice, Tenant, TenantConfig, User,
 } from "@/lib/types";
 
 /* ==========================================================================
@@ -92,8 +90,8 @@ function useClinicQuery<T>(key: readonly unknown[], fn: () => Promise<T>, enable
 }
 
 /**
- * The shell-critical reads — who works here, what the clinic bought, how it is
- * configured, what the forms look like — decide *what renders at all*, and
+ * The shell-critical reads — who works here, how the clinic is configured,
+ * what the forms look like — decide *what renders at all*, and
  * every call site treats them as present. Rather than push a null check into
  * each one, they resolve to an empty set until the answer arrives; the shell
  * holds its loading stage until `useShellReady()` says they are all in.
@@ -112,56 +110,6 @@ export function useDoctors() {
   const t = useTenantId();
   const query = useClinicQuery(qk.doctors(t), api.listDoctors);
   return { ...query, data: useResolved<User[]>(query, EMPTY) };
-}
-
-export function useFeatures() {
-  const t = useTenantId();
-  const query = useClinicQuery(qk.features(t), api.listFeatures);
-  return { ...query, data: useResolved<TenantFeature[]>(query, EMPTY) };
-}
-
-/** The module catalogue, priced — see `useFeatureCatalog` and `usePlatformCatalog`. */
-export interface FeatureCatalog {
-  features: Feature[];
-  byKey: Record<FeatureKey, Feature>;
-  /** false until the prices have arrived; a price shown before then is a guess */
-  priced: boolean;
-  /** still waiting on the first answer — false again if that answer was an error */
-  isPending: boolean;
-}
-
-function catalogOf(rows: Parameters<typeof withPrices>[0], isPending: boolean): FeatureCatalog {
-  const features = withPrices(rows);
-  return {
-    features,
-    byKey: Object.fromEntries(features.map((f) => [f.key, f])) as Record<FeatureKey, Feature>,
-    priced: !!rows,
-    isPending,
-  };
-}
-
-/**
- * Every module with what this clinic would be charged for it.
- *
- * The price is the platform's, set in the console, so it is read rather than
- * compiled in: a clinic looking at a padlocked module is quoted the figure the
- * platform will actually bill. Screens render a placeholder until `priced`.
- */
-export function useFeatureCatalog(): FeatureCatalog {
-  const t = useTenantId();
-  const query = useClinicQuery(qk.catalogFeatures(t), api.listCatalogFeatures, !!t);
-  return useMemo(() => catalogOf(query.data, query.isPending), [query.data, query.isPending]);
-}
-
-/** The same catalogue from the console, where the super admin sets the prices. */
-export function usePlatformCatalog(): FeatureCatalog {
-  const { platformSession } = useSession();
-  const query = useQuery({
-    queryKey: qk.platformCatalog(),
-    queryFn: api.listPlatformCatalogFeatures,
-    enabled: platformSession.signedIn,
-  });
-  return useMemo(() => catalogOf(query.data, query.isPending), [query.data, query.isPending]);
 }
 
 export function usePlatformSettings() {
@@ -220,13 +168,6 @@ export function usePlatformSubscription(tenantId: Id | null) {
     queryFn: () => api.tenantSubscription(tenantId!),
     enabled: platformSession.signedIn && !!tenantId,
   });
-}
-
-/** This clinic's asks of the support desk, newest first. */
-export function useSupportRequests() {
-  const t = useTenantId();
-  const query = useClinicQuery(qk.supportRequests(t), api.listSupportRequests);
-  return { ...query, data: useResolved<SupportRequest[]>(query, EMPTY) };
 }
 
 export function useConfig() {
@@ -347,6 +288,25 @@ export function useAppointmentPage(query: api.AppointmentQuery, { enabled = true
   );
 }
 
+/** One page of the call list, with its counts. */
+export function useFollowUpPage(query: api.FollowUpQuery) {
+  const t = useTenantId();
+  return usePagedQuery(
+    qk.followUpPage(t, query as unknown as Record<string, unknown>),
+    () => api.listFollowUps(query),
+  );
+}
+
+/** Every call made about one booking, newest first — read when its call sheet opens. */
+export function useFollowUpCalls(appointmentId: Id | null) {
+  const t = useTenantId();
+  return useClinicQuery(
+    qk.followUpCalls(t, appointmentId ?? ""),
+    () => api.listFollowUpCalls(appointmentId!),
+    !!appointmentId,
+  );
+}
+
 /** One page of the case book. */
 export function useEncounterPage(query: api.EncounterQuery, { enabled = true } = {}) {
   const t = useTenantId();
@@ -389,6 +349,45 @@ export function usePatientHistory(id: Id) {
   return useClinicQuery(qk.patientHistory(t, id), () => api.getPatientHistory(id), !!id);
 }
 
+/** A patient's notes — asked for only by a role that may read consultations. */
+export function usePatientNotes(id: Id) {
+  const t = useTenantId();
+  const allowed = useCan("encounter:read");
+  return useClinicQuery(qk.patientNotes(t, id), () => api.listPatientNotes(id), !!id && allowed);
+}
+
+/* ---- consent ---------------------------------------------------------------- */
+
+export function useConsentForms() {
+  const t = useTenantId();
+  return useClinicQuery(qk.consentForms(t), api.listConsentForms, useCan("consent:read"));
+}
+
+export function useConsentForm(id: Id) {
+  const t = useTenantId();
+  const allowed = useCan("consent:read");
+  return useClinicQuery(qk.consentForm(t, id), () => api.getConsentForm(id), !!id && allowed);
+}
+
+export function useConsentTemplates() {
+  const t = useTenantId();
+  return useClinicQuery(qk.consentTemplates(t), api.listConsentTemplates, useCan("consent:manage"));
+}
+
+export function usePatientConsents(patientId: Id) {
+  const t = useTenantId();
+  const allowed = useCan("consent:read");
+  return useClinicQuery(
+    qk.patientConsents(t, patientId), () => api.listPatientConsents(patientId), !!patientId && allowed,
+  );
+}
+
+export function usePatientConsent(id: Id) {
+  const t = useTenantId();
+  const allowed = useCan("consent:read");
+  return useClinicQuery(qk.patientConsent(t, id), () => api.getPatientConsent(id), !!id && allowed);
+}
+
 export function useAppointments() {
   const t = useTenantId();
   return useClinicQuery(qk.appointments(t), api.listAppointments);
@@ -426,16 +425,17 @@ export function usePrescription(id: Id) {
   return useClinicQuery(qk.prescription(t, id), () => api.getPrescription(id), !!id);
 }
 
-/* The purchasable modules answer 403 when a clinic has not bought them, so
-   these three only ask when the entitlement says they can. */
-function useFeatureEnabled(key: Parameters<typeof api.purchaseFeature>[0]) {
-  const { data: features } = useFeatures();
-  return (features ?? EMPTY).some((f) => f.feature_key === key && f.status === "active");
+/* Every clinic has every module, but not every role may read every one: the
+   API answers 403 to a receptionist asking for the lab's orders. So these ask
+   only when the signed-in person's own permissions say they can — a question
+   about the user, never about the clinic. */
+function useCan(permission: string) {
+  return useSession().permissions.includes(permission);
 }
 
 export function useLabOrders() {
   const t = useTenantId();
-  return useClinicQuery(qk.labOrders(t), api.listLabOrders, useFeatureEnabled("lab"));
+  return useClinicQuery(qk.labOrders(t), api.listLabOrders, useCan("lab:read"));
 }
 
 /**
@@ -453,7 +453,7 @@ export function useLabOrder(id: Id) {
 /** One page of the lab's order book. */
 export function useLabOrderPage(query: api.LabOrderQuery, { enabled = true } = {}) {
   const t = useTenantId();
-  const gated = useFeatureEnabled("lab");
+  const gated = useCan("lab:read");
   return usePagedQuery(
     qk.labOrderPage(t, query as Record<string, unknown>),
     () => api.listLabOrderPage(query),
@@ -469,7 +469,7 @@ export function useLabOrderPage(query: api.LabOrderQuery, { enabled = true } = {
  */
 export function useLabAttachments(orderId: Id) {
   const t = useTenantId();
-  const gated = useFeatureEnabled("lab");
+  const gated = useCan("lab:read");
   return useClinicQuery(
     qk.labAttachments(t, orderId),
     () => api.listLabAttachments(orderId),
@@ -480,9 +480,9 @@ export function useLabAttachments(orderId: Id) {
 /**
  * What this clinic charges (§3.12).
  *
- * Not behind a feature gate: a tariff is configuration, and the composer needs
- * it whether or not the lab module was ever bought. It changes rarely, so it
- * stays fresh for a while — like the catalogues.
+ * Not behind a module permission: a tariff is configuration, and the composer
+ * needs it whoever is composing. It changes rarely, so it stays fresh for a
+ * while — like the catalogues.
  */
 export function useServicePrices(query: { kind?: ServiceKind; active?: boolean } = {}) {
   const t = useTenantId();
@@ -499,28 +499,28 @@ export function useServicePrices(query: { kind?: ServiceKind; active?: boolean }
 
 export function useInventoryItems() {
   const t = useTenantId();
-  return useClinicQuery(qk.inventoryItems(t), api.listInventoryItems, useFeatureEnabled("inventory"));
+  return useClinicQuery(qk.inventoryItems(t), api.listInventoryItems, useCan("inventory:read"));
 }
 
 export function useInventoryTx() {
   const t = useTenantId();
-  return useClinicQuery(qk.inventoryTx(t), api.listInventoryTx, useFeatureEnabled("inventory"));
+  return useClinicQuery(qk.inventoryTx(t), api.listInventoryTx, useCan("inventory:read"));
 }
 
 export function useInventoryBatches() {
   const t = useTenantId();
-  return useClinicQuery(qk.inventoryBatches(t), api.listInventoryBatches, useFeatureEnabled("inventory"));
+  return useClinicQuery(qk.inventoryBatches(t), api.listInventoryBatches, useCan("inventory:read"));
 }
 
 export function useInvoices() {
   const t = useTenantId();
-  return useClinicQuery(qk.invoices(t), api.listInvoices, useFeatureEnabled("billing"));
+  return useClinicQuery(qk.invoices(t), api.listInvoices, useCan("billing:read"));
 }
 
 /** One page of the ledger, with the tab counts the server worked out. */
 export function useInvoicePage(query: api.InvoiceQuery, { enabled = true } = {}) {
   const t = useTenantId();
-  const gated = useFeatureEnabled("billing");
+  const gated = useCan("billing:read");
   return usePagedQuery(
     qk.invoicePage(t, query as Record<string, unknown>),
     () => api.listInvoicePage(query),
@@ -537,7 +537,7 @@ export function useInvoicePage(query: api.InvoiceQuery, { enabled = true } = {})
  */
 export function useSuggestedLines(encounterId: Id | null) {
   const t = useTenantId();
-  const gated = useFeatureEnabled("billing");
+  const gated = useCan("billing:read");
   return useClinicQuery(
     qk.suggestedLines(t, encounterId ?? ""),
     () => api.suggestedInvoiceLines(encounterId as Id),
@@ -554,7 +554,7 @@ export function useSuggestedLines(encounterId: Id | null) {
  */
 export function usePatientAccount(patientId: Id | null) {
   const t = useTenantId();
-  const gated = useFeatureEnabled("billing");
+  const gated = useCan("billing:read");
   return useClinicQuery(
     qk.patientAccount(t, patientId ?? ""),
     () => api.getPatientAccount(patientId as Id),
@@ -564,7 +564,8 @@ export function usePatientAccount(patientId: Id | null) {
 
 export function useInvoice(id: Id) {
   const t = useTenantId();
-  return useClinicQuery(qk.invoice(t, id), () => api.getInvoice(id), !!id && useFeatureEnabled("billing"));
+  const gated = useCan("billing:read");
+  return useClinicQuery(qk.invoice(t, id), () => api.getInvoice(id), !!id && gated);
 }
 
 /**
@@ -578,8 +579,8 @@ export function useInvoice(id: Id) {
 export function useRailCounters() {
   const t = useTenantId();
   const signedIn = useSignedIn();
-  const hasLab = useFeatureEnabled("lab");
-  const hasBilling = useFeatureEnabled("billing");
+  const hasLab = useCan("lab:read");
+  const hasBilling = useCan("billing:read");
 
   const { data: queue } = useQueue();
 
@@ -613,8 +614,7 @@ export function useRailCounters() {
 /* ---- module figures --------------------------------------------------------
    Three small readers over the same analytics response, so the module pages and
    the reports page quote the same numbers — computed once, in the database.
-   Each resolves to zeroes while the request is in flight, and stays at zeroes
-   for a clinic that has not bought the module (the API sends no key at all). */
+   Each resolves to zeroes while the request is in flight. */
 
 const ZERO_BILLING = {
   billed: 0, paid: 0, outstanding: 0, count: 0, unpaid: 0, drafts: 0,
@@ -692,17 +692,6 @@ export function usePlatformJob(taskId: Id | null) {
   });
 }
 
-/** One clinic's entitlement rows, read from the console rather than inside it. */
-export function usePlatformTenantFeatures(tenantId: Id | null) {
-  const { platformSession } = useSession();
-  const query = useQuery({
-    queryKey: qk.platformFeatures(tenantId ?? ""),
-    queryFn: () => api.tenantFeatures(tenantId!),
-    enabled: platformSession.signedIn && !!tenantId,
-  });
-  return { ...query, data: useResolved<TenantFeature[]>(query, EMPTY) };
-}
-
 /** That clinic's staff, as the console sees them — support accounts excluded. */
 export function usePlatformTenantUsers(tenantId: Id | null) {
   const { platformSession } = useSession();
@@ -712,54 +701,6 @@ export function usePlatformTenantUsers(tenantId: Id | null) {
     enabled: platformSession.signedIn && !!tenantId,
   });
   return { ...query, data: useResolved<User[]>(query, EMPTY) };
-}
-
-/**
- * Every clinic's entitlement rows, for the views that read across all of them.
- *
- * The snapshot already says which modules are *on*; this is what says which are
- * on trial and when each was switched on, which is the whole of what the
- * console knows about subscriptions. It is one request per clinic because that
- * is the route the API offers — each one scoped to its own tenant, which is the
- * property worth keeping — and they are cached under the same `["platform"]`
- * subtree as the snapshot, so one grant refreshes the lot.
- *
- * The screens above render from the snapshot until these land, so this is
- * detail arriving rather than a page waiting.
- */
-export function usePlatformEntitlements() {
-  const { platformSession } = useSession();
-  const { data: snapshot } = usePlatformSnapshot();
-  const ids = useMemo(
-    () => (snapshot?.tenants ?? []).map((r) => r.tenant.id),
-    [snapshot],
-  );
-
-  const queries = useQueries({
-    queries: ids.map((id) => ({
-      queryKey: qk.platformFeatures(id),
-      queryFn: () => api.tenantFeatures(id),
-      enabled: platformSession.signedIn,
-    })),
-  });
-
-  const settled = queries.every((q) => !q.isPending);
-  /* Keyed by clinic, so a row can ask for its own without scanning. Rebuilt
-     only when an answer actually changes — `useQueries` hands back a new array
-     every render, so the array itself is no use as a dependency. */
-  const signature = queries.map((q) => q.dataUpdatedAt).join(",");
-
-  const byTenant = useMemo(() => {
-    const map = new Map<Id, TenantFeature[]>();
-    ids.forEach((id, i) => {
-      const data = queries[i]?.data;
-      if (data) map.set(id, data);
-    });
-    return map;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ids, signature]);
-
-  return { byTenant, isPending: !settled && ids.length > 0 };
 }
 
 /* ---- composition ----------------------------------------------------------- */
@@ -775,7 +716,6 @@ export function useClinicDb(): import("@/lib/data/repository").Db {
   /* eslint-disable react-hooks/rules-of-hooks -- fixed hook order, one call per collection */
   const { tenant } = useTenant();
   const users = useUsers().data;
-  const tenantFeatures = useFeatures().data;
   const config = useConfig().data;
   const fieldDefinitions = useFieldDefinitions().data;
   const appointments = useAppointments().data;
@@ -791,7 +731,6 @@ export function useClinicDb(): import("@/lib/data/repository").Db {
   return useMemo(() => ({
     tenants: tenant.id ? [tenant] : EMPTY,
     users: users ?? EMPTY,
-    tenantFeatures: tenantFeatures ?? EMPTY,
     fieldDefinitions: fieldDefinitions ?? EMPTY,
     tenantConfigs: config ? [config] : EMPTY,
     appointments: appointments ?? EMPTY,
@@ -804,18 +743,17 @@ export function useClinicDb(): import("@/lib/data/repository").Db {
     inventoryBatches: inventoryBatches ?? EMPTY,
     invoices: invoices ?? EMPTY,
   }), [
-    tenant, users, tenantFeatures, fieldDefinitions, config, appointments,
+    tenant, users, fieldDefinitions, config, appointments,
     queue, encounters, prescriptions, labOrders, inventoryItems, inventoryTx,
     inventoryBatches, invoices,
   ]);
 }
 
-/** True once the shell has what it needs: which clinic, what it bought, how it is set up. */
+/** True once the shell has what it needs: which clinic, and how it is set up. */
 export function useShellReady() {
   const tenant = useTenantRecord();
-  const features = useFeatures();
   const config = useConfig();
-  return !tenant.isPending && !features.isPending && !config.isPending;
+  return !tenant.isPending && !config.isPending;
 }
 
 /** True once every collection this clinic needs has arrived. */

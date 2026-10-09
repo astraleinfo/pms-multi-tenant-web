@@ -5,11 +5,12 @@ import { useApp } from "@/lib/store/app-store";
 import { useClinicDb } from "@/lib/query/hooks";
 import { selectDoctors } from "@/lib/data/repository";
 import { formatTime12, formatDate } from "@/lib/format";
-import { appointmentTypes, formatLength, slotTimes } from "@/lib/appointment-types";
+import { addMinutes, appointmentTypes, formatLength, slotTimes } from "@/lib/appointment-types";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { ChoiceGroup, Field, Input, Select, Textarea } from "@/components/ui/field";
 import { PatientPicker } from "./patient";
+import { SlotGrid } from "./slot-grid";
 import { Badge } from "@/components/ui/badge";
 import { IconAlert, IconCheck, IconPlus } from "@/components/ui/icons";
 
@@ -176,33 +177,7 @@ export function AppointmentModal({
               A {formatLength(duration)} visit doesn’t fit between the clinic’s opening and closing times.
             </p>
           )}
-          <div className="flex flex-wrap gap-1.5">
-            {SLOT_TIMES.map((t) => {
-              const busy = taken.has(t);
-              const on = t === time;
-              return (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setTime(t)}
-                  className={[
-                    "tnum rounded-[var(--r-sm)] border px-2.5 py-1.5 text-caption transition-all duration-150",
-                    /* busy survives selection: picking a taken slot must still look taken */
-                    busy
-                      ? on
-                        ? "border-critical bg-critical-soft text-critical-text line-through"
-                        : "border-line bg-surface-2 text-ink-3 line-through"
-                      : on
-                        ? "border-accent bg-accent text-accent-ink"
-                        : "border-line-strong bg-surface text-ink hover:border-accent hover:bg-accent-soft",
-                  ].join(" ")}
-                  title={busy ? "Clashes with an existing booking" : undefined}
-                >
-                  {formatTime12(t)}
-                </button>
-              );
-            })}
-          </div>
+          <SlotGrid times={SLOT_TIMES} value={time} onChange={setTime} taken={taken} />
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -237,12 +212,6 @@ export function AppointmentModal({
       </div>
     </Modal>
   );
-}
-
-function addMinutes(hhmm: string, mins: number) {
-  const [h, m] = hhmm.split(":").map(Number);
-  const total = h * 60 + m + mins;
-  return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
 /** §3.5 — a walk-in skips Appointment entirely and lands straight in the queue. */

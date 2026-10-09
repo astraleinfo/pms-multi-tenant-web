@@ -8,7 +8,6 @@ import { useApp, useTenant } from "@/lib/store/app-store";
 import { useSession } from "@/lib/store/session";
 import { buildTour, TOUR_VERSION, type TourStep } from "@/lib/tour";
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
-import { NAV } from "@/lib/nav";
 import { Button } from "@/components/ui/button";
 import { IconArrowRight, IconChevronLeft, IconX, IconSpark } from "@/components/ui/icons";
 
@@ -49,7 +48,7 @@ export function useTour() {
 }
 
 export function TourProvider({ children }: { children: React.ReactNode }) {
-  const { hasFeature, ready } = useApp();
+  const { ready } = useApp();
   const { preferences, savePreferences, session } = useSession();
   const { tenant, role } = useTenant();
   const pathname = usePathname();
@@ -59,17 +58,12 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
 
   const clinical = CLINICAL_TYPES.find((c) => c.key === tenant.clinical_type);
 
-  const steps = React.useMemo(() => {
-    const anyLocked = NAV.flatMap((g) => g.items).some((i) => i.feature && !hasFeature(i.feature));
-    return buildTour({
-      role,
-      clinicName: tenant.name,
-      clinicalLabel: clinical?.label ?? "General",
-      examLabel: clinical?.examLabel ?? "the clinical exam",
-      hasFeature,
-      anyLocked,
-    });
-  }, [role, tenant.name, clinical, hasFeature]);
+  const steps = React.useMemo(() => buildTour({
+    role,
+    clinicName: tenant.name,
+    clinicalLabel: clinical?.label ?? "General",
+    examLabel: clinical?.examLabel ?? "the clinical exam",
+  }), [role, tenant.name, clinical]);
 
   /* The waiting room is a public screen and the login page is not the app. */
   const allowedHere = session.signedIn && pathname !== "/display" && !pathname.startsWith("/login");

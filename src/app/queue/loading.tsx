@@ -1,4 +1,4 @@
-import { PageLoader } from "@/components/ui/loader";
+import { PageSkeleton } from "@/components/ui/loader";
 
 /**
  * The instant state for this route: Next shows it in the shell's content area
@@ -6,5 +6,5 @@ import { PageLoader } from "@/components/ui/loader";
  * Once the screen is up, its own data has its own loaders — see `ui/loader`.
  */
 export default function Loading() {
-  return <PageLoader />;
+  return <PageSkeleton />;
 }

@@ -29,9 +29,9 @@ const CONSOLE: ShowcaseSlide[] = [
     blurb: "A subdomain, an admin invite and a staff import — a clinic live in one sitting.",
   },
   {
-    key: "console.modules",
-    name: "Modules & pricing",
-    blurb: "Set what each module costs and choose which of them a clinic runs.",
+    key: "console.settings",
+    name: "One plan, every module",
+    blurb: "Every clinic runs the whole product. Set the one monthly fee, and what each new clinic starts with.",
   },
   {
     key: "console.billing",

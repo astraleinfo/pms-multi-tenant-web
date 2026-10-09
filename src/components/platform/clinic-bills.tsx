@@ -87,7 +87,7 @@ export function ClinicBills({
           <THead>
             <TR>
               <TH>Bill</TH>
-              <TH>Modules</TH>
+              <TH>For</TH>
               <TH>Due</TH>
               <TH>Status</TH>
               <TH align="right">Amount</TH>

@@ -6,7 +6,6 @@ import { cn } from "@/lib/cn";
 import { useApp, useTenant } from "@/lib/store/app-store";
 import { useRailCounters } from "@/lib/query/hooks";
 import { navItemFor, ROLE_LABEL } from "@/lib/nav";
-import { FEATURE_BY_KEY } from "@/lib/data/catalog";
 import { titleCase } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Menu, MenuItem, MenuLabel, MenuSep } from "@/components/ui/modal";
@@ -40,17 +39,8 @@ function QueueLive({ state }: { state: "connecting" | "live" | "offline" }) {
   );
 }
 
-/**
- * What to call a page the rail has no entry for.
- *
- * A locked module's own page is the case that matters: `/modules/lab` is not
- * in the nav — the padlock in the rail is — so the header would otherwise have
- * nothing to say. The module's real name is better than the product's, which
- * is what used to be here.
- */
+/** What to call a page the rail has no entry for. */
 function pageTitle(pathname: string) {
-  const key = pathname.match(/^\/modules\/([^/]+)/)?.[1];
-  if (key) return FEATURE_BY_KEY[key]?.name ?? titleCase(key.replace(/_/g, " "));
   const first = pathname.split("/").filter(Boolean)[0];
   return first ? titleCase(first.replace(/-/g, " ")) : "";
 }
@@ -67,19 +57,18 @@ function pageTitle(pathname: string) {
  * dot is absent and the panel says so, rather than inventing news.
  */
 function Notifications() {
-  const { hasFeature } = useApp();
   const c = useRailCounters();
 
   const lines = [
     { key: "queue", href: "/queue", icon: <IconQueue size={15} />, n: c.queue,
-      label: "waiting in the queue", feature: "queue" as const },
+      label: "waiting in the queue" },
     { key: "rx", href: "/prescriptions", icon: <IconRx size={15} />, n: c.pendingRx,
-      label: "prescriptions not dispensed", feature: "prescription" as const },
+      label: "prescriptions not dispensed" },
     { key: "lab", href: "/lab", icon: <IconFlask size={15} />, n: c.labPending,
-      label: "lab results unverified", feature: "lab" as const },
+      label: "lab results unverified" },
     { key: "unpaid", href: "/billing", icon: <IconReceipt size={15} />, n: c.unpaid,
-      label: "invoices unpaid", feature: "billing" as const },
-  ].filter((l) => hasFeature(l.feature) && l.n > 0);
+      label: "invoices unpaid" },
+  ].filter((l) => l.n > 0);
 
   const total = lines.reduce((s, l) => s + l.n, 0);
 

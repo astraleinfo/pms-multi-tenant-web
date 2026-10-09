@@ -5,12 +5,11 @@ import { useApp, useTenant } from "@/lib/store/app-store";
 import * as api from "@/lib/api";
 import { openPdfBlob } from "@/lib/pdf";
 import { useAnalytics } from "@/lib/query/hooks";
-import { CLINICAL_TYPES, FEATURE_BY_KEY } from "@/lib/data/catalog";
-import { modulePath } from "@/lib/nav";
+import { CLINICAL_TYPES } from "@/lib/data/catalog";
 import { currency, duration, formatDate, pluralise, weekdayShort } from "@/lib/format";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Button, ButtonLink, Segmented } from "@/components/ui/button";
+import { Button, Segmented } from "@/components/ui/button";
 import { EmptyState, KV, Meter } from "@/components/ui/misc";
 import { Stat } from "@/components/ui/stat";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
@@ -21,7 +20,7 @@ import { RoleGate } from "@/components/domain/gates";
 import { Avatar } from "@/components/ui/misc";
 import { PageLoader } from "@/components/ui/loader";
 import {
-  IconArrowRight, IconChart, IconClock, IconDownload, IconFlask, IconLock, IconPill, IconReceipt,
+  IconChart, IconClock, IconDownload, IconFlask, IconPill, IconReceipt,
   IconSpark,
   IconStethoscope, IconUsers
 } from "@/components/ui/icons";
@@ -35,7 +34,7 @@ export default function ReportsPage() {
 }
 
 function Reports() {
-  const { hasFeature, notify } = useApp();
+  const { notify } = useApp();
   const { tenant } = useTenant();
   const [range, setRange] = React.useState<7 | 14 | 30>(14);
   const [exporting, setExporting] = React.useState(false);
@@ -53,16 +52,14 @@ function Reports() {
   };
 
   const clinical = CLINICAL_TYPES.find((c) => c.key === tenant.clinical_type)!;
-  const advanced = hasFeature("advanced_reports");
 
   /**
    * §3.14 — one request, aggregated in the database.
    *
-   * Nothing on this page is derived in the browser any more: what a clinic has
-   * bought decides which panels come back at all, so the client renders what it
-   * is given rather than deciding what it is allowed to compute. It also means
-   * the figures here cannot drift from the ones the API reports elsewhere —
-   * there is only one implementation of each.
+   * Nothing on this page is derived in the browser any more: every panel comes
+   * back for every clinic, and the client renders what it is given. It also
+   * means the figures here cannot drift from the ones the API reports
+   * elsewhere — there is only one implementation of each.
    */
   const { data: analytics, isPending } = useAnalytics(range);
 
@@ -208,7 +205,7 @@ function Reports() {
         </Card>
       </div>
 
-      {/* feature-conditional */}
+      {/* every clinic has all three; each also needs its panel to have arrived */}
       {(money || pharm || lab) && (
         <>
           <h2 className="mb-4 mt-8 font-display text-title-lg font-semibold text-ink">
@@ -284,63 +281,43 @@ function Reports() {
         </>
       )}
 
-      {/* entitlement-gated extras */}
       <h2 className="mb-1 mt-8 font-display text-title-lg font-semibold text-ink">
         Advanced reports
       </h2>
       <p className="mb-4 max-w-2xl text-body text-ink-2">
-        {advanced
-          ? "Breakdowns by clinician."
-          : "Breakdowns by clinician come with the Advanced reports module. Contact Astrale support to add it."}
+        Breakdowns by clinician.
       </p>
 
-      {advanced ? (
-        <Card className="overflow-hidden">
-          <CardHeader icon={<IconChart size={15} />} tone="accent" title="By clinician" hint="Encounters, prescriptions and invoiced value per doctor." />
-          <TableWrap>
-            <Table>
-              <THead>
-                <tr>
-                  <TH>Clinician</TH><TH>Speciality</TH><TH align="right">Encounters</TH>
-                  <TH align="right">Prescriptions</TH>
-                  {showInvoiced && <TH align="right">Invoiced</TH>}
-                </tr>
-              </THead>
-              <TBody>
-                {clinicians.map((c) => (
-                  <TR key={c.user_id}>
-                    <TD>
-                      <div className="flex items-center gap-2.5">
-                        <Avatar name={c.name} initials={c.initials} size="sm" tintKey={c.user_id} />
-                        <span className="font-medium text-ink">{c.name}</span>
-                      </div>
-                    </TD>
-                    <TD className="text-ink-2">{c.speciality ?? "—"}</TD>
-                    <TD align="right" className="tnum font-mono">{c.encounters}</TD>
-                    <TD align="right" className="tnum font-mono">{c.prescriptions}</TD>
-                    {showInvoiced && <TD align="right" className="tnum font-mono">{currency(c.revenue ?? 0)}</TD>}
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
-          </TableWrap>
-        </Card>
-      ) : (
-        <Card className="border-dashed">
-          <CardBody className="pt-6">
-            <EmptyState
-              icon={<IconLock size={20} />}
-              title={`${FEATURE_BY_KEY.advanced_reports.name} is not enabled`}
-              body={FEATURE_BY_KEY.advanced_reports.summary}
-              action={
-                <ButtonLink href={modulePath("advanced_reports")} variant="primary" size="sm">
-                  See what it adds <IconArrowRight size={14} />
-                </ButtonLink>
-              }
-            />
-          </CardBody>
-        </Card>
-      )}
+      <Card className="overflow-hidden">
+        <CardHeader icon={<IconChart size={15} />} tone="accent" title="By clinician" hint="Encounters, prescriptions and invoiced value per doctor." />
+        <TableWrap>
+          <Table>
+            <THead>
+              <tr>
+                <TH>Clinician</TH><TH>Speciality</TH><TH align="right">Encounters</TH>
+                <TH align="right">Prescriptions</TH>
+                {showInvoiced && <TH align="right">Invoiced</TH>}
+              </tr>
+            </THead>
+            <TBody>
+              {clinicians.map((c) => (
+                <TR key={c.user_id}>
+                  <TD>
+                    <div className="flex items-center gap-2.5">
+                      <Avatar name={c.name} initials={c.initials} size="sm" tintKey={c.user_id} />
+                      <span className="font-medium text-ink">{c.name}</span>
+                    </div>
+                  </TD>
+                  <TD className="text-ink-2">{c.speciality ?? "—"}</TD>
+                  <TD align="right" className="tnum font-mono">{c.encounters}</TD>
+                  <TD align="right" className="tnum font-mono">{c.prescriptions}</TD>
+                  {showInvoiced && <TD align="right" className="tnum font-mono">{currency(c.revenue ?? 0)}</TD>}
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </TableWrap>
+      </Card>
 
       <p className="mt-6 text-caption leading-relaxed text-ink-3">
         Figures cover {formatDate(analytics.range.to, "long")} and the {range} days before it.

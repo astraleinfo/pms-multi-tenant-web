@@ -8,7 +8,8 @@ import { useSubscription, useSupportInfo } from "@/lib/query/hooks";
 import { formatDate } from "@/lib/format";
 import { openPdfBlob } from "@/lib/pdf";
 import { cn } from "@/lib/cn";
-import type { Subscription, SubscriptionInvoice } from "@/lib/types";
+import { MODULES } from "@/lib/data/catalog";
+import type { NotBilledReason, Subscription, SubscriptionInvoice } from "@/lib/types";
 import { Badge, type Tone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
@@ -75,80 +76,61 @@ export function useBillPdf() {
   return { open, busy };
 }
 
-/** Every bill, newest first. */
+/** Why a clinic's next bill leaves the fee off, in the words its admin reads. */
+export const NOT_BILLED_LABEL: Record<NotBilledReason, string> = {
+  exempt: "Exempt",
+  trial: "Not during trial",
+  suspended: "Not while suspended",
+  no_fee: "No fee set",
+};
+
 /**
- * What the clinic has switched on, and what that comes to a month.
+ * What the clinic pays a month, and what that buys.
  *
- * Every module is listed, core and trial included, so "what do we have" and
- * "what do we pay" are one read. The price column is the catalogue's today;
- * the last column says whether the next bill charges for it, and the total is
- * the server's sum of exactly those — the same rule the bill is raised by.
+ * One fee, one line: every module is included for every clinic, so there is
+ * nothing per module to price, add or drop. The last column says whether the
+ * next bill charges it — the same rule the bill is raised by.
  */
 export function SubscriptionPlan({ subscription }: { subscription: Subscription }) {
   const plan = subscription.plan;
   const code = subscription.summary.currency;
-  if (!plan || !plan.modules.length) {
-    return (
-      <EmptyState
-        icon={<IconReceipt size={20} />}
-        title="No modules switched on"
-        body="Modules are switched on for this clinic by the Astrale team."
-        compact
-      />
-    );
-  }
+  if (!plan) return null;
 
   return (
     <TableWrap>
       <Table>
         <THead>
           <TR>
-            <TH>Module</TH>
-            <TH>Since</TH>
+            <TH>Plan</TH>
             <TH align="right">Price / month</TH>
             <TH align="right">On the bill</TH>
           </TR>
         </THead>
         <TBody>
-          {plan.modules.map((m) => (
-            <TR key={m.feature_key}>
-              <TD>
-                <span className="flex items-center gap-2">
-                  <span className="text-label font-medium text-ink">{m.name}</span>
-                  {m.is_core && <Badge tone="neutral" size="sm">Core</Badge>}
-                  {m.status === "trial" && <Badge tone="info" size="sm">Trial</Badge>}
+          <TR>
+            <TD>
+              <span className="block text-label font-medium text-ink">Astrale PMS — every module</span>
+              <span className="mt-0.5 block text-caption leading-snug text-ink-3">
+                {MODULES.map((m) => m.name).join(" · ")}
+              </span>
+            </TD>
+            <TD align="right">
+              <span className="tnum font-mono text-label text-ink">{rentMoney(plan.price_monthly, code)}</span>
+            </TD>
+            <TD align="right">
+              {plan.billed ? (
+                <Badge tone="ok" size="sm" dot>Billed</Badge>
+              ) : (
+                <span className="text-caption text-ink-3">
+                  {plan.not_billed_reason ? NOT_BILLED_LABEL[plan.not_billed_reason] : "Not billed"}
                 </span>
-              </TD>
-              <TD>
-                <span className="tnum text-label text-ink-2">
-                  {m.activated_at ? formatDate(m.activated_at) : "—"}
-                </span>
-              </TD>
-              <TD align="right">
-                <span className="tnum font-mono text-label text-ink">
-                  {m.is_core ? "Included" : rentMoney(m.price_monthly, code)}
-                </span>
-              </TD>
-              <TD align="right">
-                {m.billed ? (
-                  <Badge tone="ok" size="sm" dot>Billed</Badge>
-                ) : (
-                  <span className="text-caption text-ink-3">
-                    {m.is_core ? "Free" : m.status === "trial" ? "Not during trial" : subscription.summary.exempt ? "Exempt" : "Free"}
-                  </span>
-                )}
-              </TD>
-            </TR>
-          ))}
+              )}
+            </TD>
+          </TR>
         </TBody>
         <tfoot>
           <tr className="border-t border-line bg-surface-2">
-            <td colSpan={2} className="px-4 py-3 text-label font-semibold text-ink">
-              Monthly total
-              <span className="ml-2 font-normal text-caption text-ink-3">
-                {plan.modules.filter((m) => m.billed).length} billed of {plan.modules.length} on
-              </span>
-            </td>
+            <td className="px-4 py-3 text-label font-semibold text-ink">Monthly total</td>
             <td colSpan={2} className="px-4 py-3 text-right">
               <span className="tnum font-mono text-body font-semibold text-ink">{rentMoney(plan.monthly_total, code)}</span>
             </td>
@@ -159,6 +141,7 @@ export function SubscriptionPlan({ subscription }: { subscription: Subscription 
   );
 }
 
+/** Every bill, newest first. */
 export function SubscriptionBills({
   subscription, today, compact = false,
 }: {
@@ -174,7 +157,7 @@ export function SubscriptionBills({
       <EmptyState
         icon={<IconReceipt size={20} />}
         title="No bills yet"
-        body="A bill is raised at the start of each month for the paid modules switched on for this clinic."
+        body="A bill is raised at the start of each month for the subscription fee, once this clinic is active."
         compact
       />
     );
@@ -187,7 +170,7 @@ export function SubscriptionBills({
           <TR>
             <TH>Bill</TH>
             <TH>Period</TH>
-            {!compact && <TH>Modules</TH>}
+            {!compact && <TH>For</TH>}
             <TH>Due</TH>
             <TH>Status</TH>
             <TH align="right">Amount</TH>

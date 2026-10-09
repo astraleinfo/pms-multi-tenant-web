@@ -4,16 +4,19 @@ This expands the high-level flow into concrete entities, API contracts, state ma
 
 ---
 
-## 1. Guiding Principle — Four Independent Axes
+## 1. Guiding Principle — Three Independent Axes
 
 | Axis | Answers | Example |
 |---|---|---|
 | **Tenant** | Who owns the data | "Smile Dental Clinic" |
-| **Clinical type** | What workflow/fields apply | `dental`, `ophthalmology`, `dermatology` |
-| **Feature entitlement** | What's unlocked | Billing ✅, Lab ❌, Pharmacy ✅ |
-| **Customization** | How this tenant configured it | Custom field "Insurance Number" |
+| **Clinical type** | What workflow/fields apply inside each module | `dental`, `ophthalmology`, `dermatology` |
+| **Customization** | How this tenant configured it | Custom field "Insurance Number", slot length, invoice prefix |
 
-These must never be conflated in code — e.g. a feature check should never look at `clinical_type`, and a custom field should never gate an API route.
+These must never be conflated in code — e.g. a custom field should never gate an API route, and a clinical type changes what is recorded inside a module, never whether the module exists.
+
+**Every tenant has every module.** There is no per-tenant entitlement, purchase, trial or switch for a module. What a *person* may do inside a module is decided by their role's permissions (§4), never by which tenant they belong to.
+
+The product is a **modular monolith**: patients, appointments, queue, consultation, prescriptions, pharmacy, lab, inventory, billing, reports, configuration and team are separate modules in one codebase and one deployment — not separate repositories, and not separately sold.
 
 ---
 
@@ -23,8 +26,6 @@ These must never be conflated in code — e.g. a feature check should never look
 |---|---|---|
 | `Tenant` | id, name, clinical_type, status | root of isolation |
 | `ClinicalType` | key, label | seed data: dental, ophthalmology, dermatology... |
-| `Feature` | key, name, is_core | catalog: billing, pharmacy, lab, inventory, advanced_reports |
-| `TenantFeature` | tenant_id, feature_key, status, activated_at | purchased/active features |
 | `FieldDefinition` | id, scope[common\|clinical_type\|tenant], entity, field_key, label, type, required, order | drives dynamic forms |
 | `User` | id, tenant_id, role | receptionist, doctor, pharmacist, lab_tech, admin |
 | `Patient` | id, tenant_id, common fields, clinical_ext JSONB | |
@@ -45,26 +46,19 @@ Every row-level table carries `tenant_id`. `Prescription`, `Encounter`, `Appoint
 ### 3.1 Tenant Onboarding
 ```
 POST /tenants/register {clinic_name, clinical_type, admin_user}
-→ create Tenant(status=trial/active)
-→ seed core TenantFeatures: patient, appointment, queue, consultation, prescription (always-on, not purchasable)
+→ create Tenant(status=trial/active)    # every module is available from this moment
 → clone default FieldDefinitions for clinical_type into tenant's effective schema
 → create User(role=tenant_admin)
 → return {tenant_id, session_token}
 ```
 
-### 3.2 Feature-Based Access
+### 3.2 Module Access
+Every module is available to every tenant. There is no feature table, no purchase flow and no feature guard — a route is reachable by any authenticated user of the tenant whose role holds the route's permission:
 ```
-POST /tenants/{id}/features/{feature_key}/purchase
-→ payment step (external or internal)
-→ on success: upsert TenantFeature{status=active}
-→ invalidate feature cache (Redis) for tenant
+if not role_has(current_user.role, permission):
+    return 403 "forbidden"
 ```
-**Feature Guard** (middleware on every gated route):
-```
-if not TenantFeature.is_active(tenant_id, feature_key):
-    return 403 "Feature not enabled"
-```
-Frontend calls `GET /tenants/{id}/features` on login and conditionally renders nav modules — but the frontend check is UX only; the backend guard is the actual enforcement.
+The frontend renders the full navigation for every tenant, filtered only by the signed-in user's role — and that is UX only; the backend permission guard is the actual enforcement. Clinical type and tenant customization change what happens *inside* a module (fields, widgets, defaults); neither hides or disables one.
 
 ### 3.3 Tenant Configuration (Field Resolution)
 Effective schema for any entity = **common fields** → overridden/extended by **clinical_type fields** → overridden/extended by **tenant custom fields** (later scope wins on `field_key` collision).
@@ -110,9 +104,9 @@ POST /encounters {patient_id, queue_entry_id, common fields, clinical_ext: {...}
 ```
 POST /encounters/{id}/prescriptions {items: [{medicine, dosage, frequency, duration, instructions}]}
 ```
-Always available (core), regardless of whether Pharmacy is purchased.
+Readable by the pharmacy without being copied.
 
-### 3.9 Pharmacy *(feature-gated)*
+### 3.9 Pharmacy
 ```
 GET  /pharmacy/prescriptions?status=pending      # reads Prescription directly — no copy
 POST /pharmacy/prescriptions/{id}/dispense {items:[{item_id, qty, batch_no}]}
@@ -121,7 +115,7 @@ POST /pharmacy/prescriptions/{id}/dispense {items:[{item_id, qty, batch_no}]}
 → update PrescriptionItem.dispensed_qty/status
 ```
 
-### 3.10 Lab *(feature-gated)*
+### 3.10 Lab
 ```
 POST  /encounters/{id}/lab-orders {tests:[...]}
 GET   /lab/orders?status=pending
@@ -136,7 +130,7 @@ Single ledger, all movements as `InventoryTransaction`:
 `purchase | dispense | return | adjustment | expiry | transfer`.
 Stock level = sum of transactions per item per tenant. Pharmacy dispense (3.9) writes to this ledger automatically; a scheduled job flags near-expiry batches.
 
-### 3.12 Billing *(feature-gated)*
+### 3.12 Billing
 ```
 POST /billing/invoices {patient_id, encounter_id, line_items:[...]}
 ```
@@ -156,9 +150,9 @@ Aggregates appointments, queue history, encounters, prescriptions, lab results, 
 `AnalyticsService` reads existing transactional tables directly — no separate analytics DB up front.
 ```
 GET /analytics/dashboard?range=...
-→ resolve tenant's active features + clinical_type
-→ always compute: patients, appointments, no-shows, queue wait time, consultation time, prescriptions, revenue
-→ conditionally compute (only if feature active): pharmacy sales, lab tests, inventory consumption, billing revenue
+→ resolve tenant's clinical_type
+→ compute: patients, appointments, no-shows, queue wait time, consultation time, prescriptions, revenue
+→ compute module panels: pharmacy sales, lab tests, inventory consumption, billing revenue, advanced reports
 → conditionally compute (driven by clinical_ext data): dental procedures, eye exams, dermatology treatments
 ```
 Cache expensive aggregations in Redis or materialize via a scheduled job for daily rollups.
@@ -174,9 +168,10 @@ Cache expensive aggregations in Redis or materialize via a scheduled job for dai
 
 1. **Auth** — resolves `tenant_id` + `user_id` + `role` from token
 2. **Tenant isolation guard** — injects tenant filter into every query
-3. **Feature guard** — blocks gated routes if entitlement inactive
-4. **RBAC guard** — checks role/permission for the route
-5. **Schema resolver** — merges common/clinical/tenant field definitions for dynamic-form routes
+3. **RBAC guard** — checks role/permission for the route
+4. **Schema resolver** — merges common/clinical/tenant field definitions for dynamic-form routes
+
+There is no module/feature guard: every module is mounted for every tenant.
 
 ## 5. State Machines — Summary
 
@@ -194,8 +189,7 @@ Cache expensive aggregations in Redis or materialize via a scheduled job for dai
 
 1. Tenant + Auth + RBAC + tenant isolation guard (foundation everything else depends on)
 2. Field resolution engine (3.3) — needed before any dynamic form works
-3. Patient → Appointment/Walk-in → Queue → Encounter → Prescription (the always-on core loop)
-4. Feature guard + entitlement purchase flow
-5. Pharmacy, Lab, Inventory, Billing (feature-gated modules, in any order — each only depends on the core loop, not on each other)
-6. Patient history (read-composition over everything above)
-7. AnalyticsService last, since it reads off the tables everything else produces
+3. Patient → Appointment/Walk-in → Queue → Encounter → Prescription (the clinical loop)
+4. Pharmacy, Lab, Inventory, Billing (in any order — each only depends on the clinical loop, not on each other)
+5. Patient history (read-composition over everything above)
+6. AnalyticsService last, since it reads off the tables everything else produces

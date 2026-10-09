@@ -112,55 +112,122 @@ preference is in `localStorage`.
   tables draw themselves in outline while their first rows are in flight, and a refetch keeps the
   page it already has; see *Loading states*.
 
-## The four axes
+## Architecture
 
-The reference document's first rule is that tenant, clinical type, entitlement and
-customisation must never be conflated. The code keeps them apart:
+One PMS application, built as a **modular monolith**: every module lives in this one repository
+(and its counterpart in the one API repository), logically separated by folder, route and
+endpoint group, and deployed together. There are no Git submodules, no per-module repositories
+and no per-tenant module configuration.
 
-| Axis | Where it lives | What it changes |
+```text
+PMS
+├── Authentication
+├── User management
+├── Patients
+├── Appointments
+├── Queue
+├── Consultation
+├── Prescriptions
+├── Pharmacy
+├── Lab
+├── Inventory
+├── Billing
+├── Reports
+├── Configuration
+└── Team
+```
+
+**Every tenant gets every module.** No module is purchased, trialled, switched on or switched off
+for a clinic, and nothing in the client or the API asks whether a clinic "has" one. What decides
+whether a *person* can use a module is their role:
+
+```text
+Tenant
+  └── Modules: all of them, always
+User
+  └── Role → permissions (view / create / update / delete, per module)
+```
+
+A permission answers "can this user perform this action?" — never "does this clinic have this
+module?".
+
+## Three concepts
+
+The reference document's first rule is that tenant, clinical type and customisation must never be
+conflated. The code keeps them apart:
+
+| Concept | Where it lives | What it changes |
 |---|---|---|
 | **Tenant** | the host, and the session token that has to agree with it | which rows exist at all |
-| **Clinical type** | `tenant.clinical_type`, `GET /tenant/schema/…`, `ClinicalExamPanel` | which exam fields and which chart widget |
-| **Entitlement** | `TenantFeature` rows, `hasFeature`, `<FeatureGate>` | which whole modules are reachable |
-| **Customisation** | tenant-scoped `FieldDefinition` rows | extra fields on the dynamic forms |
+| **Clinical type** | `tenant.clinical_type`, `GET /tenant/schema/…`, `ClinicalExamPanel` | which exam fields, which chart widget, which clinical analytics — inside every module |
+| **Customisation** | tenant-scoped `FieldDefinition` rows, and the clinic's configuration | extra fields on the dynamic forms; slots, prefixes, tax, currency and the rest |
 
-A feature check never reads `clinical_type`; a custom field never gates a route. Sign in at
-`northgate.localhost:3000` and then at `clearview.localhost:3000` to watch all four change at
-once — the same build serves a dental practice, an eye centre and a dermatology clinic.
+A clinical type never decides whether a module exists, and a custom field or a configuration value
+never hides one — they only change what happens inside it. Sign in at `northgate.localhost:3000`
+and then at `clearview.localhost:3000` to watch them change at once — the same build, with the same
+modules, serves a dental practice, an eye centre and a dermatology clinic.
 
-None of these checks is enforcement. `<FeatureGate>` and `<RoleGate>` shape the UI; the server
-answers `403 feature_not_enabled` to a module a clinic never bought and `404` to another clinic's
-row, whatever this app renders.
+None of the client's checks is enforcement. `<RoleGate>` and the role filter on the rail shape the
+UI; the server answers `403 forbidden` to a role without the permission and `404` to another
+clinic's row, whatever this app renders.
 
 ## Three demo tenants
 
-| Clinic | Clinical type | Paid modules |
-|---|---|---|
-| Northgate Dental Studio | dental | pharmacy, lab, inventory, billing |
-| Clearview Eye Centre | ophthalmology | billing, inventory, advanced reports |
-| Rowan Skin & Laser | dermatology | lab only — still on trial |
+```text
+Northgate Dental Studio
+  Clinical type: Dental
+  Modules: All
+
+Clearview Eye Centre
+  Clinical type: Ophthalmology
+  Modules: All
+
+Rowan Skin & Laser
+  Clinical type: Dermatology
+  Modules: All
+```
+
+What differs between them is their clinical type, configuration, data and customisation — never the
+modules. Rowan is still on trial, which only means the platform does not bill it yet.
 
 Clinics are created in the **platform console**, not by a self-service form inside a tenant.
-Creating one claims its subdomain, seeds the five core features, clones the clinical-type
-field set, writes its configuration and mints the first admin credential — §3.1, performed by
-the platform. The console can also suspend a clinic, which takes its subdomain offline.
+Creating one claims its subdomain, clones the clinical-type field set, writes its configuration
+and mints the first admin credential — §3.1, performed by the platform. The console can also
+suspend a clinic, which takes its subdomain offline.
 
 Platform staff are a separate table from `User`: no `tenant_id`, and they never appear inside
 a clinic.
 
+**What a clinic pays the platform** is one flat monthly fee for the whole product, the same for
+every clinic, set under **Settings → Subscription** in the console. An active clinic that is not
+exempt is billed it at the start of each month; a clinic on trial is not billed. An unpaid bill past
+its grace period puts the whole clinic on hold until it is settled — a hold is about the clinic's
+account, never about a module.
+
 ## Modules
 
-Core (always on): **patients**, **appointments**, **queue**, **consultation**, **prescriptions**.
-Purchasable: **pharmacy**, **lab**, **inventory**, **billing**, **advanced reports**.
+Every clinic has all of these: **patients**, **appointments**, **queue**, **consultation**,
+**prescriptions**, **pharmacy**, **lab**, **inventory**, **billing**, **advanced reports**, plus
+**configuration** and **team** under Settings.
 
 - **Queue** — token per tenant per day, the `waiting → called → in_consultation → completed`
   state machine, walk-ins with no appointment row, plus a waiting-room screen at `/display` that
   shows a first name and an initial and nothing more. Both are live: `src/lib/realtime.ts` holds
   a socket open and turns each event into a re-read, and the topbar carries a dot for whether
   that connection is up.
+- **Patient notes** — a Notes tab on the record, and the latest note in its side rail: what
+  clinicians write about a patient outside any one consultation, signed with the author, their role
+  and the time. Read under `encounter:read`, written under `encounter:write`. A note is never edited
+  — its author corrects it with a new note, and both stay (a database trigger refuses any rewrite).
+  The printed record carries them for every role that may read them.
+- **Follow-ups** — the front desk's call list: every booking in the next few days, the number to
+  ring, and where its follow-up stands (pending, confirmed, no answer, call back, reschedule
+  required, declined). Confirming marks the appointment `confirmed`; a new slot is offered from the
+  booking dialog's own free-slot logic and checked again on the server, under a per-clinician-per-day
+  lock, so two desks cannot book the same one. Every call is kept, with who rang and what they wrote.
 - **Consultation** — one encounter row for every discipline; `clinical_ext` carries an FDI tooth
   chart, a refraction grid or a body-site lesion map depending on the tenant.
-- **Prescriptions** — core, and readable by the pharmacy without being copied.
+- **Prescriptions** — readable by the pharmacy without being copied.
 - **Pharmacy** — dispensing writes `dispense` rows into the single inventory ledger.
 - **Lab** — `ordered → pending → resulted → verified`; results are withheld from the patient
   record until verification.
@@ -168,16 +235,20 @@ Purchasable: **pharmacy**, **lab**, **inventory**, **billing**, **advanced repor
   and reorder levels fall out of it.
 - **Billing** — invoices reference the encounter, suggest line items from the visit, and follow
   `draft → issued → partially_paid → paid` (or `void`).
-- **Reports** — always-on metrics, module-conditional panels, and clinical-type analytics driven
-  purely by what is inside `clinical_ext`. All of it arrives from `GET /analytics/dashboard` in
-  one request: the panels that render are the ones the API sent, which are the ones this clinic
-  pays for.
+- **Reports** — core metrics, every module's panels, the advanced breakdowns, and clinical-type
+  analytics driven purely by what is inside `clinical_ext`. All of it arrives from
+  `GET /analytics/dashboard` in one request, the same panels for every clinic; only the money
+  figures are withheld from a role without `revenue:read`.
 - **Configuration** (Settings → Configuration) — §3.3's other half. Contact details, record and
   token prefixes, the working day, slot interval and default appointment length, urgent-first
   queueing, invoice prefix, tax rate, payment terms and currency. Every one of them is wired:
   change the slot interval and the booking dialog and day grid follow it, change the currency
   and every figure in the app reformats, change the invoice prefix and the next invoice uses it.
 - **Team** (Settings → Team) — roles, credentials, failed attempts, and lock/unlock.
+
+A module's data is only fetched for a person whose role can read it (`lab:read`,
+`inventory:read`, `billing:read`), so a receptionist's screens never collect a 403 for the lab's
+orders — a question about the user, not the clinic.
 
 ## Layout
 
@@ -189,7 +260,8 @@ src/
     ui/                    buttons, fields, data-table, modal, badges, primitives
     charts/                hand-drawn SVG charts — no charting dependency
     layout/                rail, topbar, command palette, auth stage, toaster
-    domain/                dynamic forms, gates, clinical exam widgets, composers
+    domain/                dynamic forms, the role gate, clinical exam widgets, composers
+    platform/              the console's own chrome, bills and clinic actions
   lib/
     types.ts               the entities from §2 — the JSON the API returns
     tenancy.ts             Host header → tenant, and links between hosts
@@ -197,11 +269,12 @@ src/
     api/index.ts           one function per endpoint
     realtime.ts            the queue socket, turned into cache invalidation
     demo-accounts.ts       the seeded credentials the login screens offer
-    data/catalog.ts        clinical types, features, lab tests, medicines
+    data/catalog.ts        clinical types, modules, lab tests, medicines
     data/repository.ts     pure reads over what a screen is already holding
     query/                 key factory, read hooks, query client
     store/session.tsx      host, session, theme, toasts
     store/app-store.tsx    the facade: every write as a mutation, plus session
+    platform/              the console's figures: what clinics pay, and what was billed
     analytics.ts           §3.14 read models
 ```
 
@@ -210,11 +283,12 @@ src/
 The first time anyone signs in, the app offers a short guided tour — seven stops for a practice
 admin, six for a receptionist, and only ever of things that person can actually see.
 
-It teaches the four axes rather than the buttons: that the address *is* the clinic, that the
-clinical type shapes the forms, that an entitlement locks whole modules, and that a clinic's own
-fields sit on top of all three. Steps are declarative (`src/lib/tour.tsx`), filtered by role and
-entitlement before the tour starts, and skipped entirely if their anchor never appears — which is
-what makes the steps that change route safe.
+It teaches the three concepts rather than the buttons: that the address *is* the clinic, that the
+clinical type shapes the work inside every module, and that a clinic's own fields and
+configuration sit on top of both — and that every clinic has every module, with what a person sees
+following their role. Steps are declarative (`src/lib/tour.tsx`), filtered by role before the tour
+starts, and skipped entirely if their anchor never appears — which is what makes the steps that
+change route safe.
 
 - **It is a dialog.** Focus moves into the card, Tab is trapped, Escape leaves, ← and → move,
   and each step is announced to a screen reader.
@@ -272,6 +346,8 @@ reports cannot drift from the ledger.
 Nothing above `src/lib/api` knows where the data comes from, which is what made the swap from the
 mock database a one-file change. What is worth knowing:
 
+- **No module is refused for being a module.** There is no `feature_not_enabled`: a `403` means
+  the signed-in role lacks the permission, and the app treats it as such.
 - **No function takes a tenant id.** The clinic is the address the request goes to and the session
   it carries, and the server derives it from those two agreeing. A `tenant_id` in a body is
   rejected outright, so there is nothing to get wrong here.
@@ -337,7 +413,7 @@ Three kinds of wait, three answers — `components/ui/loader.tsx`:
   Next shows it in the shell's content area the moment you navigate: the rail, the topbar and the
   clinic's name stay put and stay interactive. `<StageLoader>` is the same thing full-screen, for
   the three stages before there is a shell — is there a clinic at this address, is there a
-  session, has the entitlement arrived.
+  session, has the clinic's record and configuration arrived.
 - **A table that has not got its rows.** `<DataTable loading>` (or `server.loading`) draws
   skeleton rows in the shape of the rows that are coming — same columns, same row height, same
   ten of them — so nothing jumps when the answer lands, and the empty state is held back rather

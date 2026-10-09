@@ -5,7 +5,7 @@ import { useApp } from "@/lib/store/app-store";
 import { useAppointment, useClinicDb } from "@/lib/query/hooks";
 import { userName } from "@/lib/data/repository";
 import { daysBetween, formatDate, formatTime12, relativeDay } from "@/lib/format";
-import type { Appointment } from "@/lib/types";
+import { isBooked, type Appointment } from "@/lib/types";
 import { Modal } from "@/components/ui/modal";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -44,7 +44,7 @@ export function AppointmentDetailModal({ appointment: opened, onClose }: {
       subtitle={appointment ? `${formatDate(appointment.date, "day")} at ${formatTime12(appointment.time)}` : undefined}
       footer={
         appointment && (
-          appointment.status === "scheduled" ? (
+          isBooked(appointment.status) ? (
             <>
               <Button variant="ghost" onClick={() => act(appointment, "cancelled", "Appointment cancelled")}>
                 <IconX size={14} /> Cancel
@@ -98,7 +98,7 @@ export function AppointmentDetailModal({ appointment: opened, onClose }: {
             <p className="mt-1 text-body leading-relaxed text-ink">{appointment.reason}</p>
           </div>
 
-          {appointment.date === today && appointment.status === "scheduled" && (
+          {appointment.date === today && isBooked(appointment.status) && (
             <p className="flex items-start gap-2 rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-caption leading-relaxed text-ink-2">
               <IconClock size={14} className="mt-px shrink-0 text-ink-3" />
               Checking in issues the next token in today&apos;s sequence and pushes the board update — the

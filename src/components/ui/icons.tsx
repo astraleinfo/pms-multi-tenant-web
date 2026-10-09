@@ -82,6 +82,7 @@ export const IconChevronCircleLeft = mk(<><circle cx="12" cy="12" r="8.5" /><pat
 export const IconSidebar = mk(<><rect x="3.5" y="4.5" width="17" height="15" rx="2.4" /><path d="M9.5 4.5v15" /></>);
 export const IconPlay = mk(<><path d="M8 5.5 18 12 8 18.5v-13Z" /></>);
 export const IconBookmark = mk(<><path d="M6 4.5h12v16l-6-4-6 4v-16Z" /></>);
+export const IconNote = mk(<><path d="M6.5 3.5h8l3 3v14h-11v-17Z" /><path d="M14.5 3.5v3h3M9 11h6M9 14.5h6M9 18h3.5" /></>);
 export const IconCard = mk(<><rect x="2.5" y="5" width="19" height="14" rx="2.6" /><path d="M2.5 9.8h19M6 15h4" /></>);
 export const IconDownload = mk(<><path d="M12 4v10.5M7.5 10.5 12 15l4.5-4.5" /><path d="M4.5 19.5h15" /></>);
 export const IconUpload = mk(<><path d="M12 15V4.5M7.5 9 12 4.5 16.5 9" /><path d="M4.5 19.5h15" /></>);

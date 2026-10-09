@@ -1,11 +1,12 @@
 import * as React from "react";
-import { Badge, APPOINTMENT_TONE, FLAG_TONE, INVOICE_TONE, LAB_TONE, QUEUE_TONE, RX_TONE, TX_TONE, type Tone } from "@/components/ui/badge";
+import { Badge, APPOINTMENT_TONE, FLAG_TONE, FOLLOW_UP_TONE, INVOICE_TONE, LAB_TONE, QUEUE_TONE, RX_TONE, TX_TONE, type Tone } from "@/components/ui/badge";
 import { IconArrowDown, IconArrowUp, IconCheck } from "@/components/ui/icons";
 import { sentenceCase } from "@/lib/format";
 import type { BillingDepartment } from "@/lib/types";
 
 const MAPS = {
   appointment: APPOINTMENT_TONE,
+  followUp: FOLLOW_UP_TONE,
   queue: QUEUE_TONE,
   prescription: RX_TONE,
   lab: LAB_TONE,
@@ -20,6 +21,9 @@ const LABELS: Record<string, string> = {
   no_show: "No show",
   checked_in: "Checked in",
   void: "Void",
+  reschedule_required: "Reschedule required",
+  no_answer: "No answer",
+  call_back: "Call back later",
 };
 
 /**

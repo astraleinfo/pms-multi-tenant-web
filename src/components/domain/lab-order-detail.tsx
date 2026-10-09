@@ -70,11 +70,11 @@ export function LabOrderModal({ order: opened, onClose }: { order: LabOrder | nu
 }
 
 function LabOrderDialog({ open, order, onClose }: { open: boolean; order: LabOrder; onClose: () => void }) {
-  const { startLabOrder, saveLabResults, verifyLabOrder, hasFeature, can, notify } = useApp();
+  const { startLabOrder, saveLabResults, verifyLabOrder, can, notify } = useApp();
 
-  /* The clinic bills, and this person is allowed to take the money. Both, or
-     the button is an apology waiting to happen. */
-  const billsHere = hasFeature("billing") && can("billing:write");
+  /* This person is allowed to take the money, or the button is an apology
+     waiting to happen. */
+  const billsHere = can("billing:write");
   /* The lab bills on its own invoices, so it can take its own money — a
      patient collecting a report pays for the scan, not for their medicine. */
   const [collecting, setCollecting] = React.useState(false);

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { PlatformBilling } from "@/lib/api";
-import type { SubscriptionInvoice, Tenant, FeatureKey } from "@/lib/types";
+import type { SubscriptionInvoice, Tenant } from "@/lib/types";
 import {
-  charges, latestPeriod, moduleRevenue, revenueSeries, revenueTotals,
+  charges, clinicRevenue, latestPeriod, revenueSeries, revenueTotals,
 } from "./revenue";
 
 const tenant = (id: string, name: string) => ({ id, name, slug: name.toLowerCase() } as Tenant);
@@ -11,7 +11,7 @@ function invoice(over: Partial<SubscriptionInvoice> = {}): SubscriptionInvoice {
   return {
     id: "inv-1", tenant_id: "t1", number: "AS-1", period_start: "2026-09-01",
     period_end: "2026-09-30", currency: "INR", amount: 100,
-    lines: [{ feature_key: "billing", name: "Billing", amount: 100 }],
+    lines: [{ name: "Astrale PMS subscription", amount: 100 }],
     issued_on: "2026-09-01", due_on: "2026-09-08", hold_on: "2026-09-15",
     status: "open", reminder_stage: "none", reminders_sent: 0,
     paid_at: null, payment_reference: "", settled_by: "",
@@ -22,7 +22,7 @@ function invoice(over: Partial<SubscriptionInvoice> = {}): SubscriptionInvoice {
 function billing(clinics: PlatformBilling["clinics"]): PlatformBilling {
   return {
     enabled: true, currency: "INR", due_days: 7, grace_days: 7,
-    reminder_days_before_due: 3, clinics,
+    reminder_days_before_due: 3, fee_monthly: 100, clinics,
   };
 }
 
@@ -41,7 +41,7 @@ describe("a withdrawn bill is not money", () => {
 
     expect(revenueTotals(data).billed).toBe(100);
     expect(revenueSeries(data, 6).at(-1)!.billed).toBe(100);
-    expect(moduleRevenue(data).reduce((s, m) => s + m.billed, 0)).toBe(100);
+    expect(clinicRevenue(data).reduce((s, c) => s + c.billed, 0)).toBe(100);
     expect(charges(data)).toHaveLength(1);
   });
 });
@@ -71,7 +71,7 @@ describe("no invoices at all", () => {
     expect(latestPeriod(EMPTY)).toBeNull();
     expect(revenueTotals(EMPTY).period).toBeNull();
     expect(revenueSeries(EMPTY, 6)).toEqual([]);
-    expect(moduleRevenue(EMPTY)).toEqual([]);
+    expect(clinicRevenue(EMPTY)).toEqual([]);
     expect(charges(EMPTY)).toEqual([]);
   });
 });
@@ -92,18 +92,46 @@ describe("the current month has not been billed yet", () => {
   });
 });
 
-describe("a module dropped from the catalogue", () => {
-  it("names it from the invoice line, which carries its own copy", () => {
+describe("a bill from before every module was included", () => {
+  it("lists each of its old per-module lines by the name the line carries", () => {
     const data = billing([{
       tenant: tenant("t1", "Northgate"),
       summary: {} as never,
       invoices: [invoice({
-        lines: [{ feature_key: "retired_module" as FeatureKey, name: "Retired Module", amount: 250 }],
+        amount: 400,
+        lines: [{ name: "Lab", amount: 150 }, { name: "Billing", amount: 250 }],
       })],
     }]);
 
-    expect(moduleRevenue(data)).toEqual([
-      { feature_key: "retired_module" as FeatureKey, name: "Retired Module", billed: 250, clinics: 1 },
+    expect(charges(data).map((c) => [c.name, c.amount])).toEqual([["Lab", 150], ["Billing", 250]]);
+    expect(new Set(charges(data).map((c) => c.id)).size).toBe(2);
+    expect(clinicRevenue(data)).toEqual([
+      { tenant: tenant("t1", "Northgate"), billed: 400, collected: 0 },
+    ]);
+  });
+});
+
+describe("revenue by clinic", () => {
+  it("ranks clinics by what they were billed in the period, and counts only paid bills as collected", () => {
+    const data = billing([
+      {
+        tenant: tenant("t1", "Northgate"),
+        summary: {} as never,
+        invoices: [invoice({ id: "a", amount: 100, status: "paid" })],
+      },
+      {
+        tenant: tenant("t2", "Clearview"),
+        summary: {} as never,
+        invoices: [
+          invoice({ id: "b", tenant_id: "t2", amount: 300, status: "open" }),
+          invoice({ id: "c", tenant_id: "t2", period_start: "2026-08-01", amount: 999, status: "paid" }),
+        ],
+      },
+    ]);
+
+    expect(clinicRevenue(data).map((c) => [c.tenant.name, c.billed, c.collected])).toEqual([
+      ["Clearview", 300, 0],
+      ["Northgate", 100, 100],
     ]);
   });
 });
