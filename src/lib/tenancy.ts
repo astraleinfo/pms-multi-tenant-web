@@ -40,8 +40,20 @@ export interface HostContext {
 
 const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
 
+/**
+ * The apex, when it is not a bare two-label domain — `pms.astraleinfo.com` has
+ * three labels, so without this it would read as a clinic called `pms`. The
+ * API's APP_DOMAIN, inlined at build time. Unset, the apex is inferred: two
+ * labels for a real domain, `localhost` locally.
+ */
+const APP_DOMAIN = (process.env.NEXT_PUBLIC_APP_DOMAIN ?? "").trim().toLowerCase().replace(/^\.+/, "");
+
 /** Parse a Host header (or `window.location.host`) into a tenancy context. */
-export function resolveHost(host: string | null | undefined, protocol = "http:"): HostContext {
+export function resolveHost(
+  host: string | null | undefined,
+  protocol = "http:",
+  appDomain = APP_DOMAIN,
+): HostContext {
   const raw = (host ?? "").trim().toLowerCase();
   const [hostname = "", port = ""] = raw.split(":");
   const platform = (root: string): HostContext => ({ kind: "platform", slug: null, root, port, protocol });
@@ -54,6 +66,19 @@ export function resolveHost(host: string | null | undefined, protocol = "http:")
       : platform(root);
 
   if (!hostname || IPV4.test(hostname) || hostname === "[::1]") return platform(hostname || "localhost");
+
+  /* the configured apex and the single labels under it; anything deeper is
+     not an address this deployment hands out, so it gets the apex */
+  if (appDomain) {
+    if (hostname === appDomain) return platform(appDomain);
+    if (hostname.endsWith(`.${appDomain}`)) {
+      const slug = hostname.slice(0, -(appDomain.length + 1));
+      if (slug.includes(".")) return platform(appDomain);
+      return RESERVED_SUBDOMAINS.has(slug)
+        ? reserved(slug, appDomain)
+        : { kind: "tenant", slug, root: appDomain, port, protocol };
+    }
+  }
 
   const labels = hostname.split(".");
 

@@ -1,10 +1,18 @@
 # syntax=docker/dockerfile:1.7
 #
-# The web app as a standalone Node server. In production it sits behind the
-# nginx in ../pms-multi-tenant-api (docker-compose.prod.yml there), which sends
-# /api/* straight to the API and everything else here.
+# The web app as a standalone Node server. In production it sits behind an
+# nginx that sends /api/* straight to the API and everything else here: the
+# host's own (docker-compose.yml, deploy/host-nginx in the API repo), or the
+# API stack's container on a dedicated host (docker-compose.prod.yml).
+#
+# Usually built by compose, which passes the build arguments from .env:
+#
+#   docker compose build
+#
+# By hand:
 #
 #   docker build -t pms-web:$(git rev-parse --short HEAD) \
+#     --build-arg NEXT_PUBLIC_APP_DOMAIN=pms.astraleinfo.com \
 #     --build-arg VERSION=$(git describe --tags --always) \
 #     --build-arg REVISION=$(git rev-parse HEAD) .
 
@@ -38,14 +46,18 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # NEXT_PUBLIC_* values are inlined into the browser bundle at this step, so
-# they are build arguments, not runtime settings. In production leave both
-# unset: the API shares the clinic's own origin, and the socket is derived
-# from window.location. .env* files never reach the build (.dockerignore), so
-# a developer's .env.local cannot leak 127.0.0.1 into a production bundle.
+# they are build arguments, not runtime settings. In production leave the two
+# API ones unset: the API shares the clinic's own origin, and the socket is
+# derived from window.location. NEXT_PUBLIC_APP_DOMAIN is the API's APP_DOMAIN,
+# needed when the apex has more than two labels (src/lib/tenancy.ts). .env*
+# files never reach the build (.dockerignore), so a developer's .env.local
+# cannot leak 127.0.0.1 into a production bundle.
 ARG NEXT_PUBLIC_API_BASE
 ARG NEXT_PUBLIC_API_WS_ORIGIN
+ARG NEXT_PUBLIC_APP_DOMAIN
 ENV NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE} \
-    NEXT_PUBLIC_API_WS_ORIGIN=${NEXT_PUBLIC_API_WS_ORIGIN}
+    NEXT_PUBLIC_API_WS_ORIGIN=${NEXT_PUBLIC_API_WS_ORIGIN} \
+    NEXT_PUBLIC_APP_DOMAIN=${NEXT_PUBLIC_APP_DOMAIN}
 
 RUN --mount=type=cache,id=next-cache,target=/app/.next/cache \
     pnpm build

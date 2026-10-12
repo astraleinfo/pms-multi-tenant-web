@@ -1,0 +1,53 @@
+# Server deployment, beside other applications behind the host's own nginx.
+#
+#   REVISION=$(git rev-parse HEAD) docker compose up -d --build
+#
+# The host nginx (deploy/host-nginx/pms.conf.template in the API repo) sends
+# /api/* to the API and everything else to 127.0.0.1:PMS_WEB_PORT here. The app makes
+# no server-side calls to the API, so it needs no network of the API's.
+#
+# .env here, read by Compose:
+#
+#   NEXT_PUBLIC_APP_DOMAIN=pms.astraleinfo.com     # the API's APP_DOMAIN
+#   PMS_WEB_PORT=13000                             # loopback port; optional
+#
+# NEXT_PUBLIC_APP_DOMAIN is inlined into the bundle, so changing it needs a
+# rebuild (`--build`).
+# The API's URL is not a setting: the browser calls /api on the address it is
+# already on, and the queue socket follows the same origin.
+
+services:
+  web:
+    image: pms-web:latest
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_APP_DOMAIN: ${NEXT_PUBLIC_APP_DOMAIN:?set NEXT_PUBLIC_APP_DOMAIN in .env, e.g. pms.astraleinfo.com}
+        # Image labels, so `docker inspect` says which commit is running.
+        REVISION: ${REVISION:-unknown}
+    # Loopback only: the host nginx is the way in.
+    ports:
+      - "127.0.0.1:${PMS_WEB_PORT:-13000}:3000"
+    read_only: true
+    tmpfs:
+      # Next's image and fetch caches; uid 1000 is the image's `node` user.
+      - /app/.next/cache:uid=1000,gid=1000
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    # The server is shared: a leak or a traffic spike here must not starve the
+    # applications next to it. The standalone server idles well under 200 MB.
+    # The limits cover the running container only, not `--build`.
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    stop_grace_period: 30s
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"

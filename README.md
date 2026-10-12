@@ -45,6 +45,13 @@ unclaimed subdomain says so. That routing happens in `src/proxy.ts` before anyth
 
 ## Deploying
 
+**On a server whose own nginx already serves other sites**, `docker compose up -d --build` with
+`docker-compose.yml` serves the app on `127.0.0.1:13000` (`PMS_WEB_PORT` in `.env`), and the host nginx routes to it (see
+`deploy/host-nginx/pms.conf.template` in the API repo). Its `.env` holds one line,
+`NEXT_PUBLIC_APP_DOMAIN` (the API's `APP_DOMAIN`), which the build needs whenever the apex has
+more than two labels — `pms.astraleinfo.com` would otherwise read as a clinic called `pms`. The rest of this section describes
+`docker-compose.prod.yml`, the alternative for a dedicated host.
+
 Production is a Docker image of the standalone server (`output: "standalone"`), running as the
 `web` service behind the nginx in `../pms-multi-tenant-api/docker-compose.prod.yml`. That nginx
 sends `/api/*` straight to the API with the clinic's `Host` intact, and everything else here, so
