@@ -1,8 +1,10 @@
 "use client";
 
 import * as React from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useApp } from "@/lib/store/app-store";
 import { usePlatformSnapshot } from "@/lib/query/hooks";
+import { qk } from "@/lib/query/keys";
 import * as api from "@/lib/api";
 import { CLINICAL_TYPES, MODULES } from "@/lib/data/catalog";
 import { slugProblem, slugify } from "@/lib/tenancy";
@@ -10,6 +12,7 @@ import type { ClinicalTypeKey, Id, Tenant } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/loader";
 import { Badge } from "@/components/ui/badge";
 import { KV } from "@/components/ui/misc";
 import { Field, Input, Select } from "@/components/ui/field";
@@ -31,10 +34,6 @@ export interface CreatedClinic {
   name: string;
   slug: string;
   email: string;
-  /** false means the clinic exists but nobody can sign into it yet */
-  invitationSent: boolean;
-  /** only under the development mail transport; otherwise it is in an inbox */
-  invitationUrl: string | null;
   tenantId: Id;
   userId: Id;
   /** the row itself, so the console can enter the clinic it just made */
@@ -52,7 +51,7 @@ export function CreateClinicFlow({ open, onClose }: { open: boolean; onClose: ()
         onClose={onClose}
         onCreated={(next) => { onClose(); setCreated(next); }}
       />
-      <CreatedReceipt created={created} onChange={setCreated} onClose={() => setCreated(null)} />
+      <CreatedReceipt created={created} onClose={() => setCreated(null)} />
     </>
   );
 }
@@ -138,23 +137,13 @@ function CreateClinic({
     }
     setBusy(false);
 
-    /* A clinic whose admin never got the link exists but cannot be signed
-       into, so that is not a success message. */
-    notify(
-      result.invitationSent
-        ? { tone: "ok", title: `${name.trim()} created`, body: `Invitation sent to ${adminEmail}.` }
-        : {
-          tone: "warn",
-          title: `${name.trim()} created, but the invitation did not send`,
-          body: "Nobody can sign in until it does. Try Resend.",
-        },
-    );
+    /* The invitation is the worker's; the receipt watches it leave and says
+       so if it does not. */
+    notify({ tone: "ok", title: `${name.trim()} created`, body: `Invitation on its way to ${adminEmail}.` });
     onCreated({
       name: name.trim(),
       slug: effectiveSlug,
       email: adminEmail,
-      invitationSent: result.invitationSent,
-      invitationUrl: result.invitationUrl,
       tenantId: result.tenantId,
       userId: result.userId,
       tenant: result.tenant,
@@ -262,10 +251,9 @@ function CreateClinic({
 }
 
 function CreatedReceipt({
-  created, onChange, onClose,
+  created, onClose,
 }: {
   created: CreatedClinic | null;
-  onChange: (next: CreatedClinic) => void;
   onClose: () => void;
 }) {
   const { host } = useApp();
@@ -277,11 +265,7 @@ function CreatedReceipt({
       onClose={onClose}
       width="sm"
       title={created ? `${created.name} is live` : ""}
-      subtitle={
-        created?.invitationSent
-          ? "Its subdomain is serving already, and its first admin has been invited."
-          : "Its subdomain is serving, but the invitation did not send."
-      }
+      subtitle="Its subdomain is serving already, and its first admin is being invited."
       footer={
         created && (
           <>
@@ -309,7 +293,7 @@ function CreatedReceipt({
               {created.slug}.{host.root}{host.port ? `:${host.port}` : ""}
             </p>
           </div>
-          <InvitationPanel created={created} onResent={onChange} />
+          <InvitationPanel created={created} />
           <dl className="grid grid-cols-2 gap-x-4">
             <KV label="Plan" value="Trial" />
             <KV label="Modules" value="Core loop only" />
@@ -356,59 +340,65 @@ function useSlugCheck(slug: string) {
 }
 
 /**
- * What happened to the invitation, and how to send it again.
+ * Where the invitation is, and how to send it again.
  *
- * The link itself only appears under the development mail transport, where
- * there is no inbox to check. With a real transport it exists in exactly one
- * place, which is the point of the whole arrangement.
+ * The worker mints the link and emails it after the clinic is created, so this
+ * reads the admin's row until the email has either left or failed. The link
+ * itself is never shown: it exists in one inbox and nowhere else.
  */
-export function InvitationPanel({
-  created, onResent,
-}: {
-  created: CreatedClinic;
-  onResent: (next: CreatedClinic) => void;
-}) {
+export function InvitationPanel({ created }: { created: CreatedClinic }) {
   const { resendTenantInvitation, notify } = useApp();
+  const queryClient = useQueryClient();
   const [busy, setBusy] = React.useState(false);
+
+  const { data: staff } = useQuery({
+    queryKey: qk.platformUsers(created.tenantId),
+    queryFn: () => api.tenantUsers(created.tenantId),
+    /* read again until the worker has settled it — sent, failed, or stuck */
+    refetchInterval: (query) => {
+      const admin = query.state.data?.find((u) => u.id === created.userId);
+      return !admin || (admin.link_email_status === "queued" && !admin.link_email_retryable) ? 1500 : false;
+    },
+  });
+  const admin = staff?.find((u) => u.id === created.userId);
+  const status = admin?.link_email_status ?? "queued";
+  const problem = status === "failed" || !!admin?.link_email_retryable;
+  const sent = status === "sent";
 
   const resend = async () => {
     setBusy(true);
     try {
-      const again = await resendTenantInvitation(created.tenantId, created.userId);
-      onResent({ ...created, invitationSent: again.invitationSent, invitationUrl: again.invitationUrl });
-      notify(
-        again.invitationSent
-          ? { tone: "ok", title: "Invitation sent", body: `Another link is on its way to ${created.email}.` }
-          : { tone: "critical", title: "Still could not send", body: "Check the mail transport." },
-      );
+      await resendTenantInvitation(created.tenantId, created.userId);
+      notify({ tone: "ok", title: "Sending again", body: `A fresh link is on its way to ${created.email}.` });
     } catch (error) {
       notify({
         tone: "critical",
         title: "Could not resend",
         body: error instanceof Error ? error.message : "Try again.",
       });
+    } finally {
+      void queryClient.invalidateQueries({ queryKey: qk.platformUsers(created.tenantId) });
+      setBusy(false);
     }
-    setBusy(false);
   };
 
   return (
     <div
       className={cn(
         "rounded-[var(--r)] border p-3.5",
-        created.invitationSent
-          ? "border-accent-border bg-accent-soft"
-          : "border-critical-border bg-critical-soft",
+        problem ? "border-critical-border bg-critical-soft" : "border-accent-border bg-accent-soft",
       )}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p
             className={cn(
-              "text-micro font-semibold uppercase tracking-[0.09em]",
-              created.invitationSent ? "text-accent-text" : "text-critical-text",
+              "flex items-center gap-1.5 text-micro font-semibold uppercase tracking-[0.09em]",
+              problem ? "text-critical-text" : "text-accent-text",
             )}
           >
-            {created.invitationSent ? "Invitation sent" : "Invitation not sent"}
+            {!problem && !sent && <Spinner size={11} />}
+            {problem ? "Invitation not sent" : sent ? "Invitation sent" : "Sending invitation"}
           </p>
           <p className="tnum mt-1 break-all font-mono text-label text-ink">{created.email}</p>
         </div>
@@ -418,28 +408,10 @@ export function InvitationPanel({
       </div>
 
       <p className="mt-2 text-caption leading-relaxed text-ink-2">
-        {created.invitationSent
-          ? "They choose their own password from the link. It works once and expires."
-          : "Nobody can sign in to this clinic until a link reaches them."}
+        {problem
+          ? "Nobody can sign in to this clinic until a link reaches them. Resend tries again."
+          : "They choose their own password from the link. It works once and expires."}
       </p>
-
-      {created.invitationUrl && (
-        <div className="mt-2.5 border-t border-line-soft pt-2.5">
-          <p className="text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">
-            Development link
-          </p>
-          <p className="mt-1 text-micro leading-snug text-ink-3">
-            Shown only because mail is going to the log. Configure a real transport and this
-            disappears — the link then exists in one inbox and nowhere else.
-          </p>
-          <a
-            href={created.invitationUrl}
-            className="tnum mt-1.5 block break-all font-mono text-caption text-accent-text underline-offset-4 hover:underline"
-          >
-            {created.invitationUrl}
-          </a>
-        </div>
-      )}
     </div>
   );
 }

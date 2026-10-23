@@ -855,6 +855,8 @@ export interface ImportJob {
   /** on a failure, the one sentence that says why */
   error: string;
   report: ImportJobReport | null;
+  /** still queued well after the upload — the worker never got it; offer Retry */
+  retryable: boolean;
 }
 
 /** The sample sheet: every field, the fixed choices as dropdowns, an example per pricing mode. */
@@ -871,6 +873,9 @@ export const getInventoryImport = (id: Id) => get<ImportJob>(`/v1/inventory/impo
 
 /** The clinic's most recent import — null when there has never been one. */
 export const latestInventoryImport = () => get<ImportJob | null>("/v1/inventory/import/jobs/latest");
+
+/** Hand a stuck import to the worker again. Only a `retryable` one; anything else is a 409. */
+export const retryInventoryImport = (id: Id) => post<ImportJob>(`/v1/inventory/import/jobs/${id}/retry`);
 
 /* ---- the staff list as a spreadsheet — the Team tab's import and export.
    The import only adds people: an email the clinic already has is a
@@ -889,6 +894,8 @@ export const startStaffImport = (file: File) => {
 export const getStaffImport = (id: Id) => get<ImportJob>(`/v1/users/import/jobs/${id}`);
 
 export const latestStaffImport = () => get<ImportJob | null>("/v1/users/import/jobs/latest");
+
+export const retryStaffImport = (id: Id) => post<ImportJob>(`/v1/users/import/jobs/${id}/retry`);
 
 /** Every stock line with what is on hand, and the batches on the shelf. */
 export const exportInventory = () => requestBlob("/v1/inventory/export");
@@ -1108,18 +1115,14 @@ export interface TenantCreated {
   adminEmail: string;
   /** the clinic row, so the console can act on what it just made */
   tenant: Tenant;
-  /** false means the clinic exists but nobody can sign into it yet */
-  invitationSent: boolean;
-  /** only under the development mail transport — otherwise it is in an inbox */
-  invitationUrl: string | null;
 }
 
 interface TenantCreatedBody {
   tenant: Tenant;
   admin_user_id: Id;
   admin_email: string;
-  invitation_sent: boolean;
-  invitation_url: string | null;
+  /** always `queued`: the worker sends it; the admin's `link_email_status` says how it went */
+  invitation_status: string;
 }
 
 const asCreated = (body: TenantCreatedBody): TenantCreated => ({
@@ -1128,17 +1131,15 @@ const asCreated = (body: TenantCreatedBody): TenantCreated => ({
   userId: body.admin_user_id,
   slug: body.tenant.slug,
   adminEmail: body.admin_email,
-  invitationSent: body.invitation_sent,
-  invitationUrl: body.invitation_url,
 });
 
 /**
  * Create a clinic.
  *
  * No password, anywhere: the first administrator is written without one and
- * emailed a link to choose their own. `invitationSent` is the part worth
- * reading — a clinic whose admin never got the link exists but cannot be
- * signed into, and the console should say so rather than report success.
+ * emailed a link to choose their own — by the worker, after this answers. A
+ * clinic whose admin never got the link exists but cannot be signed into, so
+ * the console watches the admin's `link_email_status` until it says.
  */
 export const createTenant = async (input: {
   name: string; slug: string; city: string; clinical_type: ClinicalTypeKey;
@@ -1181,6 +1182,10 @@ export const tenantUsers = (tenantId: Id) =>
 /** What one clinic has asked the desk for, newest first. */
 export const tenantSupportRequests = (tenantId: Id) =>
   get<SupportRequest[]>(`/v1/platform/tenants/${tenantId}/support-requests`);
+
+/** Email the desk about a failed or stuck request again. Only a `retryable` one; anything else is a 409. */
+export const retrySupportRequest = (tenantId: Id, requestId: Id) =>
+  post<SupportRequest>(`/v1/platform/tenants/${tenantId}/support-requests/${requestId}/retry`);
 
 /** Who referred this clinic (if anyone), and its own referral programme. */
 export const tenantReferrals = (tenantId: Id) =>
@@ -1343,6 +1348,8 @@ export interface Job {
   id: Id;
   /** the registered task name, e.g. `pms.support.deliver` */
   name: string;
+  /** what the job is, in words — "Password reset email", "Spreadsheet import" */
+  label: string;
   status: JobStatus;
   /** Celery's own state — the buckets above fold some of them together */
   state: string;
@@ -1351,6 +1358,8 @@ export interface Job {
   /** the call as the worker was handed it, already rendered by Celery */
   args: string;
   kwargs: string;
+  /** the call, labelled — clinics and accounts by name where they were found */
+  arguments: { label: string; value: string }[];
   /** ISO-8601, UTC — a job belongs to no clinic, so it has no local clock */
   received_at: string | null;
   started_at: string | null;
@@ -1400,6 +1409,8 @@ export interface JobsPage {
   summary: JobSummary;
   workers: JobWorker[];
   task_names: string[];
+  /** each task name in words, for the dropdown */
+  task_labels: Record<string, string>;
   worker_names: string[];
   items: Job[];
   total: number;

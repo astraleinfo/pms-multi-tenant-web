@@ -7,7 +7,7 @@ import { qk } from "./keys";
 import { useSession } from "@/lib/store/session";
 import { defaultConfig } from "@/lib/data/repository";
 import type {
-  FieldDefinition, Id, Patient, ServiceKind, ServicePrice, Tenant, TenantConfig, User,
+  FieldDefinition, Id, Patient, ServiceKind, ServicePrice, SupportRequest, Tenant, TenantConfig, User,
 } from "@/lib/types";
 
 /* ==========================================================================
@@ -707,6 +707,17 @@ export function usePlatformTenantUsers(tenantId: Id | null) {
     enabled: platformSession.signedIn && !!tenantId,
   });
   return { ...query, data: useResolved<User[]>(query, EMPTY) };
+}
+
+/** What one clinic has asked the desk for, newest first. */
+export function usePlatformSupportRequests(tenantId: Id | null) {
+  const { platformSession } = useSession();
+  const query = useQuery({
+    queryKey: qk.platformSupportRequests(tenantId ?? ""),
+    queryFn: () => api.tenantSupportRequests(tenantId!),
+    enabled: platformSession.signedIn && !!tenantId,
+  });
+  return { ...query, data: useResolved<SupportRequest[]>(query, EMPTY) };
 }
 
 /* ---- composition ----------------------------------------------------------- */

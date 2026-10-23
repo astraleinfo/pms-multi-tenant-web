@@ -22,7 +22,7 @@ export function JobDetailModal({ job: opened, onClose }: { job: api.Job | null; 
       open={!!opened}
       onClose={onClose}
       width="xl"
-      title={job ? shortTaskName(job.name) : "Job"}
+      title={job ? job.label || shortTaskName(job.name) : "Job"}
       subtitle={job ? <span className="font-mono">{job.name}</span> : undefined}
     >
       {!job && isPending ? (
@@ -58,7 +58,16 @@ export function JobDetailModal({ job: opened, onClose }: { job: api.Job | null; 
             {job.eta && <KV label="Scheduled for" value={momentOf(job.eta)} mono />}
           </dl>
 
-          <Block label="Arguments" value={[job.args, job.kwargs].filter(Boolean).join("\n")} />
+          {job.arguments.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-micro font-semibold uppercase tracking-[0.09em] text-ink-3">Arguments</p>
+              <dl className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
+                {job.arguments.map((a) => <KV key={a.label} label={a.label} value={a.value} />)}
+              </dl>
+            </div>
+          )}
+          {/* exactly what went to the worker, for when the labels are not enough */}
+          <Block label="As sent" value={[job.args, job.kwargs].filter((p) => p && p !== "{}" && p !== "()").join("\n")} />
           {job.result && <Block label="Result" value={job.result} />}
           {job.exception && <Block label="Error" value={job.exception} tone="critical" />}
           {job.traceback && <Block label="Traceback" value={job.traceback} tone="critical" />}

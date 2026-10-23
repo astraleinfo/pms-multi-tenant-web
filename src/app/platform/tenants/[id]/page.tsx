@@ -6,12 +6,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as api from "@/lib/api";
 import { qk } from "@/lib/query/keys";
 import {
-  usePlatformSnapshot, usePlatformSubscription, usePlatformTenantUsers,
+  usePlatformSnapshot, usePlatformSubscription, usePlatformSupportRequests, usePlatformTenantUsers,
 } from "@/lib/query/hooks";
 import { CLINICAL_TYPES, MODULES } from "@/lib/data/catalog";
 import { currency, formatDate, pluralise, titleCase } from "@/lib/format";
 import { consoleRows, type ConsoleRow } from "@/lib/platform/subscriptions";
-import type { ClinicalTypeKey, User } from "@/lib/types";
+import type { ClinicalTypeKey, SupportRequest, User } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Card, CardBody, CardHeader, CardFooter, Legend } from "@/components/ui/card";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -32,7 +32,7 @@ import { ImportButton } from "@/components/platform/import-dialog";
 import { AccountBadge } from "@/components/platform/account-badge";
 import { SubscriptionPlan } from "@/components/domain/subscription";
 import {
-  IconChevronLeft, IconInfo, IconLayers, IconReceipt, IconShield, IconUsers
+  IconChevronLeft, IconInfo, IconLayers, IconMail, IconReceipt, IconRefresh, IconShield, IconUsers
 } from "@/components/ui/icons";
 
 /* ==========================================================================
@@ -48,7 +48,7 @@ export default function TenantPage(props: PageProps<"/platform/tenants/[id]">) {
   return <ConsolePage><TenantConsole id={id} /></ConsolePage>;
 }
 
-type Tab = "details" | "bills" | "staff";
+type Tab = "details" | "bills" | "staff" | "support";
 
 function TenantConsole({ id }: { id: string }) {
   const { data: snapshot, isPending } = usePlatformSnapshot();
@@ -113,12 +113,14 @@ function TenantConsole({ id }: { id: string }) {
           { value: "details", label: "Details", icon: <IconInfo size={15} /> },
           { value: "bills", label: "Subscription", icon: <IconReceipt size={15} /> },
           { value: "staff", label: "Staff", icon: <IconUsers size={15} />, count: row.users },
+          { value: "support", label: "Support requests", icon: <IconMail size={15} /> },
         ]}
       />
 
       {tab === "details" && <DetailsTab row={row} />}
       {tab === "bills" && <BillsTab tenantId={row.tenant.id} />}
       {tab === "staff" && <StaffTab row={row} />}
+      {tab === "support" && <SupportTab tenantId={row.tenant.id} />}
     </>
   );
 }
@@ -369,6 +371,52 @@ const ROLE_LABEL: Record<User["role"], string> = {
   lab_tech: "Lab",
 };
 
+/**
+ * Another link for an account that has not chosen its password — most often the
+ * clinic's first admin, whose original email went astray. Issuing it spends
+ * every earlier link, so only the email this sends still opens anything.
+ */
+function ResendInvitation({ tenantId, user }: { tenantId: string; user: User }) {
+  const { resendTenantInvitation, notify } = useApp();
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = React.useState(false);
+
+  const resend = async () => {
+    setBusy(true);
+    try {
+      await resendTenantInvitation(tenantId, user.id);
+      notify({ tone: "ok", title: "Sending again", body: `A fresh link is on its way to ${user.email}.` });
+    } catch (error) {
+      notify({
+        tone: "critical",
+        title: "Could not resend",
+        body: error instanceof Error ? error.message : "Try again.",
+      });
+    } finally {
+      /* the row says queued now, then sent or failed once the worker has run */
+      void queryClient.invalidateQueries({ queryKey: qk.platformUsers(tenantId) });
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Button variant="ghost" size="sm" onClick={() => { void resend(); }} disabled={busy}>
+      {busy ? "Sending…" : "Resend invitation"}
+    </Button>
+  );
+}
+
+/** Where an invited account's email is, when it is worth a word: on its way, or not sent. */
+function LinkEmailNote({ user }: { user: User }) {
+  if (user.status !== "invited" || !user.link_email_status || user.link_email_status === "sent") return null;
+  const problem = user.link_email_status === "failed" || user.link_email_retryable;
+  return (
+    <span className={cn("ml-2 text-caption", problem ? "text-critical-text" : "text-ink-3")}>
+      {user.link_email_status === "failed" ? "email failed" : problem ? "email not sent" : "email sending"}
+    </span>
+  );
+}
+
 function StaffTab({ row }: { row: ConsoleRow }) {
   const { data: users, isPending } = usePlatformTenantUsers(row.tenant.id);
 
@@ -396,6 +444,7 @@ function StaffTab({ row }: { row: ConsoleRow }) {
                 <TH>Role</TH>
                 <TH>Account</TH>
                 <TH>Last sign-in</TH>
+                <TH />
               </TR>
             </THead>
             <TBody>
@@ -427,11 +476,15 @@ function StaffTab({ row }: { row: ConsoleRow }) {
                         {pluralise(u.failed_attempts, "failed attempt")}
                       </span>
                     )}
+                    <LinkEmailNote user={u} />
                   </TD>
                   <TD>
                     <span className={cn("tnum font-mono text-label", u.last_sign_in ? "text-ink-2" : "text-ink-3")}>
                       {u.last_sign_in ? formatDate(u.last_sign_in) : "never"}
                     </span>
+                  </TD>
+                  <TD className="text-right">
+                    {u.status === "invited" && <ResendInvitation tenantId={row.tenant.id} user={u} />}
                   </TD>
                 </TR>
               ))}
@@ -450,6 +503,118 @@ function StaffTab({ row }: { row: ConsoleRow }) {
         </p>
       </div>
     </Card>
+  );
+}
+
+
+const SUPPORT_KIND: Record<SupportRequest["kind"], string> = {
+  walkthrough: "Walkthrough",
+  general: "General help",
+};
+
+/**
+ * What this clinic has asked the desk for. The email to the desk is tried once;
+ * nothing re-sends it on a timer. A send that failed, or one still queued well
+ * after its hand-off, is `retryable` — the desk sends it again from here.
+ */
+function SupportTab({ tenantId }: { tenantId: string }) {
+  const { data: requests, isPending } = usePlatformSupportRequests(tenantId);
+
+  if (isPending) return <PageLoader label="Reading this clinic's requests…" minHeight="30vh" />;
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader
+        icon={<IconMail size={15} />} tone="accent" title="Support requests"
+        hint="Walkthroughs and help this clinic has asked for, newest first, and whether the desk was emailed."
+      />
+      {requests.length === 0 ? (
+        <EmptyState
+          icon={<IconMail size={20} />}
+          title="No requests"
+          body="This clinic has not asked the desk for anything."
+          compact
+        />
+      ) : (
+        <TableWrap>
+          <Table>
+            <THead>
+              <TR>
+                <TH>Asked</TH>
+                <TH>Request</TH>
+                <TH>Desk emailed</TH>
+                <TH />
+              </TR>
+            </THead>
+            <TBody>
+              {requests.map((r) => (
+                <TR key={r.id}>
+                  <TD>
+                    <p className="tnum whitespace-nowrap font-mono text-label text-ink-2">{r.created_at ?? "—"}</p>
+                    <p className="truncate text-caption text-ink-3">{r.requested_by}</p>
+                  </TD>
+                  <TD>
+                    <p className="font-medium text-ink">{SUPPORT_KIND[r.kind]}</p>
+                    {r.message && <p className="line-clamp-2 text-caption text-ink-2">{r.message}</p>}
+                  </TD>
+                  <TD>
+                    <SupportStatus request={r} />
+                  </TD>
+                  <TD className="text-right">
+                    {r.retryable && <RetrySupportRequest tenantId={tenantId} request={r} />}
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </TableWrap>
+      )}
+    </Card>
+  );
+}
+
+function SupportStatus({ request: r }: { request: SupportRequest }) {
+  if (r.status === "sent") {
+    return (
+      <>
+        <Badge tone="ok" size="sm" dot>Sent</Badge>
+        {r.sent_at && <span className="ml-2 tnum font-mono text-caption text-ink-3">{r.sent_at}</span>}
+      </>
+    );
+  }
+  if (r.status === "failed") return <Badge tone="critical" size="sm" dot>Failed</Badge>;
+  /* queued: either on its way, or its hand-off was lost and it waits for Retry */
+  return r.retryable
+    ? <Badge tone="warn" size="sm" dot>Stuck</Badge>
+    : <Badge tone="neutral" size="sm" dot>Sending</Badge>;
+}
+
+function RetrySupportRequest({ tenantId, request }: { tenantId: string; request: SupportRequest }) {
+  const { notify } = useApp();
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = React.useState(false);
+
+  const retry = async () => {
+    setBusy(true);
+    try {
+      await api.retrySupportRequest(tenantId, request.id);
+      notify({ tone: "ok", title: "Sending again", body: "The desk email is back with the worker." });
+    } catch (error) {
+      notify({
+        tone: "critical",
+        title: "Could not retry",
+        body: error instanceof Error ? error.message : "Try again.",
+      });
+    } finally {
+      void queryClient.invalidateQueries({ queryKey: qk.platformSupportRequests(tenantId) });
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Button variant="ghost" size="sm" onClick={() => { void retry(); }} disabled={busy}>
+      <IconRefresh size={14} /> {busy ? "Retrying…" : "Retry"}
+    </Button>
   );
 }
 

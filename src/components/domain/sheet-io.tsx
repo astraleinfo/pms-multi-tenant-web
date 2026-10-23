@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import {
-  IconAlert, IconDownload, IconExport, IconImport, IconSheet,
+  IconAlert, IconDownload, IconExport, IconImport, IconRefresh, IconSheet,
 } from "@/components/ui/icons";
 
 /* ==========================================================================
@@ -27,6 +27,10 @@ import {
    owns the job, not the dialog, so closing the dialog does not lose it — the
    outcome arrives as a toast, and a failure's rows are there when the dialog
    is opened again.
+
+   Nothing re-sends a job on its own. One whose hand-off to the worker was lost
+   stays queued; the server marks it `retryable` after a short wait, and the
+   dialog offers Retry in place of the spinner.
 
    The export is in the import's own layout, so an export is also a sample of
    what the clinic already has.
@@ -48,6 +52,8 @@ export interface SheetSource {
   start: (file: File) => Promise<api.ImportJob>;
   get: (id: string) => Promise<api.ImportJob>;
   latest: () => Promise<api.ImportJob | null>;
+  /** hand a stuck job to the worker again */
+  retry: (id: string) => Promise<api.ImportJob>;
   /** the success toast, from a finished job's report */
   summary: (report: api.ImportJobReport) => { title: string; body?: string };
 }
@@ -149,9 +155,10 @@ function ImportDialog({ source, open, job, onStarted, onClose }: {
   const { tenant } = useTenant();
   const [file, setFile] = React.useState<File | null>(null);
   const [problem, setProblem] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState<"template" | "upload" | null>(null);
+  const [busy, setBusy] = React.useState<"template" | "upload" | "retry" | null>(null);
   const active = running(job);
   const failed = job?.status === "failed" ? job : null;
+  const stuck = active && job!.retryable;
 
   const template = async () => {
     setBusy("template");
@@ -173,6 +180,17 @@ function ImportDialog({ source, open, job, onStarted, onClose }: {
     } catch (error) {
       /* only what is plainly not the sheet is refused here — empty, too big, the wrong columns */
       setProblem(errorText(error));
+    }
+    setBusy(null);
+  };
+
+  const retry = async () => {
+    if (!job) return;
+    setBusy("retry");
+    try {
+      onStarted(await source.retry(job.id));
+    } catch (error) {
+      notify({ tone: "warn", title: "Could not retry the import", body: errorText(error) });
     }
     setBusy(null);
   };
@@ -211,7 +229,18 @@ function ImportDialog({ source, open, job, onStarted, onClose }: {
           </Button>
         </div>
 
-        {active ? (
+        {stuck ? (
+          <div className="flex flex-col gap-3 rounded-[var(--r-lg)] border border-warn-border bg-warn-soft px-4 py-4 sm:flex-row sm:items-center">
+            <IconAlert size={18} className="shrink-0 text-warn-text" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-body font-medium text-ink">{job!.filename} hasn&apos;t started</p>
+              <p className="text-caption text-ink-2">It is taking longer than expected. Nothing has been imported yet.</p>
+            </div>
+            <Button variant="secondary" size="sm" onClick={() => { void retry(); }} disabled={!!busy} className="shrink-0">
+              <IconRefresh size={14} /> {busy === "retry" ? "Retrying…" : "Retry"}
+            </Button>
+          </div>
+        ) : active ? (
           <div className="flex items-center gap-3 rounded-[var(--r-lg)] border border-line bg-surface-2 px-4 py-5">
             <Spinner size={18} />
             <div className="min-w-0">

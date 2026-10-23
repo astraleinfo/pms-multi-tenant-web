@@ -100,15 +100,22 @@ const teamColumns = userCol.columns([
               after {pluralise(row.original.failed_attempts, "wrong password")}
             </span>
           )}
+          {/* the worker sends the invitation; say so when it did not go */}
+          {getValue() === "invited" && row.original.link_email_retryable && (
+            <span className="whitespace-nowrap text-micro text-critical-text">
+              {row.original.link_email_status === "failed" ? "Email failed — resend it" : "Email not sent — resend it"}
+            </span>
+          )}
         </span>
       ),
   }),
   userCol.display({
     id: "actions",
     header: "",
-    meta: { align: "right", width: 200 },
+    meta: { align: "right", width: 232 },
     cell: ({ row }) => (
       <div className="flex items-center justify-end gap-1">
+        <ResendControl user={row.original} />
         <PasswordControl user={row.original} />
         <EditControl user={row.original} />
         <LockControl user={row.original} />
@@ -129,10 +136,11 @@ const STAFF_SHEET: SheetSource = {
   start: api.startStaffImport,
   get: api.getStaffImport,
   latest: api.latestStaffImport,
+  retry: api.retryStaffImport,
   summary: ({ created, invited }) => ({
     title: `${pluralise(created, "person", "people")} added`,
     body: invited === created
-      ? "Each has been emailed an invitation to choose their password."
+      ? "Each one's invitation to choose a password is on its way."
       : `${invited} of ${created} invitations sent — resend the rest from their rows.`,
   }),
 };
@@ -285,6 +293,57 @@ function PasswordControl({ user }: { user: User }) {
       )}
       <SetPasswordModal user={user} open={open} onClose={() => setOpen(false)} />
     </>
+  );
+}
+
+/**
+ * Another invitation email for someone who has not chosen a password yet. A
+ * new link spends every earlier one, so the email this sends is the only one
+ * that still opens anything. Locked rows are left alone: the API refuses them
+ * until they are unlocked, and the Unlock button is already on that row.
+ */
+function ResendControl({ user }: { user: User }) {
+  const { resendInvitation, notify } = useApp();
+  const [busy, setBusy] = React.useState(false);
+  if (user.status !== "invited") return null;
+
+  const resend = async () => {
+    setBusy(true);
+    try {
+      await resendInvitation(user.id);
+      notify({
+        tone: "ok",
+        title: "Sending again",
+        body: `A fresh link is on its way to ${user.email}. Once it arrives, earlier links stop working.`,
+      });
+    } catch (error) {
+      notify({
+        tone: "critical",
+        title: "Could not resend",
+        body: error instanceof Error ? error.message : "Try again.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /* An email that failed, or never went, keeps its words — it is what the row
+     is waiting for. Otherwise resending is a repair, and an icon is enough. */
+  if (user.link_email_retryable) {
+    return (
+      <Button size="sm" variant="secondary" onClick={() => { void resend(); }} disabled={busy}
+              aria-label={`Resend ${user.name}'s invitation`}>
+        <IconMail size={14} /> {busy ? "Sending…" : "Resend"}
+      </Button>
+    );
+  }
+  return (
+    <Tooltip label={`Resend ${user.name}'s invitation`} side="top">
+      <Button size="icon-sm" variant="ghost" onClick={() => { void resend(); }} disabled={busy}
+              aria-label={`Resend ${user.name}'s invitation`}>
+        <IconMail size={14} />
+      </Button>
+    </Tooltip>
   );
 }
 
@@ -1552,7 +1611,7 @@ function EditPersonModal({ user, open, onClose }: { user: User; open: boolean; o
         body: changes.role
           ? `Now ${ROLE_LABEL[saved.role].toLowerCase()} — it applies from their next click.`
           : changes.email && saved.status === "invited"
-            ? `A fresh invitation has gone to ${saved.email}.`
+            ? `A fresh invitation is on its way to ${saved.email}.`
             : undefined,
       });
       onClose();

@@ -97,6 +97,8 @@ export type SupportRequestKind = "walkthrough" | "general";
 /** Whether the desk has been emailed. The request stands either way. */
 export type SupportRequestStatus = "queued" | "sent" | "failed";
 
+export type LinkEmailStatus = "queued" | "sent" | "failed";
+
 export interface SupportRequest {
   id: Id;
   tenant_id: Id;
@@ -108,6 +110,8 @@ export interface SupportRequest {
   /** `YYYY-MM-DD HH:mm`, clinic time */
   created_at: string | null;
   sent_at: string | null;
+  /** failed, or still queued well after its hand-off — the desk can send it again */
+  retryable: boolean;
 }
 
 export interface Tenant {
@@ -273,6 +277,10 @@ export interface User {
   must_change_password?: boolean;
   /** No password at all: their "set your password" link is still outstanding. */
   invitation_pending?: boolean;
+  /** The newest invitation or reset email, which the worker sends: null when none was asked for. */
+  link_email_status?: LinkEmailStatus | null;
+  /** failed, or still queued well after its hand-off — offer Resend */
+  link_email_retryable?: boolean;
 }
 
 export interface Patient {

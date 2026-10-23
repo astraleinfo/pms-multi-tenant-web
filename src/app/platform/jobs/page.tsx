@@ -109,7 +109,7 @@ function JobsConsole() {
       <PageHeader
         eyebrow="Operations"
         title="Background jobs"
-        description="Everything Celery runs away from a request: the support desk's email, the sweep that re-queues whatever the broker lost, and anything a clinic's action hands off. The figures are taken over the monitor's window rather than over all time, because that is as far back as it can see."
+        description="Everything Celery runs away from a request: the support desk's email, spreadsheet imports, and anything a clinic's action hands off. Nothing is re-queued on a timer — a stuck job shows Retry where it was started. The figures are taken over the monitor's window rather than over all time, because that is as far back as it can see."
         meta={
           <>
             <span className="text-label text-ink-2">
@@ -234,7 +234,7 @@ function jobColumns(onOpen: (job: api.Job) => void) {
       cell: ({ row }) => (
         <div className="min-w-0">
           <p className="truncate font-medium text-ink" title={row.original.name}>
-            {shortTaskName(row.original.name)}
+            {row.original.label || shortTaskName(row.original.name)}
           </p>
           <p className="tnum truncate font-mono text-micro text-ink-3" title={row.original.id}>
             {row.original.id.slice(0, 8)}
@@ -320,10 +320,18 @@ function Arguments({ job }: { job: api.Job }) {
       </p>
     );
   }
-  const call = [job.args, job.kwargs].filter((p) => p && p !== "{}" && p !== "()").join(" ");
-  return call
-    ? <p className="truncate font-mono text-micro text-ink-3" title={call}>{call}</p>
-    : <span className="text-micro text-ink-3">no arguments</span>;
+  if (!job.arguments.length) return <span className="text-micro text-ink-3">no arguments</span>;
+  const call = job.arguments.map((a) => `${a.label}: ${a.value}`).join(" · ");
+  return (
+    <p className="truncate text-micro text-ink-2" title={call}>
+      {job.arguments.map((a, i) => (
+        <React.Fragment key={a.label}>
+          {i > 0 && <span className="text-ink-3"> · </span>}
+          <span className="text-ink-3">{a.label}</span> {a.value}
+        </React.Fragment>
+      ))}
+    </p>
+  );
 }
 
 function JobsTab({
@@ -372,7 +380,7 @@ function JobsTab({
           <Select value={filters.task} onChange={(e) => onFilter("task", e.target.value)}>
             <option value="">Any task</option>
             {(data?.task_names ?? []).map((name) => (
-              <option key={name} value={name}>{name}</option>
+              <option key={name} value={name}>{data?.task_labels[name] ?? name}</option>
             ))}
           </Select>
         </Field>

@@ -25,6 +25,7 @@ const INVENTORY: SheetSource = {
   start: api.startInventoryImport,
   get: api.getInventoryImport,
   latest: api.latestInventoryImport,
+  retry: api.retryInventoryImport,
   summary: ({ created, updated, stocked }) => {
     const parts = [created && `${created} added`, updated && `${updated} updated`].filter(Boolean);
     return {

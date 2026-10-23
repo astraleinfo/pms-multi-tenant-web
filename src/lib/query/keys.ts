@@ -16,6 +16,7 @@ export const qk = {
   platformRoot: () => ["platform"] as const,
   platform: () => ["platform", "snapshot"] as const,
   platformUsers: (t: Id) => ["platform", "tenants", t, "users"] as const,
+  platformSupportRequests: (t: Id) => ["platform", "tenants", t, "support-requests"] as const,
   platformSettings: () => ["platform", "settings"] as const,
   publicSettings: () => ["public", "settings"] as const,
   /** Every clinic's subscription bills, and one clinic's. */
