@@ -6,7 +6,7 @@ import { cn } from "@/lib/cn";
 import { DataList, DataRow } from "@/components/ui/data-list";
 import { Legend } from "@/components/ui/card";
 import { ChipMulti, Checkbox, Field, Input, Select, Textarea } from "@/components/ui/field";
-import { formatDate } from "@/lib/format";
+import { formatDate, today } from "@/lib/format";
 
 export type FormValues = Record<string, unknown>;
 
@@ -90,7 +90,7 @@ export function DynamicField({
       ) : def.type === "select" ? (
         <Select id={id} value={String(value ?? "")} invalid={!!error} onChange={(e) => onChange(e.target.value)}>
           <option value="">Not recorded</option>
-          {(def.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+          {(def.options ?? []).map((o) => <option key={o} value={o}>{optionLabel(o)}</option>)}
         </Select>
       ) : def.type === "multiselect" ? (
         <ChipMulti
@@ -108,6 +108,8 @@ export function DynamicField({
           invalid={!!error}
           type={def.type === "number" ? "number" : def.type === "date" ? "date" : def.type === "email" ? "email" : def.type === "phone" ? "tel" : "text"}
           value={value == null ? "" : String(value)}
+          /* nobody is born tomorrow */
+          max={def.type === "date" && def.field_key === "dob" ? today() : undefined}
           onChange={(e) => onChange(def.type === "number" ? (e.target.value === "" ? "" : Number(e.target.value)) : e.target.value)}
         />
       )}
@@ -132,8 +134,12 @@ function renderValue(def: FieldDefinition, v: unknown) {
   if (typeof v === "boolean") return v ? "Yes" : "No";
   if (Array.isArray(v)) return v.join(", ");
   if (def.type === "date") return formatDate(String(v), "long");
+  if (def.type === "select") return optionLabel(String(v));
   return String(v);
 }
+
+/** Options are stored as written (`female`); they are shown as a word starts a label. */
+const optionLabel = (o: string) => o.charAt(0).toUpperCase() + o.slice(1);
 
 /**
  * The resolved schema, reduced to the rows that have something in them.

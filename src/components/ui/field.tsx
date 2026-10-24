@@ -3,7 +3,7 @@
 import * as React from "react";
 import { cn } from "@/lib/cn";
 import { IconCheck, IconChevronDown, IconEye, IconEyeOff, IconSearch } from "./icons";
-import { controlBase } from "./control";
+import { controlBase, controlInvalid } from "./control";
 import { DateInput, DateTimeInput, Panel, TimeInput } from "./picker";
 
 export { Select } from "./picker";
@@ -71,7 +71,7 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
     return (
       <input
         ref={ref}
-        className={cn(controlBase, "h-9.5 px-3 text-body", invalid && "border-critical focus:border-critical", className)}
+        className={cn(controlBase, "h-9.5 px-3 text-body", invalid && controlInvalid, className)}
         {...rest}
       />
     );
@@ -93,7 +93,7 @@ export const PasswordInput = React.forwardRef<
       <input
         ref={ref}
         type={shown ? "text" : "password"}
-        className={cn(controlBase, "h-9.5 pl-3 pr-10 text-body", invalid && "border-critical focus:border-critical", className)}
+        className={cn(controlBase, "h-9.5 pl-3 pr-10 text-body", invalid && controlInvalid, className)}
         {...rest}
       />
       <button
@@ -200,7 +200,7 @@ export function NumberInput({
       }}
       className={cn(
         controlBase, "h-9.5 px-3 text-body",
-        invalid && "border-critical focus:border-critical", className,
+        invalid && controlInvalid, className,
       )}
       {...rest}
     />
@@ -341,7 +341,7 @@ export function Combobox({
         }}
         className={cn(
           controlBase, "h-9.5 pl-3 pr-9 text-body",
-          invalid && "border-critical focus:border-critical",
+          invalid && controlInvalid,
         )}
       />
       <IconChevronDown

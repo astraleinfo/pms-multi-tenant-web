@@ -1279,9 +1279,10 @@ function AddFieldModal({ open, onClose }: { open: boolean; onClose: () => void }
    and the server's guard reads the same table — so getting it wrong here is
    visible immediately and enforced regardless.
 
-   Two kinds of account come out of this form. With a password the person is
-   active and can sign in now; without one the row is `invited`, and the API
-   refuses their sign-in until a password exists.
+   Nobody here chooses the new person's password. The account is created
+   `invited`, the API emails them a link, and the password they set there is
+   one only they have ever known. Until then their sign-in is refused; a lost
+   email is what "Resend" on their row is for.
    ========================================================================== */
 
 const ROLE_CHOICES: Array<{ value: Role; description: string }> = [
@@ -1310,16 +1311,13 @@ function AddPersonModal({ open, onClose }: { open: boolean; onClose: () => void 
   const [email, setEmail] = React.useState("");
   const [role, setRole] = React.useState<Role>("doctor");
   const [speciality, setSpeciality] = React.useState("");
-  const [withPassword, setWithPassword] = React.useState(true);
-  const [password, setPassword] = React.useState("");
   const [touched, setTouched] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [refused, setRefused] = React.useState<string | null>(null);
-  const [created, setCreated] = React.useState<{ user: User; password: string | null } | null>(null);
+  const [created, setCreated] = React.useState<User | null>(null);
 
   const reset = React.useCallback(() => {
     setName(""); setEmail(""); setRole("doctor"); setSpeciality("");
-    setWithPassword(true); setPassword(suggestPassword());
     setTouched(false); setBusy(false); setRefused(null); setCreated(null);
   }, []);
 
@@ -1329,8 +1327,7 @@ function AddPersonModal({ open, onClose }: { open: boolean; onClose: () => void 
   const address = email.trim().toLowerCase();
   const duplicate = staff.some((u) => u.email.toLowerCase() === address);
   const shapeOk = EMAIL_SHAPE.test(address);
-  const valid =
-    trimmedName.length >= 2 && shapeOk && !duplicate && (!withPassword || password.length >= 12);
+  const valid = trimmedName.length >= 2 && shapeOk && !duplicate;
 
   const nameError = touched && trimmedName.length < 2 ? "At least two characters." : null;
   const emailError = touched
@@ -1340,10 +1337,6 @@ function AddPersonModal({ open, onClose }: { open: boolean; onClose: () => void 
         ? "Someone here already signs in with that."
         : null
     : null;
-  /* the API will not accept a shorter one, so the form does not pretend it might */
-  const passwordError =
-    touched && withPassword && password.length < 12 ? "At least twelve characters." : null;
-
   const submit = async () => {
     setTouched(true);
     setRefused(null);
@@ -1359,16 +1352,9 @@ function AddPersonModal({ open, onClose }: { open: boolean; onClose: () => void 
         email: address,
         role,
         speciality: role === "doctor" ? speciality.trim() || undefined : undefined,
-        password: withPassword ? password : undefined,
       });
-      setCreated({ user, password: withPassword ? password : null });
-      notify({
-        tone: "ok",
-        title: `${user.name} added`,
-        body: withPassword
-          ? `They can sign in as ${ROLE_LABEL[role].toLowerCase()} now.`
-          : "The account is invited — it cannot sign in until it has a password.",
-      });
+      setCreated(user);
+      notify({ tone: "ok", title: "Invitation sent", body: `${user.name} will get an email at ${user.email}.` });
     } catch (error) {
       setRefused(error instanceof Error ? error.message : "That account was not created.");
     } finally {
@@ -1377,18 +1363,14 @@ function AddPersonModal({ open, onClose }: { open: boolean; onClose: () => void 
   };
 
   if (created) {
-    const person = created.user;
+    const person = created;
     return (
       <Modal
         open={open}
         onClose={onClose}
         width="sm"
-        title={`${person.name} is on the team`}
-        subtitle={
-          created.password
-            ? "Hand these over out of band — the password is shown once and never stored where it can be read back."
-            : "The account exists, but nothing can sign in with it yet."
-        }
+        title={`${person.name} is invited`}
+        subtitle="They choose their own password from the email, and can sign in once they have."
         footer={
           <>
             <Button variant="ghost" onClick={reset}>Add another</Button>
@@ -1415,32 +1397,14 @@ function AddPersonModal({ open, onClose }: { open: boolean; onClose: () => void 
             </Badge>
           </div>
 
-          {created.password ? (
-            <div className="rounded-[var(--r)] border border-accent-border bg-accent-soft p-3.5">
-              <p className="text-micro font-semibold uppercase tracking-[0.09em] text-accent-text">
-                Sign-in credentials
-              </p>
-              <dl className="mt-2 space-y-1.5">
-                <div className="flex items-baseline justify-between gap-3">
-                  <dt className="text-caption text-ink-2">Email</dt>
-                  <dd className="tnum break-all font-mono text-label text-ink">{person.email}</dd>
-                </div>
-                <div className="flex items-baseline justify-between gap-3">
-                  <dt className="text-caption text-ink-2">Password</dt>
-                  <dd className="tnum font-mono text-label text-ink">{created.password}</dd>
-                </div>
-              </dl>
-            </div>
-          ) : (
-            <div className="flex gap-2.5 rounded-[var(--r)] border border-line bg-surface-2 p-3.5">
-              <IconMail size={16} className="mt-px shrink-0 text-ink-3" />
-              <p className="text-label leading-relaxed text-ink-2">
-                Invited accounts are refused at sign-in until they have a password. There is no invitation
-                email yet, so give <span className="text-ink">{person.name}</span> a password from this form
-                instead when they are ready to start.
-              </p>
-            </div>
-          )}
+          <div className="flex gap-2.5 rounded-[var(--r)] border border-accent-border bg-accent-soft p-3.5">
+            <IconMail size={16} className="mt-px shrink-0 text-accent-text" />
+            <p className="text-label leading-relaxed text-ink-2">
+              The invitation is on its way to <span className="break-all font-medium text-ink">{person.email}</span>.
+              If it does not arrive, use <span className="font-medium text-ink">Resend</span> on their row in the
+              team list.
+            </p>
+          </div>
 
           <p className="text-caption leading-relaxed text-ink-3">
             They see only what {ROLE_LABEL[person.role].toLowerCase()} may see, on this clinic&apos;s address and
@@ -1461,7 +1425,7 @@ function AddPersonModal({ open, onClose }: { open: boolean; onClose: () => void 
         <>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <Button variant="primary" onClick={() => { void submit(); }} disabled={busy}>
-            <IconSpark size={15} /> {busy ? "Adding…" : "Add person"}
+            <IconMail size={15} /> {busy ? "Sending…" : "Send invitation"}
           </Button>
         </>
       }
@@ -1506,31 +1470,11 @@ function AddPersonModal({ open, onClose }: { open: boolean; onClose: () => void 
           </Field>
         )}
 
-        <div className="rounded-[var(--r)] border border-line bg-surface-2 p-3.5">
-          <Checkbox
-            checked={withPassword}
-            onChange={setWithPassword}
-            label="Give them a password now"
-            description="Off creates an invited account instead — it exists in the list, but sign-in is refused until it has one."
-          />
-          {withPassword && (
-            <Field className="mt-3.5" label="Temporary password" required error={passwordError}
-                   help={!passwordError ? "Shown once, on the next screen. Hand it over out of band." : undefined}>
-              <div className="flex items-stretch gap-2">
-                <Input
-                  type="text"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="tnum font-mono"
-                  invalid={!!passwordError}
-                />
-                <Button variant="secondary" onClick={() => setPassword(suggestPassword())}
-                        aria-label="Suggest another password">
-                  <IconRefresh size={15} /> Suggest
-                </Button>
-              </div>
-            </Field>
-          )}
+        <div className="flex gap-2.5 rounded-[var(--r)] border border-line bg-surface-2 p-3.5">
+          <IconMail size={16} className="mt-px shrink-0 text-ink-3" />
+          <p className="text-label leading-relaxed text-ink-2">
+            We&rsquo;ll email them an invitation to set their own password. Nobody else ever sees it.
+          </p>
         </div>
 
         <p className="flex gap-2.5 border-t border-line-soft pt-3 text-caption leading-relaxed text-ink-3">

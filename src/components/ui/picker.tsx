@@ -4,7 +4,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/cn";
 import { TODAY, formatDate, formatTime12, today as clinicToday } from "@/lib/format";
-import { controlBase } from "./control";
+import { controlBase, controlInvalid } from "./control";
 import { IconCalendar, IconCheck, IconChevronDown, IconChevronLeft, IconChevronRight, IconClock } from "./icons";
 
 /* ==========================================================================
@@ -152,7 +152,7 @@ function triggerClass(open: boolean, invalid: boolean | undefined, className?: s
     controlBase,
     "flex h-9.5 items-center pl-3 pr-9 text-left text-body",
     open && "border-focus shadow-[var(--focus-ring)]",
-    invalid && "border-critical focus:border-critical",
+    invalid && controlInvalid,
     className,
   );
 }
@@ -475,7 +475,29 @@ const shiftMonths = (iso: string, n: number) => {
 };
 const validIso = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
 
-/** A date, "YYYY-MM-DD", picked from a month. */
+/** "1985-03-14" ⇄ "14/03/1985" — the way a date is said aloud at the desk. */
+const toTyped = (iso: string) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "");
+const fromTyped = (text: string) => {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text);
+  if (!m) return "";
+  const [d, mo, y] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  if (y < 1000 || mo < 1 || mo > 12 || d < 1 || d > utc(y, mo, 0).getUTCDate()) return "";
+  return `${m[3]}-${m[2]}-${m[1]}`;
+};
+/** Digits in, slashes put in for you: "1403" → "14/03". */
+const maskTyped = (raw: string) => {
+  const n = raw.replace(/\D/g, "").slice(0, 8);
+  return [n.slice(0, 2), n.slice(2, 4), n.slice(4)].filter(Boolean).join("/");
+};
+
+/**
+ * A date, "YYYY-MM-DD".
+ *
+ * Typed, first: somebody reading a birth date off a form types `14031985` and
+ * is done — the slashes put themselves in. The calendar is there for when the
+ * date is easier seen than said, and its month and year are each one click
+ * from any other, so 1985 is no further away than next week.
+ */
 export function DateInput({
   value, defaultValue, onChange, min, max, disabled, id, name, placeholder, required, invalid, className,
   "aria-label": ariaLabel, "aria-describedby": ariaDescribedby,
@@ -487,29 +509,75 @@ export function DateInput({
   const outside = (d: string) => (!!lo && d < lo) || (!!hi && d > hi);
   const clamp = (d: string) => (lo && d < lo ? lo : hi && d > hi ? hi : d);
 
-  const button = React.useRef<HTMLButtonElement>(null);
+  const field = React.useRef<HTMLInputElement>(null);
+  const anchor = React.useRef<HTMLDivElement>(null);
   const grid = React.useRef<HTMLDivElement>(null);
+  const yearList = React.useRef<HTMLDivElement>(null);
   const [open, setOpen] = React.useState(false);
   /* the day the keyboard is on; the month shown is always the one it is in */
   const [focus, setFocus] = React.useState(() => date || today());
+  const [level, setLevel] = React.useState<"days" | "months" | "years">("days");
   const close = React.useCallback(() => setOpen(false), []);
 
-  const show = () => { setFocus(clamp(date || today())); setOpen(true); };
+  /* what is in the box — the value as typed, until it is a date */
+  const [text, setText] = React.useState(() => toTyped(date));
+  const [unreadable, setUnreadable] = React.useState(false);
+  /* a value set from outside rewrites the box; one this field just sent out
+     came from the box, and leaves what was typed alone */
+  const sent = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (sent.current === date) { sent.current = null; return; }
+    setText(toTyped(date));
+    setUnreadable(false);
+  }, [date]);
+
+  const emit = (d: string) => {
+    if (d !== date) { sent.current = d; setCurrent(d); onChange?.(changeEvent<HTMLInputElement>(d, name)); }
+  };
+  const show = () => { setFocus(clamp(date || fromTyped(text) || today())); setLevel("days"); setOpen(true); };
   const pick = (d: string) => {
     if (outside(d)) return;
     setOpen(false);
-    button.current?.focus();
-    if (d !== date) { setCurrent(d); onChange?.(changeEvent<HTMLInputElement>(d, name)); }
+    field.current?.focus();
+    setText(toTyped(d));
+    setUnreadable(false);
+    emit(d);
   };
 
-  /* the focused day takes real focus, so the keyboard and the screen reader agree */
+  /* a whole date typed is a date chosen; anything less waits for the blur */
+  const onType = (raw: string) => {
+    const next = maskTyped(raw);
+    setText(next);
+    setUnreadable(false);
+    const iso = fromTyped(next);
+    if (iso && !outside(iso)) { emit(iso); if (open) setFocus(iso); }
+  };
+  const settle = () => {
+    if (!text) { setUnreadable(false); emit(""); return; }
+    const iso = fromTyped(text);
+    if (iso && !outside(iso)) { setUnreadable(false); emit(iso); return; }
+    /* not a date, or not one this field takes: say so, and stop holding on to
+       the old date — the form must not save one the box no longer shows */
+    setUnreadable(true);
+    emit("");
+  };
+
+  /* the focused day takes real focus once the calendar is in use, so the
+     keyboard and the screen reader agree */
+  const [driving, setDriving] = React.useState(false);
   React.useEffect(() => {
-    if (!open) return;
+    if (!open) { setDriving(false); return; }
     const frame = requestAnimationFrame(() => {
-      grid.current?.querySelector<HTMLButtonElement>(`[data-day="${focus}"]`)?.focus({ preventScroll: true });
+      if (level === "years") {
+        const at = yearList.current?.querySelector<HTMLButtonElement>(`[data-year="${focus.slice(0, 4)}"]`);
+        at?.scrollIntoView({ block: "center" });
+        if (driving) at?.focus({ preventScroll: true });
+      } else if (level === "days" && driving) {
+        grid.current?.querySelector<HTMLButtonElement>(`[data-day="${focus}"]`)?.focus({ preventScroll: true });
+      }
     });
     return () => cancelAnimationFrame(frame);
-  }, [open, focus]);
+  }, [open, focus, level, driving]);
 
   const view = parse(focus);
   const year = view.getUTCFullYear(), month = view.getUTCMonth();
@@ -517,6 +585,21 @@ export function DateInput({
   const start = shiftDays(isoOf(first), -((first.getUTCDay() + 6) % 7));
   const days = Array.from({ length: 42 }, (_, i) => shiftDays(start, i));
   const now = today();
+
+  /* a century back and a few decades on, unless the field says otherwise */
+  const thisYear = Number(now.slice(0, 4));
+  const firstYear = Math.min(lo ? Number(lo.slice(0, 4)) : thisYear - 120, year);
+  const lastYear = Math.max(hi ? Number(hi.slice(0, 4)) : thisYear + 30, year);
+  const years = Array.from({ length: lastYear - firstYear + 1 }, (_, i) => firstYear + i);
+
+  /* the same day in another month — the 31st lands on the last day there is */
+  const moveTo = (y: number, m: number) =>
+    clamp(isoOf(utc(y, m, Math.min(view.getUTCDate(), utc(y, m + 1, 0).getUTCDate()))));
+  const monthOutside = (m: number) =>
+    (!!lo && isoOf(utc(year, m + 1, 0)) < lo) || (!!hi && isoOf(utc(year, m, 1)) > hi);
+  const lastMonth = shiftMonths(focus, -1), nextMonth = shiftMonths(focus, 1);
+  const canBack = !lo || isoOf(utc(year, month, 0)) >= lo;
+  const canOn = !hi || isoOf(utc(year, month + 1, 1)) <= hi;
 
   const onGridKey = (e: React.KeyboardEvent) => {
     const moves: Record<string, () => string> = {
@@ -535,103 +618,189 @@ export function DateInput({
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (open && e.key === "Escape") {
+      /* this calendar, not the dialog it may be sitting in — and a month or
+         year list steps back to the days before anything closes */
       e.preventDefault();
       e.stopPropagation();
+      if (level !== "days") { setLevel("days"); return; }
       setOpen(false);
-      button.current?.focus();
+      field.current?.focus();
     }
   };
 
-  const navButton = "grid h-7 w-7 place-items-center rounded-[var(--r-sm)] text-ink-2 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-focus";
+  const navButton = cn(
+    "grid h-8 w-8 shrink-0 place-items-center rounded-[var(--r-sm)] text-ink-2 transition-colors",
+    "hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-focus",
+    "disabled:cursor-not-allowed disabled:text-disabled-ink disabled:hover:bg-transparent",
+  );
+  const headButton = (on: boolean) => cn(
+    "inline-flex h-8 items-center gap-1 rounded-[var(--r-sm)] px-2.5 text-label font-semibold transition-colors",
+    "focus-visible:outline-2 focus-visible:outline-focus",
+    on ? "bg-accent-soft text-accent-text" : "text-ink hover:bg-hover",
+  );
+  const cell = (selected: boolean) => cn(
+    "rounded-[var(--r-sm)] text-label tabular-nums transition-colors duration-100",
+    "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus",
+    "disabled:cursor-not-allowed disabled:text-disabled-ink disabled:hover:bg-transparent",
+    selected ? "bg-accent font-medium text-accent-ink hover:bg-accent-hover" : "text-ink hover:bg-hover",
+  );
 
   return (
-    <div className="relative" onKeyDown={onKeyDown}>
-      <button
-        ref={button}
+    <div ref={anchor} className="relative" onKeyDown={onKeyDown}>
+      <input
+        ref={field}
         id={id}
-        type="button"
-        aria-haspopup="dialog"
-        aria-expanded={open}
+        name={name}
+        value={text}
+        disabled={disabled}
+        required={required}
+        inputMode="numeric"
+        autoComplete="off"
+        placeholder={placeholder ?? "DD/MM/YYYY"}
         aria-label={ariaLabel}
         aria-describedby={ariaDescribedby}
-        disabled={disabled}
-        onClick={() => (open ? setOpen(false) : show())}
-        onKeyDown={(e) => { if (!open && e.key === "ArrowDown") { e.preventDefault(); show(); } }}
-        className={triggerClass(open, invalid, className)}
-      >
-        <span className={cn("min-w-0 flex-1 truncate tabular-nums", !date && "text-ink-placeholder")}>
-          {date ? formatDate(date, "long") : placeholder ?? "Pick a date"}
-        </span>
-      </button>
-      <IconCalendar
-        size={16}
-        aria-hidden
-        className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-3"
+        aria-invalid={invalid || unreadable || undefined}
+        title={unreadable ? "Type the date as DD/MM/YYYY" : undefined}
+        onChange={(e) => onType(e.target.value)}
+        onBlur={settle}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" && !open) { e.preventDefault(); setDriving(true); show(); }
+          if (e.key === "Enter") settle();
+        }}
+        className={cn(triggerClass(open, invalid || unreadable, className), "pr-10 tabular-nums")}
       />
+      <button
+        type="button"
+        tabIndex={-1}
+        disabled={disabled}
+        aria-label={open ? "Close calendar" : "Open calendar"}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => (open ? setOpen(false) : show())}
+        className={cn(
+          "absolute right-1 top-1/2 grid h-7.5 w-7.5 -translate-y-1/2 place-items-center rounded-[var(--r-sm)]",
+          "transition-colors hover:bg-hover hover:text-ink disabled:pointer-events-none",
+          open ? "text-accent" : "text-ink-3",
+        )}
+      >
+        <IconCalendar size={16} />
+      </button>
 
       <Panel
         open={open}
-        anchor={button}
+        anchor={anchor}
         onClose={close}
         role="dialog"
         aria-label="Choose a date"
         className="w-[18.5rem] p-3"
+        onKeyDownCapture={() => setDriving(true)}
       >
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <button type="button" className={navButton} aria-label="Previous month"
-                  onClick={() => setFocus(shiftMonths(focus, -1))}>
+        <div className="mb-2 flex items-center gap-1">
+          <button type="button" className={navButton} aria-label="Previous month" disabled={!canBack}
+                  onClick={() => { setLevel("days"); setFocus(clamp(lastMonth)); }}>
             <IconChevronLeft size={16} />
           </button>
-          <p className="text-label font-semibold text-ink" aria-live="polite">
-            {MONTHS[month]} <span className="tabular-nums">{year}</span>
-          </p>
-          <button type="button" className={navButton} aria-label="Next month"
-                  onClick={() => setFocus(shiftMonths(focus, 1))}>
+          <div className="flex flex-1 items-center justify-center gap-0.5" aria-live="polite">
+            <button type="button" aria-expanded={level === "months"} aria-label={`${MONTHS[month]}, choose a month`}
+                    className={headButton(level === "months")}
+                    onClick={() => setLevel(level === "months" ? "days" : "months")}>
+              {MONTHS[month]}
+              <IconChevronDown size={14} className={cn("transition-transform", level === "months" && "rotate-180")} />
+            </button>
+            <button type="button" aria-expanded={level === "years"} aria-label={`${year}, choose a year`}
+                    className={cn(headButton(level === "years"), "tabular-nums")}
+                    onClick={() => setLevel(level === "years" ? "days" : "years")}>
+              {year}
+              <IconChevronDown size={14} className={cn("transition-transform", level === "years" && "rotate-180")} />
+            </button>
+          </div>
+          <button type="button" className={navButton} aria-label="Next month" disabled={!canOn}
+                  onClick={() => { setLevel("days"); setFocus(clamp(nextMonth)); }}>
             <IconChevronRight size={16} />
           </button>
         </div>
 
-        <div className="grid grid-cols-7 pb-1" aria-hidden>
-          {WEEKDAYS.map((d) => (
-            <span key={d} className="py-1 text-center text-micro font-medium text-ink-3">{d}</span>
-          ))}
-        </div>
+        {/* one height for all three, so the panel does not jump as you switch */}
+        <div className="h-[15.75rem]">
+          {level === "years" && (
+            <div ref={yearList} className="grid h-full grid-cols-4 content-start gap-1 overflow-y-auto pr-0.5">
+              {years.map((y) => (
+                <button
+                  key={y}
+                  type="button"
+                  data-year={y}
+                  disabled={(!!lo && y < Number(lo.slice(0, 4))) || (!!hi && y > Number(hi.slice(0, 4)))}
+                  onClick={() => { setFocus(moveTo(y, month)); setLevel("days"); }}
+                  className={cn(cell(y === year), "h-9")}
+                >
+                  {y}
+                </button>
+              ))}
+            </div>
+          )}
 
-        <div ref={grid} role="grid" className="grid grid-cols-7 gap-0.5" onKeyDown={onGridKey}>
-          {days.map((d) => {
-            const inMonth = parse(d).getUTCMonth() === month;
-            const isSelected = d === date;
-            const isToday = d === now;
-            const off = outside(d);
-            return (
-              <button
-                key={d}
-                type="button"
-                role="gridcell"
-                data-day={d}
-                tabIndex={d === focus ? 0 : -1}
-                aria-selected={isSelected}
-                aria-current={isToday ? "date" : undefined}
-                aria-label={formatDate(d, "day") + " " + d.slice(0, 4)}
-                disabled={off}
-                onClick={() => pick(d)}
-                className={cn(
-                  "relative grid h-9 place-items-center rounded-[var(--r-sm)] text-label tabular-nums transition-colors duration-100",
-                  "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus",
-                  isSelected
-                    ? "bg-accent font-medium text-accent-ink hover:bg-accent-hover"
-                    : cn("hover:bg-hover", inMonth ? "text-ink" : "text-ink-placeholder"),
-                  isToday && !isSelected && "font-semibold text-accent-text",
-                  off && "cursor-not-allowed text-disabled-ink line-through decoration-1 hover:bg-transparent",
-                )}
-              >
-                {parse(d).getUTCDate()}
-                {isToday && !isSelected && (
-                  <span aria-hidden className="absolute bottom-1 h-1 w-1 rounded-full bg-accent" />
-                )}
-              </button>
-            );
-          })}
+          {level === "months" && (
+            <div className="grid h-full grid-cols-3 grid-rows-4 gap-1">
+              {MONTHS.map((label, m) => (
+                <button
+                  key={label}
+                  type="button"
+                  disabled={monthOutside(m)}
+                  onClick={() => { setFocus(moveTo(year, m)); setLevel("days"); }}
+                  className={cell(m === month)}
+                >
+                  {label.slice(0, 3)}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {level === "days" && (
+            <>
+              <div className="grid grid-cols-7 pb-1" aria-hidden>
+                {WEEKDAYS.map((d) => (
+                  <span key={d} className="py-1 text-center text-micro font-medium text-ink-3">{d}</span>
+                ))}
+              </div>
+
+              <div ref={grid} role="grid" className="grid grid-cols-7 gap-0.5" onKeyDown={onGridKey}>
+                {days.map((d) => {
+                  const inMonth = parse(d).getUTCMonth() === month;
+                  const isSelected = d === date;
+                  const isToday = d === now;
+                  const off = outside(d);
+                  return (
+                    <button
+                      key={d}
+                      type="button"
+                      role="gridcell"
+                      data-day={d}
+                      tabIndex={d === focus ? 0 : -1}
+                      aria-selected={isSelected}
+                      aria-current={isToday ? "date" : undefined}
+                      aria-label={formatDate(d, "day") + " " + d.slice(0, 4)}
+                      disabled={off}
+                      onClick={() => pick(d)}
+                      className={cn(
+                        "relative grid h-9 place-items-center rounded-[var(--r-sm)] text-label tabular-nums transition-colors duration-100",
+                        "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus",
+                        isSelected
+                          ? "bg-accent font-medium text-accent-ink hover:bg-accent-hover"
+                          : cn("hover:bg-hover", inMonth ? "text-ink" : "text-ink-placeholder"),
+                        isToday && !isSelected && "font-semibold text-accent-text",
+                        off && "cursor-not-allowed text-disabled-ink hover:bg-transparent",
+                      )}
+                    >
+                      {parse(d).getUTCDate()}
+                      {isToday && !isSelected && (
+                        <span aria-hidden className="absolute bottom-1 h-1 w-1 rounded-full bg-accent" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
 
         <div className="mt-2.5 flex items-center justify-between border-t border-line-soft pt-2.5">
@@ -648,9 +817,10 @@ export function DateInput({
               type="button"
               onClick={() => {
                 setOpen(false);
-                button.current?.focus();
-                setCurrent("");
-                onChange?.(changeEvent<HTMLInputElement>("", name));
+                field.current?.focus();
+                setText("");
+                setUnreadable(false);
+                emit("");
               }}
               className="rounded-[var(--r-sm)] px-2 py-1 text-label text-ink-2 transition-colors hover:bg-hover hover:text-ink"
             >

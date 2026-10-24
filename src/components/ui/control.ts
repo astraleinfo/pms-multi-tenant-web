@@ -11,3 +11,11 @@ export const controlBase =
   "focus:outline-none focus:border-focus focus:shadow-[var(--focus-ring)] " +
   "disabled:bg-disabled-surface disabled:text-disabled-ink disabled:border-disabled-border " +
   "disabled:cursor-not-allowed";
+
+/**
+ * A field that is wrong. `cn` joins rather than merges, so a plain
+ * `border-critical` beside `controlBase`'s `border-line-strong` loses to
+ * whichever the stylesheet happens to emit later — and it emits the grey
+ * later. Important, so the red is the one that shows.
+ */
+export const controlInvalid = "border-critical! focus:border-critical!";
