@@ -728,6 +728,18 @@ export const createPrescription = async (
   })),
 })).id;
 
+/** The prescription as it should now read, until the visit is billed. An
+ *  empty list takes it away; the server answers null then. */
+export const replacePrescription = async (
+  encounterId: Id,
+  items: Array<Omit<PrescriptionItem, "id" | "prescription_id" | "dispensed_qty" | "status">>,
+) => (await put_<Prescription | null>(`/v1/encounters/${encounterId}/prescription`, {
+  items: items.map((i) => ({
+    medicine: i.medicine, strength: i.strength, dosage: i.dosage, frequency: i.frequency,
+    duration: i.duration, instructions: i.instructions, qty: i.qty, item_id: i.item_id,
+  })),
+}))?.id ?? null;
+
 export const dispense = async (
   prescriptionId: Id, lines: Array<{ itemId: Id; qty: number; batch_no: string }>,
 ) => (await post<Prescription>(`/v1/pharmacy/prescriptions/${prescriptionId}/dispense`, {
@@ -949,6 +961,23 @@ export interface CounterPayment {
   remaining: number;
   invoices: Invoice[];
 }
+
+export interface FinalSettlement {
+  /** the one bill raised now, if anything was left to bill */
+  invoice: Invoice | null;
+  /** counter bills that were issued and never paid, now on that one */
+  folded: string[];
+  paid: number;
+  remaining: number;
+}
+
+/** The patient is leaving: one bill for everything still owing — unpaid
+ *  counter bills folded in, what a window was paid left out — and, unless
+ *  they pay later, one payment for it. */
+export const finalSettlement = (
+  patientId: Id,
+  input: { collect: boolean; method: Payment["method"]; reference?: string },
+) => post<FinalSettlement>(`/v1/billing/patients/${patientId}/final-settlement`, input);
 
 /** One amount, handed over at one counter. Oldest invoice first. */
 export const takeCounterPayment = (

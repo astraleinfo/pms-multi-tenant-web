@@ -99,12 +99,18 @@ interface AppContextValue {
   setQueueStatus: (id: Id, status: QueueEntry["status"]) => void;
 
   createEncounter: (e: NewEncounter, sign: boolean) => Promise<Id>;
-  updateEncounter: (id: Id, patch: Partial<Encounter> & { sign?: boolean }) => void;
+  /** Awaited: an edit refused because the visit was billed meanwhile keeps the form open. */
+  updateEncounter: (id: Id, patch: Partial<Encounter> & { sign?: boolean }) => Promise<Id>;
 
   createPrescription: (
     encounterId: Id, patientId: Id, doctorId: Id,
     items: Array<Omit<PrescriptionItem, "id" | "prescription_id" | "dispensed_qty" | "status">>,
   ) => void;
+  /** Rewrites the visit's prescription while it is still unbilled. */
+  replacePrescription: (
+    encounterId: Id,
+    items: Array<Omit<PrescriptionItem, "id" | "prescription_id" | "dispensed_qty" | "status">>,
+  ) => Promise<Id | null>;
   /** Resolves once the hand-over is written, so the window can ask for money
       knowing the charge exists. */
   dispense: (
@@ -162,6 +168,10 @@ interface AppContextValue {
       reference?: string;
     },
   ) => Promise<api.CounterPayment>;
+  finalSettlement: (
+    patientId: Id,
+    input: { collect: boolean; method: Payment["method"]; reference?: string },
+  ) => Promise<api.FinalSettlement>;
 
   /* Typed off the API call itself, so the two can never drift apart. */
   createTenant: (input: Parameters<typeof api.createTenant>[0]) => Promise<api.TenantCreated>;
@@ -253,6 +263,8 @@ function AppFacade({ children }: { children: React.ReactNode }) {
   const mUpdateEncounter = useTenantMutation((a: { id: Id; patch: Partial<Encounter> & { sign?: boolean } }) => api.updateEncounter(a.id, a.patch));
   const mCreatePrescription = useTenantMutation((a: { encounterId: Id; patientId: Id; doctorId: Id; items: Array<Omit<PrescriptionItem, "id" | "prescription_id" | "dispensed_qty" | "status">> }) =>
     api.createPrescription(a.encounterId, a.patientId, a.doctorId, a.items));
+  const mReplacePrescription = useTenantMutation((a: { encounterId: Id; items: Array<Omit<PrescriptionItem, "id" | "prescription_id" | "dispensed_qty" | "status">> }) =>
+    api.replacePrescription(a.encounterId, a.items));
   const mDispense = useTenantMutation((a: { id: Id; lines: Array<{ itemId: Id; qty: number; batch_no: string }> }) =>
     api.dispense(a.id, a.lines));
   const mCreateLabOrder = useTenantMutation((a: { encounterId: Id; patientId: Id; orderedBy: Id; tests: Array<{ code: string; name: string; panel: string; note?: string }> }) =>
@@ -284,6 +296,9 @@ function AppFacade({ children }: { children: React.ReactNode }) {
   const mCounterInvoice = useTenantMutation(
     (a: { patientId: Id; input: Parameters<typeof api.raiseCounterInvoice>[1] }) =>
       api.raiseCounterInvoice(a.patientId, a.input));
+  const mFinalSettlement = useTenantMutation(
+    (a: { patientId: Id; input: Parameters<typeof api.finalSettlement>[1] }) =>
+      api.finalSettlement(a.patientId, a.input));
   const mCounterPayment = useTenantMutation(
     (a: { patientId: Id; input: Parameters<typeof api.takeCounterPayment>[1] }) =>
       api.takeCounterPayment(a.patientId, a.input));
@@ -401,10 +416,11 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     setQueueStatus: (id, status) => mQueueStatus.mutate({ id, status }),
 
     createEncounter: (e, sign) => mCreateEncounter.mutateAsync({ e, sign }),
-    updateEncounter: (id, patch) => mUpdateEncounter.mutate({ id, patch }),
+    updateEncounter: (id, patch) => mUpdateEncounter.mutateAsync({ id, patch }),
 
     createPrescription: (encounterId, patientId, doctorId, items) =>
       mCreatePrescription.mutate({ encounterId, patientId, doctorId, items }),
+    replacePrescription: (encounterId, items) => mReplacePrescription.mutateAsync({ encounterId, items }),
     dispense: (id, lines) => mDispense.mutateAsync({ id, lines }),
 
     createLabOrder: (encounterId, patientId, orderedBy, tests) =>
@@ -434,6 +450,7 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     voidInvoice: (id) => mVoidInvoice.mutate(id),
     raiseCounterInvoice: (patientId, input) => mCounterInvoice.mutateAsync({ patientId, input }),
     takeCounterPayment: (patientId, input) => mCounterPayment.mutateAsync({ patientId, input }),
+    finalSettlement: (patientId, input) => mFinalSettlement.mutateAsync({ patientId, input }),
 
     createTenant: (input) => mCreateTenant.mutateAsync(input),
     setTenantStatus: (id, status) => mTenantStatus.mutate({ id, status }),

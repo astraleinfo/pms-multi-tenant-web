@@ -71,6 +71,24 @@ export const findEncounter = (db: Db, t: Id, id: Id) =>
 export const findInvoice = (db: Db, t: Id, id: Id) =>
   db.invoices.find((i) => i.id === id && i.tenant_id === t);
 
+/** Every invoice that bills this visit: raised from it, or with a line that
+ *  settles its consultation, one of its prescription lines or one of its lab
+ *  orders — the billing desk raises invoices without naming the encounter. */
+export function visitInvoices(db: Db, t: Id, encounterId: Id): Invoice[] {
+  const refs = new Set<Id>([encounterId]);
+  for (const rx of selectPrescriptions(db, t)) {
+    if (rx.encounter_id === encounterId) for (const it of rx.items) refs.add(it.id);
+  }
+  for (const lab of selectLabOrders(db, t)) if (lab.encounter_id === encounterId) refs.add(lab.id);
+  return selectInvoices(db, t).filter((i) =>
+    i.encounter_id === encounterId || i.line_items.some((l) => !!l.ref_id && refs.has(l.ref_id)));
+}
+
+/** The paid invoice that closed this visit to editing, if any. Mirrors the
+ *  server's lock: until the bill is settled the visit stays open. */
+export const billedOn = (db: Db, t: Id, encounterId: Id): Invoice | null =>
+  visitInvoices(db, t, encounterId).find((i) => i.status === "paid") ?? null;
+
 export const userName = (db: Db, id: Id | null | undefined) =>
   db.users.find((u) => u.id === id)?.name ?? "—";
 

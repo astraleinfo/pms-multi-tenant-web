@@ -113,6 +113,7 @@ export function InvoiceComposer({
           qty: line.qty,
           unit_price: line.unit_price,
           tax_pct: line.tax_pct,
+          ref_id: line.ref_id ?? null,
         },
         { suggested: true, unpriced: !line.priced },
       ),
@@ -126,7 +127,8 @@ export function InvoiceComposer({
 
   const [lines, setLines] = React.useState<Draft[]>([]);
   const [issue, setIssue] = React.useState(true);
-  const [split, setSplit] = React.useState(true);
+  /* one visit, one bill — splitting by counter is the exception */
+  const [split, setSplit] = React.useState(false);
   const [department, setDepartment] = React.useState<BillingDepartment>("clinic");
   const [chosen, setChosen] = React.useState<string | null>(patientId);
   const [saving, setSaving] = React.useState(false);

@@ -695,6 +695,8 @@ export interface SuggestedLine {
   unit_price: number;
   tax_pct: number;
   priced: boolean;
+  /** what the line bills for; sent back on the invoice, it marks it billed */
+  ref_id?: Id | null;
 }
 
 /**

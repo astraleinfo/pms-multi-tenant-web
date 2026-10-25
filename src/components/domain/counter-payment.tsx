@@ -62,9 +62,11 @@ export function CounterPayment({
     if (!patientId || !entry) return;
     setBusy(true);
     try {
-      /* Anything not yet on an invoice goes on one first — a payment lands
-         against invoices, so there has to be one to land against. */
-      if (entry.unbilled.length > 0) {
+      /* Paying now: anything not yet on an invoice goes on one first — a
+         payment lands against invoices, so there has to be one to land
+         against. Paying later raises nothing here: the charge waits for the
+         patient's one final bill at the desk. */
+      if (taking && entry.unbilled.length > 0) {
         await raiseCounterInvoice(patientId, { department, issue: true });
       }
       if (taking) {
@@ -84,8 +86,8 @@ export function CounterPayment({
       } else {
         notify({
           tone: "ok",
-          title: "Added to the bill",
-          body: `${currency(due)} is owing at the ${DEPARTMENT_LABEL[department].toLowerCase()} counter. It can be paid in Billing.`,
+          title: "Added to the final bill",
+          body: `${currency(due)} goes on the patient's bill at the desk, with the consultation.`,
         });
       }
       onSettled?.();
@@ -262,7 +264,7 @@ export function FinalSettlement({
   patientId: Id | null;
   onSettled?: () => void;
 }) {
-  const { raiseCounterInvoice, takeCounterPayment, notify } = useApp();
+  const { finalSettlement, notify } = useApp();
   const { data: account, isPending } = usePatientAccount(open ? patientId : null);
 
   const [method, setMethod] = React.useState<Payment["method"]>("cash");
@@ -278,47 +280,28 @@ export function FinalSettlement({
   const done = entries.filter((entry) => entry.due <= 0.005 && entry.paid > 0.005);
   const total = Math.round(owing.reduce((sum, entry) => sum + entry.due, 0) * 100) / 100;
 
-  /* One counter at a time, in the order they are listed. Each is its own
-     invoice and its own payment, so stopping half way leaves the counters that
-     went through settled — which is the truth, the money changed hands. */
+  /* One bill, one payment. The server folds any counter bill nobody paid into
+     the new one and leaves out what a window already took. */
   const run = async (collect: boolean) => {
     if (!patientId || owing.length === 0) return;
     setBusy(true);
-    const settled: BillingDepartment[] = [];
     try {
-      for (const entry of owing) {
-        if (entry.unbilled.length > 0) {
-          await raiseCounterInvoice(patientId, { department: entry.department, issue: true });
-        }
-        if (collect) {
-          await takeCounterPayment(patientId, {
-            department: entry.department,
-            amount: entry.due,
-            method,
-            reference: reference.trim() || undefined,
-          });
-        }
-        settled.push(entry.department);
-      }
+      const result = await finalSettlement(patientId, {
+        collect, method, reference: reference.trim() || undefined,
+      });
+      const bill = result.invoice ? `Invoice ${result.invoice.number}` : "The bill";
       notify({
         tone: "ok",
         title: collect ? `${currency(total)} taken` : "Put on the bill",
-        body: collect
-          ? `Settled at the ${settled.map((d) => DEPARTMENT_LABEL[d].toLowerCase()).join(", ")} counter${settled.length > 1 ? "s" : ""}. Nothing left owing.`
-          : `${currency(total)} is invoiced and owing. It can be paid here whenever they come back.`,
+        body: [
+          collect ? `${bill} is paid. Nothing left owing.` : `${bill} is issued for ${currency(total)} and owing.`,
+          result.folded.length ? `It replaces ${result.folded.join(", ")}.` : null,
+        ].filter(Boolean).join(" "),
       });
       onSettled?.();
       onClose();
     } catch {
-      /* The refusal is already a toast. Say which counters did go through, so
-         nobody asks for the same money twice. */
-      if (settled.length > 0) {
-        notify({
-          tone: "warn",
-          title: "Only part of it went through",
-          body: `${settled.map((d) => DEPARTMENT_LABEL[d].toLowerCase()).join(", ")} settled. The rest is still owing.`,
-        });
-      }
+      /* The refusal is already a toast; nothing was half done. */
     } finally {
       setBusy(false);
     }
@@ -417,9 +400,9 @@ export function FinalSettlement({
             </div>
 
             <p className="text-caption leading-relaxed text-ink-3">
-              Each counter is invoiced and paid separately, so the ledger still shows
-              consultation, lab and pharmacy apart. To pay only some of it, or part of one
-              counter, use Collect on that counter instead.
+              Everything owing goes on one bill — consultation, lab and pharmacy together.
+              A counter bill that was never paid is replaced by it. To pay only part of it,
+              use Collect on that counter instead.
             </p>
           </>
         )}

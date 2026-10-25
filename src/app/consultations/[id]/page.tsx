@@ -5,8 +5,8 @@ import * as api from "@/lib/api";
 import { useApp, useTenant } from "@/lib/store/app-store";
 import { useClinicDb, useSchema, usePatient } from "@/lib/query/hooks";
 import {
-  findEncounter, invoiceTotals, selectInvoices, selectLabOrders,
-  selectPrescriptions, userName,
+  billedOn, findEncounter, invoiceTotals, selectLabOrders,
+  selectPrescriptions, userName, visitInvoices,
 } from "@/lib/data/repository";
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
 import { addDays, currency, formatDate, relativeDay } from "@/lib/format";
@@ -23,7 +23,8 @@ import { ClinicalExamPanel } from "@/components/domain/clinical-exam";
 import { DynamicSummary } from "@/components/domain/dynamic-form";
 import { InvoiceComposer } from "@/components/domain/invoice-composer";
 import {
-  IconArrowRight, IconCheck, IconChevronLeft, IconFlask, IconPrint, IconReceipt, IconRx, IconStethoscope, IconUser,
+  IconArrowRight, IconCheck, IconChevronLeft, IconEdit, IconFlask, IconLock, IconPrint, IconReceipt, IconRx,
+  IconStethoscope, IconUser,
 } from "@/components/ui/icons";
 
 export default function EncounterPage(props: PageProps<"/consultations/[id]">) {
@@ -50,7 +51,7 @@ export default function EncounterPage(props: PageProps<"/consultations/[id]">) {
 function EncounterView({ id }: { id: string }) {
   const { session, updateEncounter, notify } = useApp();
   const db = useClinicDb();
-  const { tenant } = useTenant();
+  const { tenant, role } = useTenant();
   const t = session.tenantId;
   const encounter = findEncounter(db, t, id)!;
   const { data: patient } = usePatient(encounter.patient_id);
@@ -74,7 +75,9 @@ function EncounterView({ id }: { id: string }) {
   const schema = allSchema.filter((f) => f.field_key !== "chief_complaint");
   const prescriptions = selectPrescriptions(db, t).filter((r) => r.encounter_id === id);
   const labs = selectLabOrders(db, t).filter((l) => l.encounter_id === id);
-  const invoices = selectInvoices(db, t).filter((i) => i.encounter_id === id);
+  const invoices = visitInvoices(db, t, id);
+  /* until the bill is paid, the visit is open to correction */
+  const billed = billedOn(db, t, id);
 
   return (
     <>
@@ -92,12 +95,22 @@ function EncounterView({ id }: { id: string }) {
             <Button variant="ghost" onClick={() => void printConsultation()} disabled={printing}>
               <IconPrint size={15} /> {printing ? "Preparing…" : "Print"}
             </Button>
-            {encounter.status === "draft" && (
+            {billed ? (
+              <Badge tone="neutral" size="sm">
+                <IconLock size={12} /> Paid on {billed.number} — locked
+              </Badge>
+            ) : (role === "doctor" || role === "tenant_admin") && (
+              <ButtonLink href={`/consultations/${encounter.id}/edit`} variant="secondary">
+                <IconEdit size={15} /> Edit
+              </ButtonLink>
+            )}
+            {encounter.status === "draft" && !billed && (
               <Button
                 variant="primary"
                 onClick={() => {
-                  updateEncounter(encounter.id, { status: "signed" });
-                  notify({ tone: "ok", title: "Encounter signed" });
+                  updateEncounter(encounter.id, { sign: true })
+                    .then(() => notify({ tone: "ok", title: "Encounter signed" }))
+                    .catch(() => { /* useTenantMutation has said why */ });
                 }}
               >
                 <IconCheck size={15} /> Sign encounter

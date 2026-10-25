@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useApp } from "@/lib/store/app-store";
 import { useClinicDb } from "@/lib/query/hooks";
-import { selectDoctors } from "@/lib/data/repository";
+import { selectAppointments, selectDoctors } from "@/lib/data/repository";
 import { formatTime12, formatDate } from "@/lib/format";
 import { addMinutes, appointmentTypes, formatLength, slotTimes } from "@/lib/appointment-types";
 import { Modal } from "@/components/ui/modal";
@@ -40,7 +40,9 @@ export function AppointmentModal({
 
   const [patient, setPatient] = React.useState<string | null>(defaultPatient ?? null);
   const [doctor, setDoctor] = React.useState(doctors[0]?.id ?? "");
-  const [date, setDate] = React.useState(defaultDate ?? today);
+  /* a calendar opened on a day already gone still books from today */
+  const startDay = defaultDate && defaultDate > today ? defaultDate : today;
+  const [date, setDate] = React.useState(startDay);
   const [time, setTime] = React.useState("09:00");
   const [reason, setReason] = React.useState("");
   const [via, setVia] = React.useState<"front_desk" | "online" | "phone">("front_desk");
@@ -50,7 +52,7 @@ export function AppointmentModal({
   React.useEffect(() => {
     if (!open) return;
     const doc = doctors[0]?.id ?? "";
-    const day = defaultDate ?? today;
+    const day = startDay;
     /* open on a slot the clinician can actually take, not a fixed 09:00 */
     const first = types[0];
     const times = slotTimes(config.day_start, config.day_end, first?.minutes ?? duration);
@@ -96,7 +98,15 @@ export function AppointmentModal({
   };
 
 
-  const invalid = !patient || !doctor || !time || !reason.trim() || conflicts.length > 0;
+  const past = !!date && date < today;
+  /* one appointment per patient per day — a second is the desk booking twice */
+  const sameDay = patient && date
+    ? selectAppointments(db, session.tenantId).find((a) =>
+        a.patient_id === patient && a.date === date
+        && (a.status === "scheduled" || a.status === "confirmed" || a.status === "checked_in"))
+    : undefined;
+
+  const invalid = !patient || !doctor || !time || !reason.trim() || conflicts.length > 0 || past || !!sameDay;
 
   return (
     <Modal
@@ -111,7 +121,7 @@ export function AppointmentModal({
           <Button
             variant="primary"
             /* a clash is not a validation message you can dismiss — the slot is gone */
-            disabled={conflicts.length > 0 || saving}
+            disabled={conflicts.length > 0 || past || !!sameDay || saving}
             onClick={async () => {
               setTouched(true);
               if (invalid || saving) return;
@@ -151,8 +161,8 @@ export function AppointmentModal({
               ))}
             </Select>
           </Field>
-          <Field label="Date" required>
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <Field label="Date" required error={past ? "Choose today or a later date." : null}>
+            <Input type="date" value={date} min={today} onChange={(e) => setDate(e.target.value)} />
           </Field>
         </div>
 
@@ -194,6 +204,17 @@ export function AppointmentModal({
           <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2}
                     placeholder="e.g. Six-month recall, upper left sensitivity" />
         </Field>
+
+        {sameDay && (
+          <div className="rounded-[var(--r)] border border-critical-border bg-critical-soft p-3">
+            <p className="flex items-center gap-2 text-label font-semibold text-critical-text">
+              <IconAlert size={15} /> This patient is already booked that day
+            </p>
+            <p className="mt-2 tnum font-mono text-caption text-critical-text">
+              {formatTime12(sameDay.time)}–{formatTime12(addMinutes(sameDay.time, sameDay.duration_min))} · {sameDay.reason}
+            </p>
+          </div>
+        )}
 
         {conflicts.length > 0 && (
           <div className="rounded-[var(--r)] border border-critical-border bg-critical-soft p-3">
