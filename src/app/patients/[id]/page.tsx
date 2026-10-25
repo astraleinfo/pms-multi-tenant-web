@@ -13,10 +13,11 @@ import {
 } from "@/lib/data/repository";
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
 import {
-  addDays, age, currency, daysBetween, formatDate, formatTime12, pluralise, relativeDay,
+  age, currency, daysBetween, formatDate, formatTime12, pluralise, relativeDay,
   today as todayIso,
 } from "@/lib/format";
 import { isBooked, type HistoryEvent, type Patient } from "@/lib/types";
+import { followUpPrefill, followUpState } from "@/lib/follow-up-booking";
 import { PageHeader, MetaItem } from "@/components/ui/page-header";
 import { Card, CardBody, CardFooter, CardHeader, Legend } from "@/components/ui/card";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -27,6 +28,7 @@ import { Tabs } from "@/components/ui/tabs";
 import { Tooltip } from "@/components/ui/info";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { PageLoader } from "@/components/ui/loader";
+import { normalizeMobile } from "@/lib/mobile";
 import { DynamicForm, summaryRows, validateAgainstSchema, type FormValues } from "@/components/domain/dynamic-form";
 import { ActionItem, ActionList, DataList, DataRow } from "@/components/ui/data-list";
 import { LabFlag, StatusPill, statusLabel } from "@/components/domain/status";
@@ -103,6 +105,7 @@ function PatientRecord({ patient, initial }: { patient: Patient; initial: Tab })
 
   const [tab, setTab] = React.useState<Tab>(initial);
   const [booking, setBooking] = React.useState(false);
+  const [bookingFollowUp, setBookingFollowUp] = React.useState(false);
   const [printing, setPrinting] = React.useState(false);
 
   /* Not the screen printed: a document drawn on the server from the record,
@@ -142,7 +145,7 @@ function PatientRecord({ patient, initial }: { patient: Patient; initial: Tab })
 
   /* values as the dynamic form sees them: top-level columns + clinical_ext */
   const formValues = React.useMemo<FormValues>(() => ({
-    full_name: patient.full_name, dob: patient.dob, sex: patient.sex, phone: patient.phone,
+    full_name: patient.full_name, dob: patient.dob, sex: patient.sex, phone: normalizeMobile(patient.phone),
     email: patient.email ?? "", address: patient.address ?? "", blood_group: patient.blood_group ?? "",
     allergies: patient.allergies ?? "", ...patient.clinical_ext,
   }), [patient]);
@@ -177,12 +180,23 @@ function PatientRecord({ patient, initial }: { patient: Patient; initial: Tab })
      anybody to do something. Lab and money follow the reader's own
      permissions: a role that cannot read the lab is not loaded its orders,
      and an empty pane would read as "nothing ordered". */
-  const followUp = React.useMemo(() => {
-    const last = encounters.find((e) => e.follow_up_days);
-    if (!last?.follow_up_days) return null;
-    const due = addDays(last.date, last.follow_up_days);
-    return due <= today ? due : null;
-  }, [encounters, today]);
+  /* The latest visit that asked for a follow-up. It is only outstanding once
+     due, and only while nothing is booked after that visit and the patient
+     has not been in since — the same test the visit's own page uses. */
+  const followUpVisit = encounters.find((e) => e.follow_up_days) ?? null;
+  const followUpNow = followUpVisit
+    ? followUpState({
+        patientId: id, encounterDate: followUpVisit.date, days: followUpVisit.follow_up_days, today,
+        appointments: appts, encounters,
+      })
+    : null;
+  const followUp = followUpNow?.kind === "open" && followUpNow.due <= today ? followUpNow.due : null;
+  const followUpBooking = followUpVisit
+    ? followUpPrefill({
+        patientId: id, doctorId: followUpVisit.doctor_id, encounterDate: followUpVisit.date,
+        days: followUpVisit.follow_up_days, today,
+      })
+    : null;
 
   const unsigned = encounters.filter((e) => e.status === "draft").length;
   const seesLab = can("lab:read");
@@ -204,11 +218,18 @@ function PatientRecord({ patient, initial }: { patient: Patient; initial: Tab })
     return [...by.values()].sort((a, b) => b.visits - a.visits || b.last.localeCompare(a.last));
   }, [encounters]);
 
-  const open: Array<{ key: string; icon: React.ReactNode; label: string; tab: Tab }> = [
-    ...(followUp && upcoming.length === 0
+  const open: Array<{
+    key: string; icon: React.ReactNode; label: string; tab: Tab;
+    /* instead of going to the tab, do the thing */
+    act?: { run: () => void; label: string };
+  }> = [
+    ...(followUp
       ? [{
           key: "follow-up", icon: <IconCalendar size={16} />, tab: "history" as Tab,
           label: `Follow-up was due ${formatDate(followUp)} — nothing booked`,
+          act: can("appointment:write") && followUpBooking
+            ? { run: () => setBookingFollowUp(true), label: "Book follow-up" }
+            : undefined,
         }]
       : []),
     ...(unsigned
@@ -682,13 +703,18 @@ function PatientRecord({ patient, initial }: { patient: Patient; initial: Tab })
                   <Button
                     variant="primary"
                     onClick={() => {
-                      const errs = validateAgainstSchema(schema, draft);
+                      /* a stored number the user has not touched is not judged */
+                      const phoneUntouched = draft.phone === formValues.phone;
+                      const errs = validateAgainstSchema(schema, draft, phoneUntouched ? new Set(["phone"]) : undefined);
                       setErrors(errs);
                       if (Object.keys(errs).length) {
-                        notify({ tone: "warn", title: "Required fields are blank" });
+                        notify({ tone: "warn", title: "Check the highlighted fields" });
                         return;
                       }
-                      updatePatient(patient.id, draft);
+                      /* a stored number that was only reformatted for display is
+                         not re-sent: the record changes only if the user edited it */
+                      const { phone, ...rest } = draft;
+                      updatePatient(patient.id, phoneUntouched ? rest : draft);
                       notify({ tone: "ok", title: "Record updated" });
                       setTab("overview");
                     }}
@@ -732,8 +758,10 @@ function PatientRecord({ patient, initial }: { patient: Patient; initial: Tab })
                     <ActionItem
                       key={o.key}
                       icon={o.icon}
-                      onClick={() => setTab(o.tab)}
-                      trailing={<IconChevronRight size={15} />}
+                      onClick={() => (o.act ? o.act.run() : setTab(o.tab))}
+                      trailing={o.act
+                        ? <span className="whitespace-nowrap text-caption font-medium text-accent-text">{o.act.label}</span>
+                        : <IconChevronRight size={15} />}
                       wrap
                     >
                       {o.label}
@@ -809,6 +837,17 @@ function PatientRecord({ patient, initial }: { patient: Patient; initial: Tab })
       </div>
 
       <AppointmentModal open={booking} onClose={() => setBooking(false)} defaultPatient={patient.id} />
+      {followUpBooking && (
+        <AppointmentModal
+          open={bookingFollowUp}
+          onClose={() => setBookingFollowUp(false)}
+          title="Book the follow-up"
+          defaultPatient={followUpBooking.patient}
+          defaultDoctor={followUpBooking.doctor}
+          defaultDate={followUpBooking.date}
+          defaultReason={followUpBooking.reason}
+        />
+      )}
     </>
   );
 }

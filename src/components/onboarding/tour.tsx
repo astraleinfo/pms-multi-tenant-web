@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 import { useApp, useTenant } from "@/lib/store/app-store";
 import { useSession } from "@/lib/store/session";
 import { buildTour, TOUR_VERSION, type TourStep } from "@/lib/tour";
+import { isOnRoute, maxAnchorAttempts, skipTarget, stepTarget, type TourDirection } from "@/lib/tour-nav";
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
 import { Button } from "@/components/ui/button";
 import { IconArrowRight, IconChevronLeft, IconX, IconSpark } from "@/components/ui/icons";
@@ -145,10 +146,18 @@ function TourStage({
   const pathname = usePathname();
   const cardRef = React.useRef<HTMLDivElement>(null);
   const [rect, setRect] = React.useState<Rect | null>(null);
-  const [ready, setReady] = React.useState(false);
+  /* Which step the anchor was found for — not a bare boolean, so the render
+     after a step change never shows the old step's measurements. */
+  const [readyIndex, setReadyIndex] = React.useState<number | null>(null);
+  const direction = React.useRef<TourDirection>("forward");
+  const pathnameRef = React.useRef(pathname);
+  pathnameRef.current = pathname;
 
   const step = steps[index];
   const last = index === steps.length - 1;
+  /* A step with no anchor stands in the middle of the screen and is ready the
+     moment it is current: there is nothing to look for, so nothing to wait on. */
+  const ready = !!step && (!step.anchor || readyIndex === index);
 
   /* Navigate first, if this step lives somewhere else. */
   React.useEffect(() => {
@@ -160,13 +169,13 @@ function TourStage({
   /* Find the anchor — waiting for it, because a route may still be rendering.
      If it never turns up, move on rather than pointing at nothing. */
   React.useEffect(() => {
-    setReady(false);
     setRect(null);
-    if (!step) return;
-    if (!step.anchor) { setReady(true); return; }
+    setReadyIndex(null);
+    if (!step || !step.anchor) return;
 
     let cancelled = false;
     let attempts = 0;
+    let wasOnRoute = isOnRoute(step.href, pathnameRef.current);
 
     const look = () => {
       if (cancelled) return;
@@ -176,14 +185,20 @@ function TourStage({
         setTimeout(() => {
           if (cancelled) return;
           measure(el);
-          setReady(true);
+          setReadyIndex(index);
         }, 260);
         return;
       }
-      if (++attempts > 24) {
-        /* 3 seconds of nothing: this step has no anchor on this screen. */
-        if (index < steps.length - 1) onIndex(index + 1);
-        else onClose("finished");
+      /* the page has only just arrived: give it a fresh allowance rather than what was left of the wait for it */
+      const onRoute = isOnRoute(step.href, pathnameRef.current);
+      if (onRoute && !wasOnRoute) attempts = 0;
+      wasOnRoute = onRoute;
+      if (++attempts > maxAnchorAttempts(onRoute)) {
+        /* This step has no anchor on this screen. Skip it the way we were
+           travelling, so Back does not bounce forward again. */
+        const to = skipTarget(index, steps.length, direction.current);
+        if (to === "finish") onClose("finished");
+        else onIndex(to);
         return;
       }
       setTimeout(look, 125);
@@ -211,11 +226,17 @@ function TourStage({
   }, [step, ready]);
 
   const next = React.useCallback(() => {
-    if (last) onClose("finished");
-    else onIndex(index + 1);
-  }, [last, index, onIndex, onClose]);
+    direction.current = "forward";
+    const to = stepTarget(index, steps.length, "forward");
+    if (to === "finish") onClose("finished");
+    else onIndex(to);
+  }, [index, steps.length, onIndex, onClose]);
 
-  const back = React.useCallback(() => { if (index > 0) onIndex(index - 1); }, [index, onIndex]);
+  const back = React.useCallback(() => {
+    direction.current = "back";
+    const to = stepTarget(index, steps.length, "back");
+    if (to !== "finish" && to !== index) onIndex(to);
+  }, [index, steps.length, onIndex]);
 
   /* Focus follows the card, once it is actually on screen — while an anchor is
      still being found there is nothing to focus. */
@@ -247,11 +268,11 @@ function TourStage({
     return <div className="fixed inset-0 z-[90] bg-[hsl(var(--sh)/.45)]" aria-hidden />;
   }
 
-  const card = cardPosition(rect, step.placement);
+  const card = cardPosition(step.anchor ? rect : null, step.placement);
 
   return (
     <div className="fixed inset-0 z-[90]" role="presentation">
-      {rect ? (
+      {step.anchor && rect ? (
         <>
           {/* one cut-out, lit by its own shadow — no mask to keep in sync */}
           <div

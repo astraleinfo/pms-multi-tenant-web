@@ -15,6 +15,10 @@ import { Stat } from "@/components/ui/stat";
 import { StatusPill } from "@/components/domain/status";
 import { PatientRef } from "@/components/domain/patient";
 import { WalkInModal } from "@/components/domain/quick-actions";
+import { DoctorBusyModal } from "@/components/domain/doctor-busy";
+import {
+  blockingConsultation, describeConsultation, doctorBusyFromError, type CurrentConsultation,
+} from "@/lib/queue-rules";
 import {
   IconCalendar, IconCheck, IconMonitor, IconPlay, IconPlus, IconQueue, IconStethoscope, IconX,
 } from "@/components/ui/icons";
@@ -68,8 +72,27 @@ function QueueBoard() {
     .filter((a) => a.date === today && isBooked(a.status))
     .sort((a, b) => a.time.localeCompare(b.time));
 
-  const move = (q: QueueEntry, status: QueueEntry["status"], msg: string) => {
-    setQueueStatus(q.id, status);
+  /* A clinician sees one patient at a time: starting another consultation
+     while theirs is still open is answered here, before anything is sent —
+     and again if the server refuses anyway (another screen got there first). */
+  const [busy, setBusy] = React.useState<{ current: CurrentConsultation; doctorId: string; message?: string } | null>(null);
+
+  const move = async (q: QueueEntry, status: QueueEntry["status"], msg: string) => {
+    if (status === "in_consultation") {
+      const blocking = blockingConsultation(queue, q);
+      if (blocking) {
+        setBusy({ current: describeConsultation(blocking), doctorId: q.doctor_id });
+        return;
+      }
+    }
+    try {
+      await setQueueStatus(q.id, status);
+    } catch (error) {
+      const refusal = doctorBusyFromError(error);
+      if (refusal) setBusy({ current: refusal, doctorId: q.doctor_id, message: refusal.message });
+      /* anything else has already been explained by the store's toast */
+      return;
+    }
     notify({ tone: status === "no_show" ? "warn" : "ok", title: msg, body: `Token ${String(q.token_no).padStart(2, "0")}.` });
   };
 
@@ -170,26 +193,26 @@ function QueueBoard() {
                           <div className="flex flex-wrap items-center gap-1.5">
                             {q.status === "waiting" && (
                               <>
-                                <Button size="sm" variant="primary" onClick={() => move(q, "called", "Patient called")}>
+                                <Button size="sm" variant="primary" onClick={() => void move(q, "called", "Patient called")}>
                                   Call now
                                 </Button>
-                                <Button size="sm" variant="ghost" onClick={() => move(q, "no_show", "Marked as no show")}>
+                                <Button size="sm" variant="ghost" onClick={() => void move(q, "no_show", "Marked as no show")}>
                                   <IconX size={13} /> No show
                                 </Button>
                               </>
                             )}
                             {q.status === "called" && (
                               <>
-                                <Button size="sm" variant="primary" onClick={() => move(q, "in_consultation", "Consultation started")}>
+                                <Button size="sm" variant="primary" onClick={() => void move(q, "in_consultation", "Consultation started")}>
                                   <IconPlay size={13} /> Start
                                 </Button>
-                                <Button size="sm" variant="ghost" onClick={() => move(q, "no_show", "Marked as no show")}>
+                                <Button size="sm" variant="ghost" onClick={() => void move(q, "no_show", "Marked as no show")}>
                                   No show
                                 </Button>
                               </>
                             )}
                             {q.status === "in_consultation" && (
-                              <ButtonLink size="sm" variant="primary" href={`/consultations/new?queue=${q.id}`}>
+                              <ButtonLink size="sm" variant="primary" href={`/consultations/new?queue=${q.id}&patient=${q.patient_id}`}>
                                 <IconStethoscope size={13} /> Record encounter
                               </ButtonLink>
                             )}
@@ -252,6 +275,12 @@ function QueueBoard() {
       </div>
 
       <WalkInModal open={walkIn} onClose={() => setWalkIn(false)} />
+      <DoctorBusyModal
+        current={busy?.current ?? null}
+        doctorName={busy ? userName(db, busy.doctorId) : undefined}
+        message={busy?.message}
+        onClose={() => setBusy(null)}
+      />
     </>
   );
 }

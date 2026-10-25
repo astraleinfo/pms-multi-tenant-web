@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import { useApp } from "@/lib/store/app-store";
 import { useClinicDb, usePharmacyStats, usePatient } from "@/lib/query/hooks";
 import {
@@ -32,7 +33,9 @@ import {
 export default function PharmacyPage() {
   return (
     <RoleGate allow={["pharmacist", "doctor"]}>
-      <Pharmacy />
+      <React.Suspense fallback={null}>
+        <Pharmacy />
+      </React.Suspense>
     </RoleGate>
   );
 }
@@ -45,7 +48,10 @@ function Pharmacy() {
   const all = selectPrescriptions(db, t).sort((a, b) => b.created_at.localeCompare(a.created_at));
   const counter = all.filter((r) => r.status !== "dispensed");
   const [tab, setTab] = React.useState<"counter" | "history">("counter");
-  const [selectedId, setSelectedId] = React.useState<string | null>(counter[0]?.id ?? null);
+  /* a link from a prescription names the one to open: /pharmacy?rx=<id> */
+  const wanted = useSearchParams().get("rx");
+  const [selectedId, setSelectedId] = React.useState<string | null>(wanted ?? counter[0]?.id ?? null);
+  React.useEffect(() => { if (wanted) setSelectedId(wanted); }, [wanted]);
 
   const selected = all.find((r) => r.id === selectedId) ?? counter[0] ?? null;
   const stats = usePharmacyStats();

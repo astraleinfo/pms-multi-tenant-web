@@ -691,9 +691,11 @@ export const setQueueStatus = async (id: Id, status: QueueEntry["status"]) =>
 
 /* ---- consultation (§3.7) ------------------------------------------------------ */
 
-export const createEncounter = async (
+/* Both return the whole encounter: a signed one names the queue token it
+   closed, which the store writes straight into the cached board. */
+export const createEncounter = (
   e: NewEncounter, sign: boolean,
-) => (await post<Encounter>("/v1/encounters", {
+) => post<Encounter>("/v1/encounters", {
   patient_id: e.patient_id,
   queue_entry_id: e.queue_entry_id,
   doctor_id: e.doctor_id,
@@ -704,13 +706,13 @@ export const createEncounter = async (
   follow_up_days: e.follow_up_days,
   clinical_ext: e.clinical_ext,
   sign,
-})).id;
+});
 
-export const updateEncounter = async (id: Id, changes: Partial<Encounter> & { sign?: boolean }) => {
+export const updateEncounter = (id: Id, changes: Partial<Encounter> & { sign?: boolean }) => {
   const { chief_complaint, notes, diagnosis, follow_up_days, clinical_ext, sign } = changes;
   const body = { chief_complaint, notes, diagnosis, follow_up_days, clinical_ext, sign };
   const defined = Object.fromEntries(Object.entries(body).filter(([, v]) => v !== undefined));
-  return (await patch_<Encounter>(`/v1/encounters/${id}`, defined)).id;
+  return patch_<Encounter>(`/v1/encounters/${id}`, defined);
 };
 
 /* ---- prescriptions & pharmacy (§3.8, §3.9) ------------------------------------ */

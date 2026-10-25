@@ -22,6 +22,7 @@ import { AllergyFlag, PatientChip } from "@/components/domain/patient";
 import { ClinicalExamPanel } from "@/components/domain/clinical-exam";
 import { DynamicSummary } from "@/components/domain/dynamic-form";
 import { InvoiceComposer } from "@/components/domain/invoice-composer";
+import { FollowUpBooking } from "@/components/domain/follow-up-booking";
 import {
   IconArrowRight, IconCheck, IconChevronLeft, IconEdit, IconFlask, IconLock, IconPrint, IconReceipt, IconRx,
   IconStethoscope, IconUser,
@@ -29,6 +30,9 @@ import {
 
 export default function EncounterPage(props: PageProps<"/consultations/[id]">) {
   const { id } = React.use(props.params);
+  /* the consultation form sends a just-signed visit here with ?followup=book */
+  const sp = React.use(props.searchParams);
+  const offerFollowUp = sp.followup === "book";
   const { session } = useApp();
   const db = useClinicDb();
   const encounter = findEncounter(db, session.tenantId, id);
@@ -45,10 +49,10 @@ export default function EncounterPage(props: PageProps<"/consultations/[id]">) {
       </Card>
     );
   }
-  return <EncounterView id={id} />;
+  return <EncounterView id={id} offerFollowUp={offerFollowUp} />;
 }
 
-function EncounterView({ id }: { id: string }) {
+function EncounterView({ id, offerFollowUp }: { id: string; offerFollowUp: boolean }) {
   const { session, updateEncounter, notify } = useApp();
   const db = useClinicDb();
   const { tenant, role } = useTenant();
@@ -59,6 +63,7 @@ function EncounterView({ id }: { id: string }) {
 
   const [billing, setBilling] = React.useState(false);
   const [printing, setPrinting] = React.useState(false);
+  const [followUpOffer, setFollowUpOffer] = React.useState(offerFollowUp);
 
   const printConsultation = async () => {
     setPrinting(true);
@@ -131,6 +136,17 @@ function EncounterView({ id }: { id: string }) {
         }
       />
 
+      {followUpOffer && (
+        <FollowUpBooking
+          layout="offer"
+          patientId={encounter.patient_id}
+          doctorId={encounter.doctor_id}
+          encounterDate={encounter.date}
+          days={encounter.follow_up_days}
+          onDismiss={() => setFollowUpOffer(false)}
+        />
+      )}
+
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_19rem]">
         <div className="min-w-0 space-y-5">
           <Card>
@@ -152,6 +168,18 @@ function EncounterView({ id }: { id: string }) {
                       : "—"}
                   />
                 </dl>
+                {!!encounter.follow_up_days && (
+                  /* the instruction alone books nothing: it reaches the
+                     Follow-ups call list only as an appointment */
+                  <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                    <FollowUpBooking
+                      patientId={encounter.patient_id}
+                      doctorId={encounter.doctor_id}
+                      encounterDate={encounter.date}
+                      days={encounter.follow_up_days}
+                    />
+                  </div>
+                )}
               </div>
             </CardBody>
           </Card>

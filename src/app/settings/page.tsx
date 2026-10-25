@@ -10,6 +10,7 @@ import {
 } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { cn } from "@/lib/cn";
+import { copyText } from "@/lib/clipboard";
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
 import { selectUsers } from "@/lib/data/repository";
 import { ROLE_LABEL } from "@/lib/nav";
@@ -544,7 +545,7 @@ function Settings({ initial }: { initial: Tab }) {
             >
               {/* who this is, once, at the top — not repeated in the header */}
               <div className="flex items-center gap-3 px-4 py-3">
-                <Monogram name={tenant.name} size={38} logoUrl={logoUrl} />
+                <Monogram name={tenant.name} size={48} logoUrl={logoUrl} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-body font-semibold text-ink">{tenant.name}</p>
                   <p className="truncate text-caption text-ink-3">{tenant.city} · {tenant.plan}</p>
@@ -828,11 +829,10 @@ function ReferralSection({ currency: currencyCode }: { currency: string }) {
     setMinting(false);
   };
 
-  const copy = (code: string) => {
-    navigator.clipboard?.writeText(code).then(
-      () => notify({ tone: "ok", title: "Code copied", body: code }),
-      () => notify({ tone: "warn", title: "Could not copy", body: code }),
-    );
+  const copy = async (code: string) => {
+    const ok = await copyText(code);
+    if (ok) notify({ tone: "ok", title: "Copied", body: code });
+    else notify({ tone: "warn", title: "Could not copy", body: `Select the code and copy it manually: ${code}` });
   };
 
   return (
@@ -857,7 +857,7 @@ function ReferralSection({ currency: currencyCode }: { currency: string }) {
             <span className="tnum rounded-[var(--r)] border border-line-strong bg-surface-2 px-3 py-1.5 font-mono text-body font-semibold text-ink">
               {data.formatted_code}
             </span>
-            <Button variant="secondary" size="sm" onClick={() => copy(data.code!)}>Copy</Button>
+            <Button variant="secondary" size="sm" onClick={() => void copy(data.code!)}>Copy</Button>
           </SettingLinkRow>
           <SettingLinkRow label="Credit per referral" hint="What a new referral earns you today.">
             <span className="tnum text-label font-medium text-ink">

@@ -6,6 +6,7 @@ import { useApp, useTenant } from "@/lib/store/app-store";
 import { useClinicDb, useSchema, usePatient } from "@/lib/query/hooks";
 import { selectDoctors, selectEncounters, selectQueue } from "@/lib/data/repository";
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
+import { applySeed, seedFromQueue } from "@/lib/encounter-prefill";
 import type { Encounter, Prescription, PrescriptionItem } from "@/lib/types";
 import { age, formatDate, relativeDay } from "@/lib/format";
 import { PageHeader } from "@/components/ui/page-header";
@@ -19,6 +20,7 @@ import { AllergyFlag, PatientChip, PatientPicker } from "@/components/domain/pat
 import { ClinicalExamPanel } from "@/components/domain/clinical-exam";
 import { PrescriptionEditor, emptyRxItem, type DraftRxItem } from "@/components/domain/prescription-editor";
 import { LabOrderPicker, type DraftLabTest } from "@/components/domain/lab-order-picker";
+import { FollowUpBooking, useFollowUpState } from "@/components/domain/follow-up-booking";
 import {
   IconBookmark, IconCheck, IconFlask, IconRx, IconStethoscope, IconUser,
 } from "@/components/ui/icons";
@@ -81,6 +83,20 @@ export function ConsultationWorkspace({
   }, [focus]);
 
   const [complaint, setComplaint] = React.useState(original?.chief_complaint ?? queueEntry?.reason ?? "");
+
+  /* The queue loads after this form can mount (a fresh tab, a stale cache), so
+     the initial state above may have missed the entry. Fill in whatever is
+     still empty once it shows up — never over what has been typed. */
+  const seededFor = React.useRef<string | null>(queueEntry?.id ?? null);
+  React.useEffect(() => {
+    if (editing || !queueEntry || seededFor.current === queueEntry.id) return;
+    seededFor.current = queueEntry.id;
+    const next = applySeed({ patient, doctor, complaint }, seedFromQueue(queueEntry));
+    setPatient(next.patient);
+    setDoctor(next.doctor);
+    setComplaint(next.complaint);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seeds once per entry
+  }, [queueEntry?.id, editing]);
   const [notes, setNotes] = React.useState(original?.notes ?? "");
   const [diagnosis, setDiagnosis] = React.useState(original?.diagnosis ?? "");
   const savedFollowUp = original?.follow_up_days ?? null;
@@ -104,13 +120,20 @@ export function ConsultationWorkspace({
   const extraFields = schema.filter((f) => f.field_key !== "chief_complaint" && f.field_key !== "bp" && f.field_key !== "pulse");
   const vitalFields = schema.filter((f) => f.field_key === "bp" || f.field_key === "pulse");
 
+  const followUpDays = followUp === "custom" ? (followUpCustom ? Number(followUpCustom) : null) : followUp ? Number(followUp) : null;
+  const visitDate = original?.date ?? today;
+  const followUpNow = useFollowUpState(patient, visitDate, followUpDays);
+  /* Signed with a follow-up nobody has booked: the visit's page opens with
+     the offer to book it. Never in the way of signing — only after it. */
+  const afterSave = (id: string, sign: boolean) =>
+    sign && followUpNow.kind === "open" ? `/consultations/${id}?followup=book` : `/consultations/${id}`;
+
   const save = async (sign: boolean) => {
     setTouched(true);
     if (!patient || !complaint.trim()) {
       notify({ tone: "warn", title: "A patient and a chief complaint are required" });
       return;
     }
-    const followUpDays = followUp === "custom" ? (followUpCustom ? Number(followUpCustom) : null) : followUp ? Number(followUp) : null;
     const usableRx = rx.filter((r) => r.medicine.trim());
     const rxLines = usableRx.map((r) => ({
       item_id: r.item_id,
@@ -143,7 +166,7 @@ export function ConsultationWorkspace({
         return;
       }
       notify({ tone: "ok", title: sign ? "Encounter signed" : "Consultation updated" });
-      router.push(`/consultations/${original.id}`);
+      router.push(afterSave(original.id, sign));
       return;
     }
 
@@ -177,7 +200,7 @@ export function ConsultationWorkspace({
       ].filter(Boolean).join(" · ") || undefined,
     });
 
-    router.push(`/consultations/${encounterId}`);
+    router.push(afterSave(encounterId, sign));
   };
 
   return (
@@ -288,7 +311,7 @@ export function ConsultationWorkspace({
                 <Textarea rows={4} value={notes} onChange={(e) => setNotes(e.target.value)}
                           placeholder="What you saw, what you did, what you advised." />
               </Field>
-              <Field label="Follow-up" help="Leave blank if no review is needed.">
+              <Field label="Follow-up" help={followUpDays ? undefined : "Leave blank if no review is needed."}>
                 <div className="flex gap-2">
                   <Select
                     value={followUp}
@@ -311,6 +334,13 @@ export function ConsultationWorkspace({
                     />
                   )}
                 </div>
+                <FollowUpBooking
+                  layout="hint"
+                  patientId={patient}
+                  doctorId={doctor}
+                  encounterDate={visitDate}
+                  days={followUpDays}
+                />
               </Field>
             </CardBody>
           </Card>

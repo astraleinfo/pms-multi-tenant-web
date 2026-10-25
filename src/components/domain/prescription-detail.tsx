@@ -3,9 +3,10 @@
 import * as React from "react";
 import * as api from "@/lib/api";
 import { useApp } from "@/lib/store/app-store";
-import { usePatient, usePrescription, useUsers } from "@/lib/query/hooks";
+import { useDoctors, usePatient, usePrescription, useUsers } from "@/lib/query/hooks";
 import { formatDate } from "@/lib/format";
 import { openPdfBlob } from "@/lib/pdf";
+import { encounterHref, pharmacyCounterHref } from "@/lib/routes";
 import type { Prescription } from "@/lib/types";
 import { Modal } from "@/components/ui/modal";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -24,6 +25,7 @@ export function PrescriptionDetailModal({ prescription: opened, onClose }: {
 }) {
   const { notify } = useApp();
   const { data: users = [] } = useUsers();
+  const { data: doctors = [] } = useDoctors();
   const { data: fresh, isPending } = usePrescription(opened?.id ?? "");
   const rx = fresh ?? opened;
   /* allergies are the patient's, which a prescription row does not carry */
@@ -41,7 +43,11 @@ export function PrescriptionDetailModal({ prescription: opened, onClose }: {
     }
   };
 
-  const prescriber = rx ? users.find((u) => u.id === rx.doctor_id)?.name ?? "—" : "";
+  /* The row carries the name; the lists only cover rows from before that, and
+     neither holds a support account that recorded the visit. */
+  const prescriber = rx
+    ? rx.doctor_name || (doctors.find((u) => u.id === rx.doctor_id) ?? users.find((u) => u.id === rx.doctor_id))?.name || "—"
+    : "";
 
   return (
     <Modal
@@ -57,7 +63,7 @@ export function PrescriptionDetailModal({ prescription: opened, onClose }: {
               <IconPrint size={14} /> {printing ? "Preparing…" : "Print"}
             </Button>
             {rx.status !== "dispensed" && (
-              <ButtonLink href="/pharmacy" variant="primary">
+              <ButtonLink href={pharmacyCounterHref(rx.id)} variant="primary">
                 Dispense at the counter <IconArrowRight size={14} />
               </ButtonLink>
             )}
@@ -83,8 +89,8 @@ export function PrescriptionDetailModal({ prescription: opened, onClose }: {
           <dl className="grid grid-cols-2 gap-x-6">
             <KV label="Prescriber" value={prescriber} />
             <KV label="Encounter" value={
-              <ButtonLink href={`/consultations/${rx.encounter_id}`} variant="ghost" size="sm" className="h-6 px-1.5">
-                Open encounter <IconArrowRight size={13} />
+              <ButtonLink href={encounterHref(rx.encounter_id)} variant="ghost" size="sm" className="h-6 px-1.5">
+                View consultation <IconArrowRight size={13} />
               </ButtonLink>
             } />
           </dl>

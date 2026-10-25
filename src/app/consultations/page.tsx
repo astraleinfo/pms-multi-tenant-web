@@ -10,13 +10,15 @@ import { CLINICAL_TYPES } from "@/lib/data/catalog";
 import { formatDate, pluralise, relativeDay } from "@/lib/format";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { ButtonLink } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import { Badge, Numeral } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
 import { SearchInput } from "@/components/ui/field";
 import { DataTable, columnHelperFor } from "@/components/ui/data-table";
 import { RoleGate } from "@/components/domain/gates";
 import { PatientRef } from "@/components/domain/patient";
+import { DoctorBusyModal } from "@/components/domain/doctor-busy";
+import { blockingConsultation, describeConsultation, type CurrentConsultation } from "@/lib/queue-rules";
 import { IconArrowRight, IconPlus, IconStethoscope } from "@/components/ui/icons";
 
 const PAGE_SIZE = 10;
@@ -111,6 +113,10 @@ function Consultations() {
 
   const clinical = CLINICAL_TYPES.find((c) => c.key === tenant.clinical_type)!;
   const inRoom = (queue ?? []).filter((x) => x.status === "in_consultation" || x.status === "called");
+  /* a called token whose clinician is still with someone else waits for that
+     consultation to finish — "Record" says so instead of opening a second one */
+  const { data: users } = useUsers();
+  const [busy, setBusy] = React.useState<{ current: CurrentConsultation; doctorId: string } | null>(null);
 
   /* The query is the whole request: the search term, the sort and the page all
      go to the database, which answers with those ten rows and how many matched.
@@ -150,15 +156,25 @@ function Consultations() {
           <CardBody className="pt-0">
             <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {inRoom.map((qe) => {
+                const blocking = blockingConsultation(queue ?? [], qe);
                 return (
                   <li key={qe.id} className="flex items-center gap-3 rounded-[var(--r)] border border-line bg-surface-2 p-3">
                     <Numeral tone="accent">{String(qe.token_no).padStart(2, "0")}</Numeral>
                     <span className="min-w-0 flex-1">
                       <PatientRef id={qe.patient_id} name={qe.patient_name} sub={qe.reason} />
                     </span>
-                    <ButtonLink href={`/consultations/new?queue=${qe.id}`} size="sm" variant="primary">
-                      Record <IconArrowRight size={13} />
-                    </ButtonLink>
+                    {blocking ? (
+                      <Button
+                        size="sm" variant="secondary"
+                        onClick={() => setBusy({ current: describeConsultation(blocking), doctorId: qe.doctor_id })}
+                      >
+                        Record <IconArrowRight size={13} />
+                      </Button>
+                    ) : (
+                      <ButtonLink href={`/consultations/new?queue=${qe.id}&patient=${qe.patient_id}`} size="sm" variant="primary">
+                        Record <IconArrowRight size={13} />
+                      </ButtonLink>
+                    )}
                   </li>
                 );
               })}
@@ -208,6 +224,11 @@ function Consultations() {
         )}
       </Card>
 
+      <DoctorBusyModal
+        current={busy?.current ?? null}
+        doctorName={busy ? users.find((u) => u.id === busy.doctorId)?.name : undefined}
+        onClose={() => setBusy(null)}
+      />
     </>
   );
 }

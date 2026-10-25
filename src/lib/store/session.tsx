@@ -118,6 +118,10 @@ interface SessionContextValue {
   platformSignOut: () => Promise<void>;
   /** the API told us this session is over — drop it without a round trip */
   endSession: () => void;
+  /** Re-read who this tab is acting as, and what they may do. For a refusal
+      the screen did not expect: the role may have been changed since sign-in,
+      or a quiet token refresh may have picked up another sign-in's cookie. */
+  reloadIdentity: () => Promise<void>;
 
   theme: "light" | "dark";
   toggleTheme: () => void;
@@ -311,6 +315,16 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const reloadIdentity = React.useCallback(async () => {
+    const who = await api.me().catch(() => null);
+    const fresh = who?.user;
+    if (!fresh) return;
+    setUser(fresh);
+    setPermissions(who.permissions);
+    setSession((current) =>
+      current.signedIn ? { ...current, userId: fresh.id, tenantId: fresh.tenant_id } : current);
+  }, []);
+
   const notify = React.useCallback((t: Omit<Toast, "id">) => {
     const id = ++toastSeq.current;
     setToasts((prev) => [...prev, { ...t, id }]);
@@ -330,13 +344,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     ready, host,
     session, user, permissions, preferences, savePreferences,
     platformSession, platformUser,
-    signIn, signOut, clearPasswordHold, platformSignIn, platformSignOut, endSession,
+    signIn, signOut, clearPasswordHold, platformSignIn, platformSignOut, endSession, reloadIdentity,
     theme, toggleTheme, toasts, notify, dismissToast,
     clinicUrl, consoleUrl, apexHomeUrl,
   }), [
     ready, host, session, user, permissions, preferences, savePreferences,
     platformSession, platformUser,
-    signIn, signOut, clearPasswordHold, platformSignIn, platformSignOut, endSession,
+    signIn, signOut, clearPasswordHold, platformSignIn, platformSignOut, endSession, reloadIdentity,
     theme, toggleTheme, toasts, notify, dismissToast, clinicUrl, consoleUrl, apexHomeUrl,
   ]);
 

@@ -15,6 +15,7 @@ import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/tabl
 import { LabFlag, StatusPill } from "@/components/domain/status";
 import { PatientRef } from "@/components/domain/patient";
 import { CounterPayment } from "@/components/domain/counter-payment";
+import { labActions } from "@/lib/lab-actions";
 import {
   IconCard, IconDownload, IconFlask, IconPlay, IconPlus, IconShield, IconTrash,
 } from "@/components/ui/icons";
@@ -88,7 +89,16 @@ function LabOrderDialog({ open, order, onClose }: { open: boolean; order: LabOrd
   const patch = (i: number, p: Partial<LabResultLine>) =>
     setResults((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...p } : r)));
 
-  const editable = order.status === "pending" || order.status === "resulted";
+  /* Only what the API would let this person do is offered: accepting a sample
+     and entering results ask for lab:result, release for lab:verify. A doctor
+     reads the bench (lab:read) without working it. */
+  const actions = labActions(order.status, can);
+  const editable = actions.enterResults;
+
+  /* The success line is said once the server has agreed. A refusal is already
+     explained by the store's own toast, so it is not caught into another. */
+  const confirm = (work: Promise<unknown>, title: string, body: string) =>
+    work.then(() => notify({ tone: "ok", title, body }), () => undefined);
 
   return (
     <Modal
@@ -104,10 +114,9 @@ function LabOrderDialog({ open, order, onClose }: { open: boolean; order: LabOrd
               <IconCard size={14} /> Collect payment
             </Button>
           )}
-          {order.status === "ordered" && (
+          {actions.accept && (
             <Button variant="primary" onClick={() => {
-              startLabOrder(order.id);
-              notify({ tone: "ok", title: "Sample accepted", body: "The order is now with the lab." });
+              void confirm(startLabOrder(order.id), "Sample accepted", "The order is now with the lab.");
             }}>
               <IconPlay size={14} /> Accept sample
             </Button>
@@ -116,17 +125,21 @@ function LabOrderDialog({ open, order, onClose }: { open: boolean; order: LabOrd
             <Button
               variant="secondary"
               onClick={() => {
-                saveLabResults(order.id, results.filter((r) => r.analyte.trim()));
-                notify({ tone: "ok", title: "Results saved", body: "Still held back until a technician verifies them." });
+                void confirm(
+                  saveLabResults(order.id, results.filter((r) => r.analyte.trim())),
+                  "Results saved", "Still held back until a technician verifies them.",
+                );
               }}
             >
               Save results
             </Button>
           )}
-          {order.status === "resulted" && (
+          {actions.verify && (
             <Button variant="primary" onClick={() => {
-              verifyLabOrder(order.id);
-              notify({ tone: "ok", title: "Verified and released", body: "The result is now visible on the patient record." });
+              void confirm(
+                verifyLabOrder(order.id),
+                "Verified and released", "The result is now visible on the patient record.",
+              );
             }}>
               <IconShield size={14} /> Verify and release
             </Button>
@@ -162,7 +175,15 @@ function LabOrderDialog({ open, order, onClose }: { open: boolean; order: LabOrd
 
           {order.status === "ordered" && (
             <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-6 text-center text-label text-ink-3">
-              Accept the sample before entering results.
+              {actions.accept
+                ? "Accept the sample before entering results."
+                : "Waiting for the lab to accept the sample."}
+            </p>
+          )}
+
+          {(order.status === "pending" || order.status === "resulted") && !editable && (
+            <p className="rounded-[var(--r)] border border-dashed border-line-strong px-3 py-6 text-center text-label text-ink-3">
+              With the lab. Results appear here once a technician has verified them.
             </p>
           )}
 
@@ -250,12 +271,13 @@ const ACCEPT = ".pdf,.png,.jpg,.jpeg,.tif,.tiff,.webp,.csv,.txt";
  * front of a clinician, and changing it afterwards would do so unsigned.
  */
 function Attachments({ order }: { order: LabOrder }) {
-  const { uploadLabAttachment, removeLabAttachment, notify } = useApp();
+  const { uploadLabAttachment, removeLabAttachment, notify, can } = useApp();
   const { data: files = [], isPending } = useLabAttachments(order.id);
   const input = React.useRef<HTMLInputElement>(null);
   const [busy, setBusy] = React.useState(false);
 
-  const locked = order.status === "verified";
+  /* verified orders take no more paper; and filing it is bench work (lab:result) */
+  const locked = !labActions(order.status, can).attach;
 
   const send = async (chosen: FileList | null) => {
     const file = chosen?.[0];
@@ -323,8 +345,11 @@ function Attachments({ order }: { order: LabOrder }) {
                 {!locked && (
                   <Button variant="ghost" size="icon-sm" aria-label={`Remove ${file.filename}`}
                           onClick={() => {
-                            removeLabAttachment(order.id, file.id);
-                            notify({ tone: "ok", title: "File removed", body: file.filename });
+                            /* said once it is gone; a refusal is the store's toast */
+                            removeLabAttachment(order.id, file.id).then(
+                              () => notify({ tone: "ok", title: "File removed", body: file.filename }),
+                              () => undefined,
+                            );
                           }}>
                     <IconTrash size={14} />
                   </Button>

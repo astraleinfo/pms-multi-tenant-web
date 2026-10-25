@@ -457,6 +457,8 @@ export interface Prescription {
   patient_name: string;
   patient_mrn: string;
   doctor_id: Id;
+  /** the prescriber's name, carried on the row so it shows for roles that cannot read the staff list */
+  doctor_name?: string;
   created_at: string;
   status: PrescriptionStatus;
   items: PrescriptionItem[];

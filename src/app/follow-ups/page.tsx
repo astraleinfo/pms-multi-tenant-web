@@ -51,6 +51,12 @@ const RANGES = [
   { days: 7, label: "Next 7 days" },
   { days: 14, label: "Next 14 days" },
   { days: 30, label: "Next 30 days" },
+  /* a consultation's follow-up is often weeks or months out — once booked
+     it must still be findable here */
+  { days: 60, label: "Next 60 days" },
+  { days: 90, label: "Next 90 days" },
+  { days: 180, label: "Next 6 months" },
+  { days: 365, label: "Next 12 months" },
 ];
 
 /* Patient → phone → appointment → doctor → status → call: the order a
@@ -164,7 +170,15 @@ function FollowUps() {
           {isPending && rows.length === 0 ? (
             <RowSkeletons />
           ) : rows.length === 0 ? (
-            <EmptyState icon={<IconPhone size={20} />} {...EMPTY[tab](days, !!term)} />
+            <EmptyState
+              icon={<IconPhone size={20} />}
+              {...withDoctorFilter(EMPTY[tab](days, !!term), doctors.find((d) => d.id === doctor)?.name)}
+              action={doctor !== "all" ? (
+                <Button size="sm" variant="secondary" onClick={() => setDoctor("all")}>
+                  Show all clinicians
+                </Button>
+              ) : undefined}
+            />
           ) : (
             groups.map(([date, items]) => (
               <section key={date} aria-label={formatDate(date, "day")}>
@@ -386,6 +400,12 @@ function RowSkeletons() {
       <span className="sr-only" role="status">Loading the call list</span>
     </div>
   );
+}
+
+/** An empty list with one clinician picked may only be empty for them — say so. */
+function withDoctorFilter(empty: { title: string; body: string }, doctorName: string | undefined) {
+  if (!doctorName) return empty;
+  return { ...empty, body: `${empty.body} Showing ${doctorName} only — switch to All clinicians to see everyone's.` };
 }
 
 const EMPTY: Record<Tab, (days: number, searching: boolean) => { title: string; body: string }> = {

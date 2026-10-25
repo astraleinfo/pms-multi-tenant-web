@@ -15,14 +15,25 @@ import { Badge } from "@/components/ui/badge";
 import { IconAlert, IconCheck, IconPlus } from "@/components/ui/icons";
 
 
+/** "Follow-up", "follow up" and "FOLLOW-UP" are the same type name. */
+const sameName = (a: string, b: string) =>
+  a.toLowerCase().replace(/[^a-z0-9]/g, "") === b.toLowerCase().replace(/[^a-z0-9]/g, "");
+
 /** §3.5 — book an appointment, with the doctor-availability check in front of it. */
 export function AppointmentModal({
-  open, onClose, defaultDate, defaultPatient,
+  open, onClose, defaultDate, defaultPatient, defaultDoctor, defaultReason, title, onBooked,
 }: {
   open: boolean;
   onClose: () => void;
   defaultDate?: string;
-  defaultPatient?: string;
+  defaultPatient?: string | null;
+  /** the clinician to open on, when it is not simply the first one */
+  defaultDoctor?: string;
+  /** what the visit is for; picks the appointment type of that name if the clinic has one */
+  defaultReason?: string;
+  title?: string;
+  /** after the server has taken the booking */
+  onBooked?: (booked: { id: string; date: string; time: string }) => void;
 }) {
   const { session, today, config, createAppointment, conflictsFor, notify } = useApp();
   const db = useClinicDb();
@@ -51,10 +62,13 @@ export function AppointmentModal({
 
   React.useEffect(() => {
     if (!open) return;
-    const doc = doctors[0]?.id ?? "";
+    /* a clinician who is no longer on the list cannot be booked — fall back */
+    const doc = defaultDoctor && (doctors.length === 0 || doctors.some((d) => d.id === defaultDoctor))
+      ? defaultDoctor
+      : doctors[0]?.id ?? "";
     const day = startDay;
     /* open on a slot the clinician can actually take, not a fixed 09:00 */
-    const first = types[0];
+    const first = (defaultReason && types.find((t) => sameName(t.name, defaultReason))) || types[0];
     const times = slotTimes(config.day_start, config.day_end, first?.minutes ?? duration);
     const firstFree = times.find((t) => conflictsFor(doc, day, t, first?.minutes ?? duration).length === 0)
       ?? times[0] ?? "";
@@ -63,7 +77,7 @@ export function AppointmentModal({
     setDate(day);
     setTypeId(first?.id ?? "");
     setTime(firstFree);
-    setReason(first?.name ?? "");
+    setReason(defaultReason?.trim() || first?.name || "");
     setTouched(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -113,7 +127,7 @@ export function AppointmentModal({
       open={open}
       onClose={onClose}
       width="lg"
-      title="Book an appointment"
+      title={title ?? "Book an appointment"}
       subtitle="Availability is checked against the doctor's existing bookings before the slot is held."
       footer={
         <>
@@ -129,11 +143,12 @@ export function AppointmentModal({
                  clash or a lost slot must not leave a "booked" toast behind. */
               setSaving(true);
               try {
-                await createAppointment({
+                const id = await createAppointment({
                   patient_id: patient!, doctor_id: doctor, date, time,
                   duration_min: duration, reason: reason.trim(), created_via: via,
                 });
                 notify({ tone: "ok", title: "Appointment booked", body: `${formatDate(date, "day")} at ${formatTime12(time)}.` });
+                onBooked?.({ id, date, time });
                 onClose();
               } catch {
                 /* useTenantMutation already said why; the dialog stays open so
@@ -262,10 +277,15 @@ export function WalkInModal({ open, onClose }: { open: boolean; onClose: () => v
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <Button
             variant="primary"
-            onClick={() => {
+            onClick={async () => {
               setTouched(true);
               if (!patient || !reason.trim()) return;
-              addWalkIn({ patient_id: patient, doctor_id: doctor, reason: reason.trim(), priority });
+              try {
+                await addWalkIn({ patient_id: patient, doctor_id: doctor, reason: reason.trim(), priority });
+              } catch {
+                /* refused (for example already in the queue): the store has shown why, and the dialog stays open */
+                return;
+              }
               notify({ tone: "ok", title: "Token issued", body: "The patient is in the waiting room queue." });
               onClose();
             }}

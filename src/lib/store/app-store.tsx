@@ -10,6 +10,7 @@ import {
 import { SessionProvider, useSession } from "@/lib/store/session";
 import { useQueueStream, type ConnectionState } from "@/lib/realtime";
 import { setActiveCurrency, setToday, TODAY } from "@/lib/format";
+import { closeSignedToken, doctorBusyFromError } from "@/lib/queue-rules";
 import type {
   AccountStatus, Appointment, BillingDepartment, ClinicalTypeKey, Encounter,
   FieldDefinition, FollowUp, Id, PatientNote, InventoryItem, InventoryItemPatch, Invoice, InvoiceLineItem, LabAttachment,
@@ -95,8 +96,10 @@ interface AppContextValue {
   /** Awaited: the call sheet stays open on a refusal — a slot that went while
       the patient was deciding — so another can be offered with them still on the line. */
   recordFollowUpCall: (appointmentId: Id, call: api.NewFollowUpCall) => Promise<FollowUp>;
-  addWalkIn: (input: { patient_id: Id; doctor_id: Id; reason: string; priority: QueueEntry["priority"] }) => void;
-  setQueueStatus: (id: Id, status: QueueEntry["status"]) => void;
+  addWalkIn: (input: { patient_id: Id; doctor_id: Id; reason: string; priority: QueueEntry["priority"] }) => Promise<Id>;
+  /** Awaited: a consultation refused because the clinician is still with
+      someone else is answered by the screen with a popup, not a toast. */
+  setQueueStatus: (id: Id, status: QueueEntry["status"]) => Promise<Id>;
 
   createEncounter: (e: NewEncounter, sign: boolean) => Promise<Id>;
   /** Awaited: an edit refused because the visit was billed meanwhile keeps the form open. */
@@ -121,12 +124,14 @@ interface AppContextValue {
     encounterId: Id, patientId: Id, orderedBy: Id,
     tests: Array<{ code: string; name: string; panel: string; note?: string }>,
   ) => void;
-  startLabOrder: (id: Id) => void;
-  saveLabResults: (id: Id, results: LabResultLine[]) => void;
-  verifyLabOrder: (id: Id) => void;
+  /* Awaited, so "Sample accepted" and the like are said only once the server
+     has agreed — a refusal is the store's toast, never a success as well. */
+  startLabOrder: (id: Id) => Promise<Id>;
+  saveLabResults: (id: Id, results: LabResultLine[]) => Promise<Id>;
+  verifyLabOrder: (id: Id) => Promise<Id>;
   /** File a scan, a printout or a signed report against an order. */
   uploadLabAttachment: (orderId: Id, file: File, note?: string) => Promise<LabAttachment>;
-  removeLabAttachment: (orderId: Id, attachmentId: Id) => void;
+  removeLabAttachment: (orderId: Id, attachmentId: Id) => Promise<void>;
 
   createInventoryItem: (input: NewInventoryItem) => Promise<InventoryItem>;
   updateInventoryItem: (id: Id, changes: InventoryItemPatch) => Promise<InventoryItem>;
@@ -235,13 +240,24 @@ function AppFacade({ children }: { children: React.ReactNode }) {
    * says why. The API's messages are written for people, so they are shown as
    * they are rather than translated into something vaguer.
    */
-  function useTenantMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>) {
+  function useTenantMutation<TArgs, TResult>(
+    fn: (args: TArgs) => Promise<TResult>,
+    /** refusals the calling screen explains itself, so no toast is shown */
+    handledByCaller?: (error: unknown) => boolean,
+    /** a plainer headline for refusals the front desk will recognise; otherwise the generic one */
+    titleFor?: (error: unknown) => string | undefined,
+  ) {
     return useMutation({
       mutationFn: fn,
       onSuccess: invalidateTenant,
       onError: (error: unknown) => {
+        /* "Your role does not allow that" from a screen that offered the action
+           means this tab's idea of who is signed in is stale — re-read it, so
+           the name, the role and the buttons on screen match the server again. */
+        if (error instanceof api.ApiError && error.status === 403) void s.reloadIdentity();
+        if (handledByCaller?.(error)) { invalidateTenant(); return; }
         const message = error instanceof Error ? error.message : "That did not go through.";
-        s.notify({ tone: "critical", title: "That change was refused", body: message });
+        s.notify({ tone: "critical", title: titleFor?.(error) ?? "That change was refused", body: message });
         /* whatever the server thinks is true, re-read it */
         invalidateTenant();
       },
@@ -254,13 +270,31 @@ function AppFacade({ children }: { children: React.ReactNode }) {
   const mUpdatePatient = useTenantMutation((a: { id: Id; values: Record<string, unknown> }) => api.updatePatient(a.id, a.values));
   const mCreateAppointment = useTenantMutation((a: NewAppointment) => api.createAppointment(a));
   const mAppointmentStatus = useTenantMutation((a: { id: Id; status: Appointment["status"] }) => api.setAppointmentStatus(a.id, a.status));
-  const mCheckIn = useTenantMutation((id: Id) => api.checkIn(id));
+  const alreadyQueuedTitle = (error: unknown) =>
+    error instanceof Error && /already in the queue/i.test(error.message) ? "Already in the queue" : undefined;
+  const mCheckIn = useTenantMutation((id: Id) => api.checkIn(id), undefined, alreadyQueuedTitle);
   const mFollowUpCall = useTenantMutation((a: { id: Id; call: api.NewFollowUpCall }) =>
     api.recordFollowUpCall(a.id, a.call));
-  const mWalkIn = useTenantMutation((i: Parameters<typeof api.addWalkIn>[0]) => api.addWalkIn(i));
-  const mQueueStatus = useTenantMutation((a: { id: Id; status: QueueEntry["status"] }) => api.setQueueStatus(a.id, a.status));
-  const mCreateEncounter = useTenantMutation((a: { e: NewEncounter; sign: boolean }) => api.createEncounter(a.e, a.sign));
-  const mUpdateEncounter = useTenantMutation((a: { id: Id; patch: Partial<Encounter> & { sign?: boolean } }) => api.updateEncounter(a.id, a.patch));
+  const mWalkIn = useTenantMutation(
+    (i: Parameters<typeof api.addWalkIn>[0]) => api.addWalkIn(i),
+    undefined,
+    alreadyQueuedTitle,
+  );
+  const mQueueStatus = useTenantMutation(
+    (a: { id: Id; status: QueueEntry["status"] }) => api.setQueueStatus(a.id, a.status),
+    (error) => doctorBusyFromError(error) !== null,
+  );
+  /* Signing completes the patient's token on the server. The board is written
+     here as well, before the refetch lands, so "With you now" and the queue
+     never show a signed visit's patient as still in the room. */
+  const boardAfter = (encounter: Encounter) => {
+    qc.setQueryData<QueueEntry[]>(qk.queue(tenantId), (queue) => closeSignedToken(queue, encounter));
+    return encounter.id;
+  };
+  const mCreateEncounter = useTenantMutation(async (a: { e: NewEncounter; sign: boolean }) =>
+    boardAfter(await api.createEncounter(a.e, a.sign)));
+  const mUpdateEncounter = useTenantMutation(async (a: { id: Id; patch: Partial<Encounter> & { sign?: boolean } }) =>
+    boardAfter(await api.updateEncounter(a.id, a.patch)));
   const mCreatePrescription = useTenantMutation((a: { encounterId: Id; patientId: Id; doctorId: Id; items: Array<Omit<PrescriptionItem, "id" | "prescription_id" | "dispensed_qty" | "status">> }) =>
     api.createPrescription(a.encounterId, a.patientId, a.doctorId, a.items));
   const mReplacePrescription = useTenantMutation((a: { encounterId: Id; items: Array<Omit<PrescriptionItem, "id" | "prescription_id" | "dispensed_qty" | "status">> }) =>
@@ -412,8 +446,8 @@ function AppFacade({ children }: { children: React.ReactNode }) {
       api.conflictsIn(appointments ?? [], doctorId, date, time, duration, ignoreId),
     checkIn: (id) => mCheckIn.mutate(id),
     recordFollowUpCall: (id, call) => mFollowUpCall.mutateAsync({ id, call }),
-    addWalkIn: (input) => mWalkIn.mutate(input),
-    setQueueStatus: (id, status) => mQueueStatus.mutate({ id, status }),
+    addWalkIn: (input) => mWalkIn.mutateAsync(input),
+    setQueueStatus: (id, status) => mQueueStatus.mutateAsync({ id, status }),
 
     createEncounter: (e, sign) => mCreateEncounter.mutateAsync({ e, sign }),
     updateEncounter: (id, patch) => mUpdateEncounter.mutateAsync({ id, patch }),
@@ -425,13 +459,13 @@ function AppFacade({ children }: { children: React.ReactNode }) {
 
     createLabOrder: (encounterId, patientId, orderedBy, tests) =>
       mCreateLabOrder.mutate({ encounterId, patientId, orderedBy, tests }),
-    startLabOrder: (id) => mStartLab.mutate(id),
-    saveLabResults: (id, results) => mSaveLab.mutate({ id, results }),
-    verifyLabOrder: (id) => mVerifyLab.mutate(id),
+    startLabOrder: (id) => mStartLab.mutateAsync(id),
+    saveLabResults: (id, results) => mSaveLab.mutateAsync({ id, results }),
+    verifyLabOrder: (id) => mVerifyLab.mutateAsync(id),
     uploadLabAttachment: (orderId, file, note) =>
       mUploadAttachment.mutateAsync({ orderId, file, note }),
     removeLabAttachment: (orderId, attachmentId) =>
-      mRemoveAttachment.mutate({ orderId, attachmentId }),
+      mRemoveAttachment.mutateAsync({ orderId, attachmentId }).then(() => undefined),
 
     createInventoryItem: (input) => mCreateItem.mutateAsync(input),
     updateInventoryItem: (id, changes) => mUpdateItem.mutateAsync({ id, changes }),

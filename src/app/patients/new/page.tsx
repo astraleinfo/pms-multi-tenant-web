@@ -30,7 +30,7 @@ function NewPatient() {
     const errs = validateAgainstSchema(schema, values);
     setErrors(errs);
     if (Object.keys(errs).length) {
-      notify({ tone: "warn", title: "Some required fields are blank", body: "Fill in the fields marked as required, then register again." });
+      notify({ tone: "warn", title: "Check the highlighted fields", body: "Fill in the fields marked as required and correct any that are flagged, then register again." });
       return;
     }
     const id = await createPatient(values);

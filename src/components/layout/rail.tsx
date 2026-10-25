@@ -21,13 +21,21 @@ import { Avatar } from "@/components/ui/misc";
 export function Monogram({ name, size = 28, logoUrl }: { name: string; size?: number; logoUrl?: string | null }) {
   if (logoUrl) {
     return (
-      <img
-        src={logoUrl}
-        alt=""
-        aria-hidden
-        className="shrink-0 rounded-[var(--r-sm)] object-contain"
+      /* a fixed square, same as the initials tile below, so nothing shifts
+         between the two. The image is contained and centred inside it: wide
+         and tall logos keep their shape, and a small one is never scaled up. */
+      <span
+        className="flex shrink-0 items-center justify-center overflow-hidden rounded-[var(--r-sm)] bg-white"
         style={{ width: size, height: size }}
-      />
+        aria-hidden
+      >
+        <img
+          src={logoUrl}
+          alt=""
+          className="block object-contain"
+          style={{ maxWidth: "100%", maxHeight: "100%" }}
+        />
+      </span>
     );
   }
   const letters = name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
@@ -114,7 +122,7 @@ export function Rail({
                   aria-expanded={open}
                   className="flex w-full min-w-0 items-center gap-2 rounded-[var(--r-sm)] px-1.5 py-1.5 text-left transition-colors hover:bg-rail-2"
                 >
-                  <Monogram name={tenant.name} size={26} logoUrl={logoUrl} />
+                  <Monogram name={tenant.name} size={32} logoUrl={logoUrl} />
                   <span className="min-w-0 flex-1 truncate text-label font-semibold text-rail-ink-strong">
                     {tenant.name}
                   </span>

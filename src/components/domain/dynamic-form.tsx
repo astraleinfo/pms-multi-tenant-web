@@ -7,6 +7,10 @@ import { DataList, DataRow } from "@/components/ui/data-list";
 import { Legend } from "@/components/ui/card";
 import { ChipMulti, Checkbox, Field, Input, Select, Textarea } from "@/components/ui/field";
 import { formatDate, today } from "@/lib/format";
+import { sanitizeMobileInput, validateMobile } from "@/lib/mobile";
+
+/** The patient's own mobile number: ten digits, nothing else. */
+const isPatientMobile = (f: FieldDefinition) => f.entity === "patient" && f.field_key === "phone";
 
 export type FormValues = Record<string, unknown>;
 
@@ -69,6 +73,13 @@ export function DynamicField({
   const id = `f-${def.id}`;
   const span = columns === 2 && def.span === 2 ? "sm:col-span-2" : "";
 
+  /* A short mobile number is flagged as soon as the field is left, not only on
+     submit — and keeps being flagged while it is wrong. */
+  const [left, setLeft] = React.useState(false);
+  const mobile = isPatientMobile(def);
+  const shortMobile = mobile && left && value != null && value !== "" ? validateMobile(String(value)) : null;
+  error = error ?? shortMobile ?? undefined;
+
   const label = (
     /* Where a field comes from (common, clinical type, the clinic's own) is
        the builder's business, not the person filling it in — so no tag. */
@@ -110,7 +121,12 @@ export function DynamicField({
           value={value == null ? "" : String(value)}
           /* nobody is born tomorrow */
           max={def.type === "date" && def.field_key === "dob" ? today() : undefined}
-          onChange={(e) => onChange(def.type === "number" ? (e.target.value === "" ? "" : Number(e.target.value)) : e.target.value)}
+          {...(mobile ? { inputMode: "numeric" as const, autoComplete: "tel-national", onBlur: () => setLeft(true) } : {})}
+          onChange={(e) => onChange(
+            isPatientMobile(def)
+              ? sanitizeMobileInput(e.target.value, String(value ?? ""))
+              : def.type === "number" ? (e.target.value === "" ? "" : Number(e.target.value)) : e.target.value,
+          )}
         />
       )}
     </Field>
@@ -118,13 +134,21 @@ export function DynamicField({
 }
 
 /** Required-field validation against the resolved schema. */
-export function validateAgainstSchema(fields: FieldDefinition[], values: FormValues) {
+export function validateAgainstSchema(
+  fields: FieldDefinition[], values: FormValues,
+  /** field keys whose value the user has not changed: required-ness still applies, format does not */
+  unchanged?: ReadonlySet<string>,
+) {
   const errors: Record<string, string> = {};
   for (const f of fields) {
-    if (!f.required) continue;
     const v = values[f.field_key];
     const empty = v == null || v === "" || (Array.isArray(v) && v.length === 0);
-    if (empty) errors[f.field_key] = `${f.label} is required.`;
+    if (empty) {
+      if (f.required) errors[f.field_key] = `${f.label} is required.`;
+    } else if (isPatientMobile(f) && !unchanged?.has(f.field_key)) {
+      const bad = validateMobile(String(v));
+      if (bad) errors[f.field_key] = bad;
+    }
   }
   return errors;
 }
