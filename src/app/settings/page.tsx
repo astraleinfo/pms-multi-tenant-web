@@ -19,6 +19,7 @@ import type { AppointmentType, FieldDefinition, FieldType, Referral, Role, User 
 import {
   appointmentTypes, formatLength, newTypeId, slotTimes, TYPE_LENGTHS, typeListProblem,
 } from "@/lib/appointment-types";
+import { brandProblem, DEFAULT_BRAND_COLOR } from "@/lib/brand";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader, Legend } from "@/components/ui/card";
 import { Button, Segmented } from "@/components/ui/button";
@@ -923,12 +924,13 @@ function ConfigurationTab() {
 
   const types = appointmentTypes(draft);
   const typeProblem = typeListProblem(types);
+  const brandError = brandProblem(draft.brand_color);
   const setTypes = (next: AppointmentType[]) => set("appointment_types", next);
   const editType = (id: string, patch: Partial<AppointmentType>) =>
     setTypes(types.map((t) => (t.id === id ? { ...t, ...patch } : t)));
 
   const save = () => {
-    if (typeProblem) return;
+    if (typeProblem || brandError) return;
     /* the first type is what a new booking starts as, so the old single
        "default length" follows it rather than drifting away from it */
     const cleaned = types.map((t) => ({ ...t, name: t.name.trim() }));
@@ -953,6 +955,66 @@ function ConfigurationTab() {
           </SettingRow>
           <SettingRow label="Address" htmlFor="cfg-address" hint="Printed on every invoice.">
             <Input id="cfg-address" value={draft.address} onChange={(e) => set("address", e.target.value)} />
+          </SettingRow>
+        </SettingsSection>
+
+        <SettingsSection
+          title="Print identity"
+          hint="What your printed consultations, consent forms and invoices say about who issued them. All optional — each line is printed only when it is filled in."
+        >
+          <SettingRow
+            label="Clinic registration number"
+            htmlFor="cfg-reg" width="sm"
+            hint="Printed under your name at the top of every document."
+          >
+            <Input id="cfg-reg" value={draft.registration_no} maxLength={60} placeholder="KA/CL/2041"
+                   onChange={(e) => set("registration_no", e.target.value)} />
+          </SettingRow>
+          <SettingRow
+            label="GSTIN"
+            htmlFor="cfg-gstin" width="sm"
+            hint="Printed on invoices."
+          >
+            <Input id="cfg-gstin" value={draft.gstin} maxLength={20} className="tnum font-mono"
+                   placeholder="29ABCDE1234F1Z5"
+                   onChange={(e) => set("gstin", e.target.value.toUpperCase().replace(/\s/g, ""))} />
+          </SettingRow>
+          <SettingRow
+            label="Brand colour"
+            htmlFor="cfg-brand"
+            align="start"
+            hint="The band across the top of your invoices. It has to be dark enough for white text to be read on it."
+          >
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  aria-label="Pick a brand colour"
+                  value={brandError ? DEFAULT_BRAND_COLOR : draft.brand_color.toLowerCase()}
+                  onChange={(e) => set("brand_color", e.target.value)}
+                  className="h-9 w-11 cursor-pointer rounded-[var(--r)] border border-line bg-surface p-1"
+                />
+                <Input id="cfg-brand" value={draft.brand_color} maxLength={7} invalid={!!brandError}
+                       className="tnum w-28 font-mono"
+                       onChange={(e) => set("brand_color", e.target.value.trim())} />
+                <Button variant="ghost" size="sm" disabled={draft.brand_color === DEFAULT_BRAND_COLOR}
+                        onClick={() => set("brand_color", DEFAULT_BRAND_COLOR)}>
+                  Reset
+                </Button>
+              </div>
+              {brandError ? (
+                <p role="alert" className="text-caption text-critical-text">{brandError}</p>
+              ) : (
+                <div
+                  className="flex items-center justify-between rounded-[var(--r)] px-3 py-2 text-label font-semibold text-white"
+                  style={{ background: draft.brand_color }}
+                  aria-label="How the invoice band will look"
+                >
+                  <span className="truncate">{tenant.name}</span>
+                  <span>INVOICE</span>
+                </div>
+              )}
+            </div>
           </SettingRow>
         </SettingsSection>
 
@@ -1085,7 +1147,7 @@ function ConfigurationTab() {
             last one — it commits all five, not Inventory. */}
         <SettingsActions note={dirty ? "Unsaved changes" : "Saved — every module reads these values."}>
           <Button variant="ghost" onClick={() => setDraft(config)} disabled={!dirty}>Discard</Button>
-          <Button variant="primary" disabled={!dirty || !!typeProblem} onClick={save}>
+          <Button variant="primary" disabled={!dirty || !!typeProblem || !!brandError} onClick={save}>
             <IconCheck size={15} /> Save changes
           </Button>
         </SettingsActions>
@@ -1517,6 +1579,8 @@ function EditPersonModal({ user, open, onClose }: { user: User; open: boolean; o
   const [email, setEmail] = React.useState(user.email);
   const [role, setRole] = React.useState<Role>(user.role);
   const [speciality, setSpeciality] = React.useState(user.speciality ?? "");
+  const [qualifications, setQualifications] = React.useState(user.qualifications ?? "");
+  const [registrationNo, setRegistrationNo] = React.useState(user.registration_no ?? "");
   const [busy, setBusy] = React.useState(false);
   const [refused, setRefused] = React.useState<string | null>(null);
 
@@ -1524,6 +1588,7 @@ function EditPersonModal({ user, open, onClose }: { user: User; open: boolean; o
   React.useEffect(() => {
     if (!open) return;
     setName(user.name); setEmail(user.email); setRole(user.role); setSpeciality(user.speciality ?? "");
+    setQualifications(user.qualifications ?? ""); setRegistrationNo(user.registration_no ?? "");
     setBusy(false); setRefused(null);
   }, [open, user]);
 
@@ -1541,6 +1606,8 @@ function EditPersonModal({ user, open, onClose }: { user: User; open: boolean; o
   if (emailChanged) changes.email = address;
   if (role !== user.role) changes.role = role;
   if (speciality.trim() !== (user.speciality ?? "")) changes.speciality = speciality.trim();
+  if (qualifications.trim() !== (user.qualifications ?? "")) changes.qualifications = qualifications.trim();
+  if (registrationNo.trim() !== (user.registration_no ?? "")) changes.registration_no = registrationNo.trim();
   const dirty = Object.keys(changes).length > 0;
 
   const save = async () => {
@@ -1614,6 +1681,19 @@ function EditPersonModal({ user, open, onClose }: { user: User; open: boolean; o
             <Input value={speciality} onChange={(e) => setSpeciality(e.target.value)} placeholder="Endodontics" />
           </Field>
         </div>
+
+        {role === "doctor" && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Qualifications" help="Printed after their name on a prescription.">
+              <Input value={qualifications} maxLength={160} placeholder="MBBS, MD (General Medicine)"
+                     onChange={(e) => setQualifications(e.target.value)} />
+            </Field>
+            <Field label="Registration number" help="Printed on a prescription, under the signature line.">
+              <Input value={registrationNo} maxLength={60} placeholder="KMC 48213"
+                     onChange={(e) => setRegistrationNo(e.target.value)} />
+            </Field>
+          </div>
+        )}
       </div>
     </Modal>
   );

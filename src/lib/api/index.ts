@@ -570,6 +570,10 @@ export interface UserChanges {
   role?: Role;
   /** "" clears it */
   speciality?: string;
+  /** "" clears it */
+  qualifications?: string;
+  /** "" clears it */
+  registration_no?: string;
 }
 
 /**

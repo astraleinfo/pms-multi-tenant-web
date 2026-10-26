@@ -3,6 +3,7 @@ import type {
   InventoryTransaction, Invoice, LabOrder, Prescription, QueueEntry, Tenant,
   TenantConfig, User, Id,
 } from "@/lib/types";
+import { DEFAULT_BRAND_COLOR } from "@/lib/brand";
 
 /**
  * A snapshot of what this clinic has loaded, and pure reads over it.
@@ -54,6 +55,7 @@ export function defaultConfig(tenantId: Id, prefix = "AS"): TenantConfig {
   return {
     tenant_id: tenantId,
     contact_phone: "", contact_email: "", address: "",
+    registration_no: "", gstin: "", brand_color: DEFAULT_BRAND_COLOR,
     mrn_prefix: prefix, day_start: "09:00", day_end: "17:30",
     slot_minutes: 30, default_duration: 30,
     appointment_types: [

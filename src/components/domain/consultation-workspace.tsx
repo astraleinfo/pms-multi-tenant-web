@@ -7,6 +7,7 @@ import { useClinicDb, useSchema, usePatient } from "@/lib/query/hooks";
 import { selectDoctors, selectEncounters, selectQueue } from "@/lib/data/repository";
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
 import { applySeed, seedFromQueue } from "@/lib/encounter-prefill";
+import { splitVitals } from "@/lib/vitals";
 import type { Encounter, Prescription, PrescriptionItem } from "@/lib/types";
 import { age, formatDate, relativeDay } from "@/lib/format";
 import { PageHeader } from "@/components/ui/page-header";
@@ -116,9 +117,8 @@ export function ConsultationWorkspace({
   const { data: record } = usePatient(patient ?? "");
   const past = record ? selectEncounters(db, t).filter((e) => e.patient_id === record.id && e.id !== original?.id).sort((a, b) => b.date.localeCompare(a.date)) : [];
 
-  /* chief_complaint is a common encounter field — it is driven from its own control */
-  const extraFields = schema.filter((f) => f.field_key !== "chief_complaint" && f.field_key !== "bp" && f.field_key !== "pulse");
-  const vitalFields = schema.filter((f) => f.field_key === "bp" || f.field_key === "pulse");
+  /* the vitals group under their own heading; chief_complaint is driven from its own control */
+  const { vitals: vitalFields, rest: extraFields } = splitVitals(schema);
 
   const followUpDays = followUp === "custom" ? (followUpCustom ? Number(followUpCustom) : null) : followUp ? Number(followUp) : null;
   const visitDate = original?.date ?? today;

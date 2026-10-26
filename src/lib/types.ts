@@ -50,6 +50,11 @@ export interface TenantConfig {
   contact_phone: string;
   contact_email: string;
   address: string;
+  /** What a printed document says about who this clinic is — all optional, printed when set. */
+  registration_no: string;
+  gstin: string;
+  /** The colour of the band on the clinic's invoices: `#rrggbb`, and one white text can be read on. */
+  brand_color: string;
   /* records */
   mrn_prefix: string;
   /* appointments */
@@ -263,6 +268,9 @@ export interface User {
   email: string;
   initials: string;
   speciality?: string;
+  /** Printed after a clinician's name on a prescription, with their registration number. */
+  qualifications?: string | null;
+  registration_no?: string | null;
   /** This doctor's own consultation fee; `null`/unset means bill the clinic default. */
   consultation_fee?: number | null;
   status: AccountStatus;
