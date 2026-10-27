@@ -525,6 +525,8 @@ export interface NewUser {
   email: string;
   role: Role;
   speciality?: string;
+  qualifications?: string;
+  registration_no?: string;
   password?: string;
 }
 
@@ -534,6 +536,8 @@ export const createUser = (input: NewUser) =>
     email: input.email,
     role: input.role,
     speciality: input.speciality?.trim() || null,
+    qualifications: input.qualifications?.trim() || null,
+    registration_no: input.registration_no?.trim() || null,
     password: input.password || null,
   });
 

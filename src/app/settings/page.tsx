@@ -1373,6 +1373,8 @@ function AddPersonModal({ open, onClose }: { open: boolean; onClose: () => void 
   const [email, setEmail] = React.useState("");
   const [role, setRole] = React.useState<Role>("doctor");
   const [speciality, setSpeciality] = React.useState("");
+  const [qualifications, setQualifications] = React.useState("");
+  const [registrationNo, setRegistrationNo] = React.useState("");
   const [touched, setTouched] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [refused, setRefused] = React.useState<string | null>(null);
@@ -1380,6 +1382,7 @@ function AddPersonModal({ open, onClose }: { open: boolean; onClose: () => void 
 
   const reset = React.useCallback(() => {
     setName(""); setEmail(""); setRole("doctor"); setSpeciality("");
+    setQualifications(""); setRegistrationNo("");
     setTouched(false); setBusy(false); setRefused(null); setCreated(null);
   }, []);
 
@@ -1414,6 +1417,8 @@ function AddPersonModal({ open, onClose }: { open: boolean; onClose: () => void 
         email: address,
         role,
         speciality: role === "doctor" ? speciality.trim() || undefined : undefined,
+        qualifications: role === "doctor" ? qualifications.trim() || undefined : undefined,
+        registration_no: role === "doctor" ? registrationNo.trim() || undefined : undefined,
       });
       setCreated(user);
       notify({ tone: "ok", title: "Invitation sent", body: `${user.name} will get an email at ${user.email}.` });
@@ -1526,10 +1531,22 @@ function AddPersonModal({ open, onClose }: { open: boolean; onClose: () => void 
         </Field>
 
         {role === "doctor" && (
-          <Field label="Speciality" help="Shown under their name in the team list and on the diary.">
-            <Input value={speciality} onChange={(e) => setSpeciality(e.target.value)}
-                   placeholder="Endodontics" />
-          </Field>
+          <>
+            <Field label="Speciality" help="Shown under their name in the team list and on the diary.">
+              <Input value={speciality} onChange={(e) => setSpeciality(e.target.value)}
+                     placeholder="Endodontics" />
+            </Field>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Qualifications" help="Printed after their name on a prescription.">
+                <Input value={qualifications} maxLength={160} placeholder="MBBS, MD (General Medicine)"
+                       onChange={(e) => setQualifications(e.target.value)} />
+              </Field>
+              <Field label="Registration number" help="Printed on a prescription, under the signature line.">
+                <Input value={registrationNo} maxLength={60} placeholder="KMC 48213"
+                       onChange={(e) => setRegistrationNo(e.target.value)} />
+              </Field>
+            </div>
+          </>
         )}
 
         <div className="flex gap-2.5 rounded-[var(--r)] border border-line bg-surface-2 p-3.5">
