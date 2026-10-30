@@ -73,6 +73,10 @@ export const IconEye = mk(<><path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.
 export const IconEyeOff = mk(<><path d="M3.5 3.5l17 17" /><path d="M10.6 5.6A9.7 9.7 0 0 1 12 5.5c5 0 8.5 4.3 9.5 6.5a12.6 12.6 0 0 1-2.8 3.7M6.6 6.9C4.6 8.2 3.2 10.2 2.5 12c1 2.2 4.5 6.5 9.5 6.5a9.2 9.2 0 0 0 4.3-1" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></>);
 export const IconDroplet = mk(<><path d="M12 3.2s6 6.3 6 10.2a6 6 0 0 1-12 0c0-3.9 6-10.2 6-10.2Z" /></>);
 export const IconTooth = mk(<><path d="M7.8 3.4C5.4 3.4 4 5.3 4 7.9c0 2.4 1 3.6 1.4 6.2.3 2 .3 6.4 2.2 6.4 1.7 0 1.6-4.6 2.9-4.6h3c1.3 0 1.2 4.6 2.9 4.6 1.9 0 1.9-4.4 2.2-6.4.4-2.6 1.4-3.8 1.4-6.2 0-2.6-1.4-4.5-3.8-4.5-1.6 0-2.4.9-4.2.9s-2.6-.9-4.2-.9Z" /></>);
+/* the tooth, a little smaller, with a pair of arcs either side — it rocks in its socket */
+export const IconToothMobility = mk(<><g transform="translate(2.4 2.4) scale(.8)"><path vectorEffect="non-scaling-stroke" d="M7.8 3.4C5.4 3.4 4 5.3 4 7.9c0 2.4 1 3.6 1.4 6.2.3 2 .3 6.4 2.2 6.4 1.7 0 1.6-4.6 2.9-4.6h3c1.3 0 1.2 4.6 2.9 4.6 1.9 0 1.9-4.4 2.2-6.4.4-2.6 1.4-3.8 1.4-6.2 0-2.6-1.4-4.5-3.8-4.5-1.6 0-2.4.9-4.2.9s-2.6-.9-4.2-.9Z" /></g><path d="M3.4 9.2c-.9 1.2-.9 3.4 0 4.6M20.6 9.2c.9 1.2.9 3.4 0 4.6" /></>);
+/* the tooth with a crack running down from the biting edge */
+export const IconToothFracture = mk(<><path d="M7.8 3.4C5.4 3.4 4 5.3 4 7.9c0 2.4 1 3.6 1.4 6.2.3 2 .3 6.4 2.2 6.4 1.7 0 1.6-4.6 2.9-4.6h3c1.3 0 1.2 4.6 2.9 4.6 1.9 0 1.9-4.4 2.2-6.4.4-2.6 1.4-3.8 1.4-6.2 0-2.6-1.4-4.5-3.8-4.5-1.6 0-2.4.9-4.2.9s-2.6-.9-4.2-.9Z" /><path d="M12.6 4.3 10.6 8.2l3 1.9-2.2 4" /></>);
 export const IconLayers = mk(<><path d="m12 3.5 8.5 4.3L12 12 3.5 7.8 12 3.5Z" /><path d="m3.5 12.2 8.5 4.3 8.5-4.3M3.5 16.4l8.5 4.2 8.5-4.2" /></>);
 export const IconShield = mk(<><path d="M12 3.2 19.5 6v6c0 4.6-3.2 7.4-7.5 8.8C7.7 19.4 4.5 16.6 4.5 12V6L12 3.2Z" /><path d="m9 12 2.2 2.2L15.2 10" /></>);
 export const IconGrid = mk(<><rect x="3.5" y="3.5" width="7" height="7" rx="1.8" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.8" /><rect x="3.5" y="13.5" width="7" height="7" rx="1.8" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.8" /></>);

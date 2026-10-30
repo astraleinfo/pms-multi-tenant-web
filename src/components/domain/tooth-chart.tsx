@@ -1,31 +1,20 @@
 "use client";
 
+import type * as React from "react";
 import { cn } from "@/lib/cn";
-import { IconAlert, IconTooth } from "@/components/ui/icons";
+import {
+  IconAlert, IconTooth, IconToothFracture, IconToothMobility, type IconProps,
+} from "@/components/ui/icons";
+import { nextToothState, toothStateMeta, TOOTH_STATES, type ToothState } from "@/lib/tooth-states";
 
-export type ToothState = "healthy" | "watch" | "caries" | "filling" | "crown" | "extract";
+export { TOOTH_STATES, type ToothState };
 
-/**
- * The states in clinical order, healthy to hopeless, because the legend reads
- * as a scale and the click-cycle walks it.
- *
- * `caries` was missing. Not as an edge case — it is the second commonest value
- * in the column after `filling`, and every encounter carrying one crashed the
- * chart on `TOOTH_STATES.find(...)!`. Active decay and a tooth already booked
- * for removal are both red, and they have to be told apart, so decay takes the
- * soft tint and extraction the solid one: the tooth that is coming out is the
- * only thing on this chart that is filled in.
- */
-export const TOOTH_STATES: Array<{ key: ToothState; label: string; swatch: string; ink: string }> = [
-  { key: "healthy", label: "Sound", swatch: "bg-surface border-line-strong", ink: "text-ink-2" },
-  { key: "watch", label: "Watch", swatch: "bg-warn-soft border-warn-border", ink: "text-warn-text" },
-  { key: "caries", label: "Decay", swatch: "bg-critical-soft border-critical-border", ink: "text-critical-text" },
-  { key: "filling", label: "Filled", swatch: "bg-info-soft border-info-border", ink: "text-info-text" },
-  { key: "crown", label: "Crowned", swatch: "bg-accent-soft border-accent-border", ink: "text-accent-text" },
-  { key: "extract", label: "For extraction", swatch: "bg-critical border-critical", ink: "text-ink-on" },
-];
-
-const CYCLE: ToothState[] = ["healthy", "watch", "caries", "filling", "crown", "extract"];
+/** The glyph a state draws on its tooth. Most states are the plain tooth tinted by their swatch;
+    the two findings that are not a treatment have a shape of their own. */
+const GLYPH: Partial<Record<ToothState, (p: IconProps) => React.ReactElement>> = {
+  mobility: IconToothMobility,
+  fracture: IconToothFracture,
+};
 
 /**
  * What a tooth looks like when the record holds a state this build has never
@@ -54,6 +43,11 @@ const UPPER_LEFT = [21, 22, 23, 24, 25, 26, 27, 28];
 const LOWER_RIGHT = [48, 47, 46, 45, 44, 43, 42, 41];
 const LOWER_LEFT = [31, 32, 33, 34, 35, 36, 37, 38];
 
+const Glyph = ({ state, size }: { state: ToothState; size: number }) => {
+  const Icon = GLYPH[state] ?? IconTooth;
+  return <Icon size={size} />;
+};
+
 export type ToothMap = Record<string, ToothState>;
 
 /** The 32 permanent teeth this chart draws, as FDI numbers. */
@@ -71,11 +65,7 @@ export function ToothChart({
 }) {
   const cycle = (n: number) => {
     if (readOnly || !onChange) return;
-    const cur = value?.[String(n)] ?? "healthy";
-    /* indexOf is -1 for a state that is not in the cycle, and -1 + 1 is 0 —
-       so an unrecognised tooth steps to "healthy" on the first click rather
-       than to "watch". Clicking it is the reader saying they have looked. */
-    const next = CYCLE[(CYCLE.indexOf(cur) + 1) % CYCLE.length];
+    const next = nextToothState(value?.[String(n)] ?? "healthy");
     const copy = { ...value };
     if (next === "healthy") delete copy[String(n)];
     else copy[String(n)] = next;
@@ -84,7 +74,7 @@ export function ToothChart({
 
   const Tooth = ({ n }: { n: number }) => {
     const state = value?.[String(n)] ?? "healthy";
-    const known = TOOTH_STATES.find((s) => s.key === state);
+    const known = toothStateMeta(state);
     const meta = known ?? UNKNOWN;
     return (
       <button
@@ -103,7 +93,7 @@ export function ToothChart({
           readOnly && "cursor-default",
         )}
       >
-        {known ? <IconTooth size={15} /> : <span className="text-micro leading-none">?</span>}
+        {known ? <Glyph state={known.key} size={15} /> : <span className="text-micro leading-none">?</span>}
         <span className="tnum text-micro leading-none">{n}</span>
       </button>
     );
@@ -137,7 +127,9 @@ export function ToothChart({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line-soft pt-3">
         {TOOTH_STATES.map((s) => (
           <span key={s.key} className="flex items-center gap-1.5 text-caption text-ink-2">
-            <span className={cn("h-3 w-3 rounded-[4px] border", s.swatch)} aria-hidden />
+            <span className={cn("flex h-4 w-4 items-center justify-center rounded-[4px] border", s.swatch, s.ink)} aria-hidden>
+              <Glyph state={s.key} size={11} />
+            </span>
             {s.label}
           </span>
         ))}
