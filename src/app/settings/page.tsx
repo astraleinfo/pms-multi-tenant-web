@@ -20,6 +20,10 @@ import {
   appointmentTypes, formatLength, newTypeId, slotTimes, TYPE_LENGTHS, typeListProblem,
 } from "@/lib/appointment-types";
 import { brandProblem, DEFAULT_BRAND_COLOR } from "@/lib/brand";
+import {
+  DEFAULT_MESSAGE, DEFAULT_SUBJECT, PLACEHOLDERS, emailProblem, fillTemplate, invoiceEmailProblem,
+  previewValues, senderNameProblem, subjectProblem, templateProblem,
+} from "@/lib/invoice-email";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader, Legend } from "@/components/ui/card";
 import { Button, Segmented } from "@/components/ui/button";
@@ -27,7 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, EmptyState } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import {
-  ChoiceGroup, Checkbox, Field, Input, NumberInput, SearchInput, Select, Switch,
+  ChoiceGroup, Checkbox, Field, Input, NumberInput, SearchInput, Select, Switch, Textarea,
 } from "@/components/ui/field";
 import {
   SettingLinkRow, SettingRow, SettingToggleRow, SettingValueRow, SettingsActions, SettingsSection,
@@ -925,12 +929,17 @@ function ConfigurationTab() {
   const types = appointmentTypes(draft);
   const typeProblem = typeListProblem(types);
   const brandError = brandProblem(draft.brand_color);
+  const mailError = invoiceEmailProblem(draft);
   const setTypes = (next: AppointmentType[]) => set("appointment_types", next);
   const editType = (id: string, patch: Partial<AppointmentType>) =>
     setTypes(types.map((t) => (t.id === id ? { ...t, ...patch } : t)));
 
+  /* the preview reads like a real one: the clinic's own name, sample figures */
+  const sample = previewValues(tenant.name);
+  const replyTo = draft.invoice_email_reply_to.trim() || draft.contact_email.trim();
+
   const save = () => {
-    if (typeProblem || brandError) return;
+    if (typeProblem || brandError || mailError) return;
     /* the first type is what a new booking starts as, so the old single
        "default length" follows it rather than drifting away from it */
     const cleaned = types.map((t) => ({ ...t, name: t.name.trim() }));
@@ -1130,6 +1139,72 @@ function ConfigurationTab() {
           </SettingRow>
         </SettingsSection>
 
+        <SettingsSection
+          title="Invoice email"
+          hint="How an invoice reads when the desk emails it to a patient, with the PDF attached. It is sent from Astrale’s own mail service on your behalf, so there is no mail password to set up — only where replies go and what it says. Every field is optional."
+        >
+          <SettingRow
+            label="Reply-to address"
+            htmlFor="cfg-mail-reply"
+            hint="Where a patient’s reply lands. Left empty, replies go to the clinic email under Contact; with neither, the email tells the patient replies are not read."
+          >
+            <Input id="cfg-mail-reply" type="email" value={draft.invoice_email_reply_to} maxLength={160}
+                   placeholder={draft.contact_email || "accounts@clinic.example"}
+                   invalid={!!draft.invoice_email_reply_to.trim() && !!emailProblem(draft.invoice_email_reply_to)}
+                   onChange={(e) => set("invoice_email_reply_to", e.target.value.trim())} />
+          </SettingRow>
+          <SettingRow
+            label="Sender name"
+            htmlFor="cfg-mail-name"
+            hint="The name the email is from. It goes out from Astrale’s address on your behalf, so a patient sees “this name via Astrale”. Left empty, the clinic’s name."
+          >
+            <Input id="cfg-mail-name" value={draft.invoice_email_sender_name} maxLength={80}
+                   placeholder={tenant.name}
+                   invalid={!!senderNameProblem(draft.invoice_email_sender_name)}
+                   onChange={(e) => set("invoice_email_sender_name", e.target.value)} />
+          </SettingRow>
+          <SettingRow
+            label="Subject"
+            htmlFor="cfg-mail-subject"
+            hint="Left empty, the subject shown as the placeholder is used."
+          >
+            <Input id="cfg-mail-subject" value={draft.invoice_email_subject} maxLength={200}
+                   placeholder={DEFAULT_SUBJECT}
+                   invalid={!!subjectProblem(draft.invoice_email_subject)}
+                   onChange={(e) => set("invoice_email_subject", e.target.value)} />
+          </SettingRow>
+          <SettingRow
+            label="Message"
+            htmlFor="cfg-mail-message"
+            align="start"
+            hint="The words above the invoice details. A blank line starts a new paragraph. Left empty, the message shown as the placeholder is used."
+          >
+            <Textarea id="cfg-mail-message" rows={6} value={draft.invoice_email_message} maxLength={2000}
+                      placeholder={DEFAULT_MESSAGE}
+                      invalid={!!templateProblem(draft.invoice_email_message)}
+                      onChange={(e) => set("invoice_email_message", e.target.value)} />
+          </SettingRow>
+          <div className="px-4 py-row">
+            <p className="text-caption text-ink-2">
+              Placeholders, filled in for each invoice — click one to add it to the message:
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {PLACEHOLDERS.map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  title={p.label}
+                  onClick={() => set("invoice_email_message", `${draft.invoice_email_message}{${p.key}}`)}
+                  className="tnum rounded-[var(--r-sm)] border border-line bg-surface-2 px-2 py-1 font-mono text-micro text-ink-2 transition-colors hover:border-accent hover:text-accent-text"
+                >
+                  {`{${p.key}}`}
+                </button>
+              ))}
+            </div>
+            {mailError && <p role="alert" className="mt-2.5 text-caption text-critical-text">{mailError}</p>}
+          </div>
+        </SettingsSection>
+
         <SettingsSection title="Inventory">
           <SettingRow
             label="Expiry alert threshold"
@@ -1147,7 +1222,7 @@ function ConfigurationTab() {
             last one — it commits all five, not Inventory. */}
         <SettingsActions note={dirty ? "Unsaved changes" : "Saved — every module reads these values."}>
           <Button variant="ghost" onClick={() => setDraft(config)} disabled={!dirty}>Discard</Button>
-          <Button variant="primary" disabled={!dirty || !!typeProblem || !!brandError} onClick={save}>
+          <Button variant="primary" disabled={!dirty || !!typeProblem || !!brandError || !!mailError} onClick={save}>
             <IconCheck size={15} /> Save changes
           </Button>
         </SettingsActions>
@@ -1197,6 +1272,27 @@ function ConfigurationTab() {
               </div>
             );
           })}
+        </SettingsSection>
+
+        <SettingsSection
+          title="Invoice email preview"
+          hint="What a patient would receive with the values on the left, filled in with sample figures."
+        >
+          <SettingValueRow label="From"
+                           value={`${draft.invoice_email_sender_name.trim() || tenant.name} via Astrale`} />
+          <SettingValueRow label="Replies to"
+                           value={replyTo ? <span className="break-all">{replyTo}</span> : "Not read"} />
+          <div className="px-4 py-row">
+            <p className="text-label font-medium text-ink">
+              {fillTemplate(draft.invoice_email_subject.trim() || DEFAULT_SUBJECT, sample)}
+            </p>
+            <p className="mt-2 whitespace-pre-line text-caption leading-relaxed text-ink-2">
+              {fillTemplate(draft.invoice_email_message.trim() || DEFAULT_MESSAGE, sample)}
+            </p>
+            <p className="mt-2 flex items-center gap-1.5 text-caption text-ink-3">
+              <IconReceipt size={13} /> invoice-{sample.invoice_number}.pdf
+            </p>
+          </div>
         </SettingsSection>
 
         <SettingsSection title="Not configuration">

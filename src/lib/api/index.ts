@@ -938,6 +938,24 @@ export const issueInvoice = async (id: Id) =>
 export const voidInvoice = async (id: Id) =>
   (await post<Invoice>(`/v1/billing/invoices/${id}/void`)).id;
 
+/** What became of one emailed invoice. `failed` is an answer, not an error: the
+ *  mail server would not take it, and `detail` says so in a sentence. */
+export interface InvoiceEmailResult {
+  status: "sent" | "failed";
+  to: string;
+  detail: string;
+  invoice: Invoice;
+}
+
+/**
+ * Email an invoice to its patient, the PDF attached, worded as the clinic set
+ * it up in Settings. `to` left out sends it to the address on their record.
+ * Refused with a sentence when there is nobody to send to (422), or the
+ * invoice is void or still a draft (409).
+ */
+export const sendInvoiceEmail = (id: Id, to?: string) =>
+  post<InvoiceEmailResult>(`/v1/billing/invoices/${id}/send-email`, to ? { to } : {});
+
 /* ---- a patient's account (§3.12) -------------------------------------------
 
    One patient, three counters. The clinic, the lab and the pharmacy each keep

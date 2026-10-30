@@ -74,6 +74,13 @@ export interface TenantConfig {
   currency: "GBP" | "EUR" | "USD" | "INR";
   /* inventory */
   expiry_alert_days: number;
+  /* an invoice emailed to a patient — sent through the platform's mail, so
+     this is only how it reads and where a reply goes. Empty means the default
+     (`@/lib/invoice-email`). */
+  invoice_email_reply_to: string;
+  invoice_email_sender_name: string;
+  invoice_email_subject: string;
+  invoice_email_message: string;
   /** whether the clinic has uploaded its own logo — the image itself is a
    *  separate request, so this page's data never carries the bytes. */
   has_logo: boolean;
@@ -769,6 +776,9 @@ export interface Invoice {
   payments: Payment[];
   /** the server's arithmetic, so a client never has to agree with it */
   totals?: InvoiceTotals;
+  /** the last time it was emailed to the patient (`YYYY-MM-DD HH:mm`), and where to */
+  emailed_at?: string | null;
+  emailed_to?: string | null;
 }
 
 /* ---- history composition (§3.13) ---------------------------------------- */

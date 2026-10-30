@@ -157,6 +157,9 @@ interface AppContextValue {
   addPayment: (invoiceId: Id, amount: number, method: Payment["method"], reference?: string) => void;
   issueInvoice: (id: Id) => void;
   voidInvoice: (id: Id) => void;
+  /** Awaited, and never toasted here: the send dialog says what happened —
+      sent, a mail server that would not take it, or why it was refused. */
+  sendInvoiceEmail: (id: Id, to?: string) => Promise<api.InvoiceEmailResult>;
 
   /* One patient, three counters. Each is billed and settled on its own — the
      pharmacy window taking money for medicine has not taken money for a scan. */
@@ -327,6 +330,10 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     api.addPayment(a.id, a.amount, a.method, a.reference));
   const mIssueInvoice = useTenantMutation((id: Id) => api.issueInvoice(id));
   const mVoidInvoice = useTenantMutation((id: Id) => api.voidInvoice(id));
+  const mSendInvoiceEmail = useTenantMutation(
+    (a: { id: Id; to?: string }) => api.sendInvoiceEmail(a.id, a.to),
+    () => true,
+  );
   const mCounterInvoice = useTenantMutation(
     (a: { patientId: Id; input: Parameters<typeof api.raiseCounterInvoice>[1] }) =>
       api.raiseCounterInvoice(a.patientId, a.input));
@@ -482,6 +489,7 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     addPayment: (id, amount, method, reference) => mAddPayment.mutate({ id, amount, method, reference }),
     issueInvoice: (id) => mIssueInvoice.mutate(id),
     voidInvoice: (id) => mVoidInvoice.mutate(id),
+    sendInvoiceEmail: (id, to) => mSendInvoiceEmail.mutateAsync({ id, to }),
     raiseCounterInvoice: (patientId, input) => mCounterInvoice.mutateAsync({ patientId, input }),
     takeCounterPayment: (patientId, input) => mCounterPayment.mutateAsync({ patientId, input }),
     finalSettlement: (patientId, input) => mFinalSettlement.mutateAsync({ patientId, input }),

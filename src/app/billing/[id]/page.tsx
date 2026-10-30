@@ -7,8 +7,9 @@ import * as api from "@/lib/api";
 import { openPdfBlob } from "@/lib/pdf";
 import { findInvoice, invoiceTotals } from "@/lib/data/repository";
 import { currency, formatDate, formatTime12, pluralise, relativeDay, sentenceCase } from "@/lib/format";
-import type { Payment } from "@/lib/types";
+import type { Invoice as InvoiceRow, Payment } from "@/lib/types";
 import { PAYMENT_METHODS } from "@/lib/payment-methods";
+import { DEFAULT_SUBJECT, emailProblem, fillTemplate, type PlaceholderKey } from "@/lib/invoice-email";
 import { MetaItem, PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -21,7 +22,7 @@ import { RoleGate } from "@/components/domain/gates";
 import { DEPARTMENT_LABEL, StatusPill } from "@/components/domain/status";
 import { PatientChip } from "@/components/domain/patient";
 import {
-  IconArrowRight, IconCalendar, IconCard, IconCheck, IconChevronLeft, IconPrint, IconReceipt, IconX,
+  IconArrowRight, IconCalendar, IconCard, IconCheck, IconChevronLeft, IconMail, IconPrint, IconReceipt, IconX,
 } from "@/components/ui/icons";
 
 export default function InvoicePage(props: PageProps<"/billing/[id]">) {
@@ -34,12 +35,13 @@ export default function InvoicePage(props: PageProps<"/billing/[id]">) {
 }
 
 function Invoice({ id }: { id: string }) {
-  const { session, today, config, addPayment, issueInvoice, voidInvoice, notify } = useApp();
+  const { session, today, config, addPayment, issueInvoice, voidInvoice, notify, can } = useApp();
   const db = useClinicDb();
   const { tenant } = useTenant();
   const t = session.tenantId;
   const invoice = findInvoice(db, t, id);
   const [paying, setPaying] = React.useState(false);
+  const [emailing, setEmailing] = React.useState(false);
   const [pdfBusy, setPdfBusy] = React.useState(false);
   /* Above the bail-out below, not next to where it is read. The invoice is not
      there on the first render and is a moment later, so a hook underneath that
@@ -73,6 +75,16 @@ function Invoice({ id }: { id: string }) {
   const totals = invoiceTotals(invoice);
   const overdue = totals.balance > 0.005 && invoice.due_at < today && invoice.status !== "draft";
 
+  /* Emailing a bill is billing work that messages a patient: the API wants
+     both, so the button is offered only to a role that has both. */
+  const mayEmail = can("billing:write") && can("message:send") && invoice.status !== "void";
+  const patientEmail = patient?.email?.trim() ?? "";
+  const emailBlocked = invoice.status === "draft"
+    ? "Issue this invoice before emailing it — a draft can still change."
+    : !patientEmail
+      ? "There is no email address on this patient’s record. Add one to their record to send this invoice by email."
+      : null;
+
   return (
     <>
       <PageHeader
@@ -85,6 +97,16 @@ function Invoice({ id }: { id: string }) {
             <Button variant="ghost" onClick={() => { void downloadPdf(); }} disabled={pdfBusy}>
               <IconPrint size={15} /> {pdfBusy ? "Preparing…" : "Print / PDF"}
             </Button>
+            {mayEmail && (
+              /* A disabled button sends no hover events, so the reason rides on
+                 a wrapper — and is said in words in "Bill to" as well. */
+              <span title={emailBlocked ?? undefined} className="inline-flex">
+                <Button variant="ghost" onClick={() => setEmailing(true)} disabled={!!emailBlocked}
+                        aria-describedby={emailBlocked ? "invoice-email-blocked" : undefined}>
+                  <IconMail size={15} /> Send by email
+                </Button>
+              </span>
+            )}
             {invoice.status === "draft" && (
               <Button variant="secondary" onClick={() => {
                 issueInvoice(invoice.id);
@@ -119,6 +141,12 @@ function Invoice({ id }: { id: string }) {
               {DEPARTMENT_LABEL[invoice.department]} counter
             </Badge>
             {overdue && <Badge tone="critical" size="sm">Overdue since {formatDate(invoice.due_at)}</Badge>}
+            {invoice.emailed_at && (
+              <MetaItem icon={<IconMail size={13} />}>
+                Emailed {formatDate(invoice.emailed_at.slice(0, 10))} · {formatTime12(invoice.emailed_at.slice(11, 16))}
+                {invoice.emailed_to ? ` to ${invoice.emailed_to}` : ""}
+              </MetaItem>
+            )}
             {invoice.encounter_id && (
               <ButtonLink href={`/consultations/${invoice.encounter_id}`} variant="ghost" size="sm">
                 Linked encounter <IconArrowRight size={13} />
@@ -228,10 +256,18 @@ function Invoice({ id }: { id: string }) {
                   <dl className="mt-4 border-t border-line-soft pt-4">
                     <KV label="Record" value={<span className="tnum font-mono text-label">{patient.mrn}</span>} />
                     <KV label="Phone" value={<span className="tnum font-mono text-label">{patient.phone}</span>} />
+                    <KV label="Email" value={patientEmail
+                      ? <span className="break-all text-label">{patientEmail}</span>
+                      : <span className="text-label text-ink-3">None on file</span>} />
                     {patient.clinical_ext.insurance_number != null && (
                       <KV label="Insurance" value={<span className="tnum font-mono text-label">{String(patient.clinical_ext.insurance_number)}</span>} />
                     )}
                   </dl>
+                  {mayEmail && emailBlocked && (
+                    <p id="invoice-email-blocked" className="mt-3 text-caption leading-snug text-ink-2">
+                      {emailBlocked}
+                    </p>
+                  )}
                 </>
               ) : <p className="text-label text-ink-3">Patient not found.</p>}
             </CardBody>
@@ -281,7 +317,135 @@ function Invoice({ id }: { id: string }) {
           setPaying(false);
         }}
       />
+
+      {mayEmail && !emailBlocked && (
+        <SendEmailModal
+          open={emailing}
+          onClose={() => setEmailing(false)}
+          invoice={invoice}
+          onFile={patientEmail}
+          values={{
+            patient_name: patient?.full_name ?? invoice.patient_name,
+            invoice_number: invoice.number,
+            clinic_name: tenant.name,
+            amount: currency(totals.total),
+            balance: currency(totals.balance),
+            due_date: formatDate(invoice.due_at, "long"),
+          }}
+        />
+      )}
     </>
+  );
+}
+
+/**
+ * Email this invoice to the patient. The address on their record is filled in
+ * and can be changed for this one send (the record is not touched). What the
+ * patient will see — the subject, and where a reply goes — is shown from the
+ * clinic's Settings, so nobody sends blind.
+ */
+function SendEmailModal({
+  open, onClose, invoice, onFile, values,
+}: {
+  open: boolean;
+  onClose: () => void;
+  invoice: InvoiceRow;
+  onFile: string;
+  values: Record<PlaceholderKey, string>;
+}) {
+  const { config, sendInvoiceEmail, notify } = useApp();
+  const [to, setTo] = React.useState(onFile);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (open) { setTo(onFile); setError(null); setBusy(false); }
+  }, [open, onFile]);
+
+  const problem = emailProblem(to);
+  const typed = to.trim();
+  const subject = fillTemplate(config.invoice_email_subject || DEFAULT_SUBJECT, values);
+  const replyTo = config.invoice_email_reply_to || config.contact_email;
+
+  const send = async () => {
+    if (problem) return;
+    setBusy(true);
+    setError(null);
+    try {
+      /* the address on file is the server's to read; only a changed one is sent */
+      const result = await sendInvoiceEmail(invoice.id, typed === onFile ? undefined : typed);
+      if (result.status === "sent") {
+        notify({ tone: "ok", title: "Invoice emailed", body: `Sent to ${result.to}.` });
+        onClose();
+      } else {
+        setError(result.detail);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "The invoice could not be sent.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      width="sm"
+      title="Send invoice by email"
+      subtitle={`${invoice.number} · the PDF is attached`}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={!!problem || busy} onClick={() => { void send(); }}>
+            <IconMail size={15} /> {busy ? "Sending…" : "Send"}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <Field
+          label="Send to"
+          htmlFor="invoice-email-to"
+          required
+          error={typed && problem ? problem : undefined}
+          help={typed === onFile
+            ? "The address on the patient’s record. Change it to send this one somewhere else — the record stays as it is."
+            : "Only this email goes here; the patient’s record is not changed."}
+        >
+          <Input id="invoice-email-to" type="email" value={to} invalid={!!typed && !!problem} autoComplete="off"
+                 onChange={(e) => setTo(e.target.value)} />
+        </Field>
+
+        <dl className="space-y-1.5 rounded-[var(--r)] border border-line bg-surface-2 px-3 py-2.5 text-label">
+          <div className="flex gap-3">
+            <dt className="w-20 shrink-0 text-ink-3">Subject</dt>
+            <dd className="min-w-0 text-ink">{subject}</dd>
+          </div>
+          <div className="flex gap-3">
+            <dt className="w-20 shrink-0 text-ink-3">Replies</dt>
+            <dd className="min-w-0 break-all text-ink">
+              {replyTo || <span className="text-ink-2">Not read — set a reply-to address in Settings</span>}
+            </dd>
+          </div>
+          {invoice.emailed_at && (
+            <div className="flex gap-3">
+              <dt className="w-20 shrink-0 text-ink-3">Last sent</dt>
+              <dd className="min-w-0 text-ink">
+                {formatDate(invoice.emailed_at.slice(0, 10))} · {formatTime12(invoice.emailed_at.slice(11, 16))}
+                {invoice.emailed_to ? ` to ${invoice.emailed_to}` : ""}
+              </dd>
+            </div>
+          )}
+        </dl>
+
+        {error && (
+          <p role="alert" className="rounded-[var(--r)] border border-critical-border bg-critical-soft px-3 py-2.5 text-label text-critical-text">
+            {error}
+          </p>
+        )}
+      </div>
+    </Modal>
   );
 }
 
