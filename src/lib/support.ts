@@ -7,5 +7,10 @@
    next load — no rebuild.
    ========================================================================== */
 
-/** `+91 80 4718 2200` → `+918047182200`, which is what a phone will dial. */
-export const telHref = (phone: string) => `tel:${phone.replace(/[^\d+]/g, "")}`;
+/** `+91 80 4718 2200` → `+918047182200`, which is what a phone will dial.
+ *  A bare ten-digit Indian mobile number (`7305961254`) gets its `+91`, so
+ *  it dials the same from a phone set to another country. */
+export const telHref = (phone: string) => {
+  const dialable = phone.replace(/[^\d+]/g, "");
+  return `tel:${/^[6-9]\d{9}$/.test(dialable) ? `+91${dialable}` : dialable}`;
+};

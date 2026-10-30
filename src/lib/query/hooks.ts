@@ -125,8 +125,8 @@ export function usePlatformSettings() {
  *  menu and the on-hold screen never render a blank phone number or a
  *  `mailto:` with nobody in it. */
 const SUPPORT_FALLBACK: api.PublicSettings = {
-  support_email: "support@astrale.health",
-  support_phone: "+91 80 4718 2200",
+  support_email: "astraleinfo@gmail.com",
+  support_phone: "7305961254",
   support_hours: "Monday to Saturday, 9am – 7pm IST",
 };
 
