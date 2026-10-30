@@ -17,6 +17,7 @@ const MAPS = {
 const LABELS: Record<string, string> = {
   in_consultation: "In consultation",
   partially_dispensed: "Part dispensed",
+  prescribe_only: "Prescribe only",
   partially_paid: "Part paid",
   no_show: "No show",
   checked_in: "Checked in",

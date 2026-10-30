@@ -10,6 +10,7 @@ import {
 } from "@/lib/data/repository";
 
 import { currency, formatDate, formatStamp, pluralise } from "@/lib/format";
+import { awaitsCounter, dispensedHere } from "@/lib/prescription-pricing";
 import { StockReference } from "@/components/domain/stock-reference";
 import type { Prescription } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
@@ -46,7 +47,8 @@ function Pharmacy() {
   const t = session.tenantId;
 
   const all = selectPrescriptions(db, t).sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const counter = all.filter((r) => r.status !== "dispensed");
+  /* a prescription the patient fills elsewhere never comes to the window */
+  const counter = all.filter((r) => awaitsCounter(r.status));
   const [tab, setTab] = React.useState<"counter" | "history">("counter");
   /* a link from a prescription names the one to open: /pharmacy?rx=<id> */
   const wanted = useSearchParams().get("rx");
@@ -185,15 +187,19 @@ function DispensePanel({ rx, onDone }: { rx: Prescription; onDone: () => void })
   /* The panel shows allergies, which a list row does not carry. */
   const { data: patient } = usePatient(rx.patient_id);
 
+  /* only what this clinic hands over; a line bought elsewhere is shown, not dispensed */
+  const handOver = dispensedHere(rx.items);
+  const elsewhere = rx.items.filter((it) => it.dispense === false);
+
   const [lines, setLines] = React.useState<Record<string, { qty: number; batch: string }>>(() =>
-    Object.fromEntries(rx.items.map((it) => {
+    Object.fromEntries(handOver.map((it) => {
       const batches = it.item_id ? batchesFor(db, it.item_id).filter((b) => b.qty > 0) : [];
       return [it.id, { qty: Math.max(0, it.qty - it.dispensed_qty), batch: batches[0]?.batch_no ?? "—" }];
     })));
 
   const anything = Object.values(lines).some((l) => l.qty > 0);
 
-  const shortfalls = rx.items.filter((it) => {
+  const shortfalls = handOver.filter((it) => {
     if (!it.item_id) return false;
     const want = lines[it.id]?.qty ?? 0;
     return want > stockLevel(db, t, it.item_id);
@@ -222,7 +228,7 @@ function DispensePanel({ rx, onDone }: { rx: Prescription; onDone: () => void })
         <div>
           <Legend>Lines to hand over</Legend>
           <ul className="space-y-3">
-            {rx.items.map((it) => {
+            {handOver.map((it) => {
               const remaining = it.qty - it.dispensed_qty;
               const batches = it.item_id ? batchesFor(db, it.item_id) : [];
               const level = it.item_id ? stockLevel(db, t, it.item_id) : null;
@@ -281,6 +287,18 @@ function DispensePanel({ rx, onDone }: { rx: Prescription; onDone: () => void })
               );
             })}
           </ul>
+          {elsewhere.length > 0 && (
+            <div className="mt-3 rounded-[var(--r)] border border-dashed border-line-strong p-3">
+              <p className="text-caption font-medium text-ink-2">For the patient to buy elsewhere — not dispensed here</p>
+              <ul className="mt-1.5 space-y-1">
+                {elsewhere.map((it) => (
+                  <li key={it.id} className="text-label text-ink-2">
+                    {it.medicine} <span className="text-ink-3">{it.strength}</span> · {it.qty}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         {shortfalls.length > 0 && (
@@ -300,7 +318,7 @@ function DispensePanel({ rx, onDone }: { rx: Prescription; onDone: () => void })
             onClick={async () => {
               setBusy(true);
               try {
-                await dispense(rx.id, rx.items.map((it) => ({
+                await dispense(rx.id, handOver.map((it) => ({
                   itemId: it.id, qty: lines[it.id]?.qty ?? 0, batch_no: lines[it.id]?.batch ?? "—",
                 })).filter((l) => l.qty > 0));
               } catch {

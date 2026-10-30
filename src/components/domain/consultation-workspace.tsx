@@ -8,6 +8,7 @@ import { selectDoctors, selectEncounters, selectQueue } from "@/lib/data/reposit
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
 import { applySeed, seedFromQueue } from "@/lib/encounter-prefill";
 import { splitVitals } from "@/lib/vitals";
+import { priceToSend, unitPriceProblem } from "@/lib/prescription-pricing";
 import type { Encounter, Prescription, PrescriptionItem } from "@/lib/types";
 import { age, formatDate, relativeDay } from "@/lib/format";
 import { PageHeader } from "@/components/ui/page-header";
@@ -32,6 +33,8 @@ const toDraft = (it: PrescriptionItem): DraftRxItem => ({
   ...emptyRxItem(),
   item_id: it.item_id ?? null, medicine: it.medicine, strength: it.strength, dosage: it.dosage,
   frequency: it.frequency, duration: it.duration, instructions: it.instructions ?? "", qty: it.qty,
+  /* a line from before the flag was always dispensed here */
+  dispense: it.dispense ?? true, unit_price: it.unit_price ?? null,
 });
 
 /** What a prescription line says, without the row key the editor adds — two
@@ -39,7 +42,7 @@ const toDraft = (it: PrescriptionItem): DraftRxItem => ({
 const rxShape = (items: DraftRxItem[]) =>
   JSON.stringify(items.map((r) => [
     r.item_id ?? null, r.medicine.trim(), r.strength.trim(), r.dosage.trim(), r.frequency.trim(),
-    r.duration.trim(), r.instructions.trim(), r.qty,
+    r.duration.trim(), r.instructions.trim(), r.qty, r.dispense, priceToSend(r),
   ]));
 
 /**
@@ -135,11 +138,17 @@ export function ConsultationWorkspace({
       return;
     }
     const usableRx = rx.filter((r) => r.medicine.trim());
+    const mispriced = usableRx.find((r) => r.dispense && unitPriceProblem(r.unit_price));
+    if (mispriced) {
+      notify({ tone: "warn", title: `Check the price of ${mispriced.medicine.trim()}`, body: unitPriceProblem(mispriced.unit_price) ?? undefined });
+      return;
+    }
     const rxLines = usableRx.map((r) => ({
       item_id: r.item_id,
       medicine: r.medicine.trim(), strength: r.strength.trim(), dosage: r.dosage.trim(),
       frequency: r.frequency.trim(), duration: r.duration.trim(),
       instructions: r.instructions.trim() || undefined, qty: r.qty,
+      dispense: r.dispense, unit_price: priceToSend(r),
     }));
 
     if (original) {

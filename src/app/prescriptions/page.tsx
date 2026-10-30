@@ -4,6 +4,7 @@ import * as React from "react";
 import { usePrescriptionPage, useUsers } from "@/lib/query/hooks";
 import { useDebounced } from "@/lib/debounce";
 import { formatDate, pluralise } from "@/lib/format";
+import { dispensedHere } from "@/lib/prescription-pricing";
 import type { Prescription } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/card";
@@ -16,7 +17,7 @@ import { PatientRef } from "@/components/domain/patient";
 import { PrescriptionDetailModal } from "@/components/domain/prescription-detail";
 import { IconRx } from "@/components/ui/icons";
 
-type Tab = "all" | "pending" | "partially_dispensed" | "dispensed";
+type Tab = "all" | "pending" | "partially_dispensed" | "dispensed" | "prescribe_only";
 
 const PAGE_SIZE = 10;
 
@@ -59,14 +60,17 @@ const prescriptionColumns = col.columns([
     enableSorting: false,
     cell: ({ row }) => <RxPrescriber id={row.original.doctor_id} />,
   }),
-  col.accessor((rx) => rx.items.reduce((s2, i) => s2 + i.dispensed_qty, 0) / Math.max(1, rx.items.reduce((s2, i) => s2 + i.qty, 0)), {
+  /* measured over the lines the clinic hands over — one bought elsewhere is never "left" */
+  col.accessor((rx) => dispensedHere(rx.items).reduce((s2, i) => s2 + i.dispensed_qty, 0) / Math.max(1, dispensedHere(rx.items).reduce((s2, i) => s2 + i.qty, 0)), {
     id: "dispensed",
     header: "Dispensed",
     enableSorting: false,
     meta: { width: 160 },
     cell: ({ row }) => {
-      const total = row.original.items.reduce((a, i) => a + i.qty, 0);
-      const done = row.original.items.reduce((a, i) => a + i.dispensed_qty, 0);
+      const here = dispensedHere(row.original.items);
+      if (here.length === 0) return <span className="text-caption text-ink-3">Bought elsewhere</span>;
+      const total = here.reduce((a, i) => a + i.qty, 0);
+      const done = here.reduce((a, i) => a + i.dispensed_qty, 0);
       return (
         <div className="flex items-center gap-2">
           <Meter value={done} max={total} tone={done >= total ? "ok" : done > 0 ? "info" : "warn"} className="w-20" />
@@ -128,6 +132,7 @@ function Prescriptions() {
     pending: byStatus.pending ?? 0,
     partially_dispensed: byStatus.partially_dispensed ?? 0,
     dispensed: byStatus.dispensed ?? 0,
+    prescribe_only: byStatus.prescribe_only ?? 0,
   };
 
   return (
@@ -152,6 +157,7 @@ function Prescriptions() {
             { value: "pending", label: "Pending", count: counts.pending },
             { value: "partially_dispensed", label: "Part dispensed", count: counts.partially_dispensed },
             { value: "dispensed", label: "Dispensed", count: counts.dispensed },
+            { value: "prescribe_only", label: "Prescribe only", count: counts.prescribe_only },
           ]}
         />
         <SearchInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Patient or medicine"

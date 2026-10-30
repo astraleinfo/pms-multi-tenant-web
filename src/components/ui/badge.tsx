@@ -86,7 +86,7 @@ export const QUEUE_TONE: Record<string, Tone> = {
   no_show: "critical", cancelled: "neutral",
 };
 export const RX_TONE: Record<string, Tone> = {
-  pending: "warn", partially_dispensed: "info", dispensed: "ok",
+  pending: "warn", partially_dispensed: "info", dispensed: "ok", prescribe_only: "neutral",
 };
 export const LAB_TONE: Record<string, Tone> = {
   ordered: "neutral", pending: "warn", resulted: "info", verified: "ok",

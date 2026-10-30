@@ -15,6 +15,7 @@ import type {
 import type {
   ConsentContent, ConsentForm, ConsentTemplate, ConsentVersion, PatientConsent,
 } from "@/lib/consent";
+import { priceToSend } from "@/lib/prescription-pricing";
 import {
   ApiError, del, get, patch as patch_, post, put as put_, requestBlob, setAccessToken, upload,
 } from "./client";
@@ -725,6 +726,16 @@ export const updateEncounter = (id: Id, changes: Partial<Encounter> & { sign?: b
 
 /* ---- prescriptions & pharmacy (§3.8, §3.9) ------------------------------------ */
 
+/** One line as the API takes it. A prescribe-only line goes without a price —
+ *  the server would drop it anyway. */
+const prescriptionLineBody = (
+  i: Omit<PrescriptionItem, "id" | "prescription_id" | "dispensed_qty" | "status">,
+) => ({
+  medicine: i.medicine, strength: i.strength, dosage: i.dosage, frequency: i.frequency,
+  duration: i.duration, instructions: i.instructions, qty: i.qty, item_id: i.item_id,
+  dispense: i.dispense, unit_price: priceToSend(i),
+});
+
 export const createPrescription = async (
   encounterId: Id,
   _patientId: Id,
@@ -732,10 +743,7 @@ export const createPrescription = async (
   items: Array<Omit<PrescriptionItem, "id" | "prescription_id" | "dispensed_qty" | "status">>,
 ) => (await post<Prescription>(`/v1/encounters/${encounterId}/prescriptions`, {
   /* the patient and the prescriber come from the encounter and the session */
-  items: items.map((i) => ({
-    medicine: i.medicine, strength: i.strength, dosage: i.dosage, frequency: i.frequency,
-    duration: i.duration, instructions: i.instructions, qty: i.qty, item_id: i.item_id,
-  })),
+  items: items.map(prescriptionLineBody),
 })).id;
 
 /** The prescription as it should now read, until the visit is billed. An
@@ -744,10 +752,7 @@ export const replacePrescription = async (
   encounterId: Id,
   items: Array<Omit<PrescriptionItem, "id" | "prescription_id" | "dispensed_qty" | "status">>,
 ) => (await put_<Prescription | null>(`/v1/encounters/${encounterId}/prescription`, {
-  items: items.map((i) => ({
-    medicine: i.medicine, strength: i.strength, dosage: i.dosage, frequency: i.frequency,
-    duration: i.duration, instructions: i.instructions, qty: i.qty, item_id: i.item_id,
-  })),
+  items: items.map(prescriptionLineBody),
 }))?.id ?? null;
 
 export const dispense = async (

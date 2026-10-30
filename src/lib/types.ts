@@ -81,6 +81,9 @@ export interface TenantConfig {
   invoice_email_sender_name: string;
   invoice_email_subject: string;
   invoice_email_message: string;
+  /* prescriptions — a clinic that prescribes but sells no medicine starts
+     every new line as "prescribe only"; each line can still say otherwise */
+  prescribe_only_default: boolean;
   /** whether the clinic has uploaded its own logo — the image itself is a
    *  separate request, so this page's data never carries the bytes. */
   has_logo: boolean;
@@ -444,7 +447,8 @@ export type NewEncounter = Omit<
   Encounter, "id" | "tenant_id" | "status" | "patient_name" | "patient_mrn"
 >;
 
-export type PrescriptionItemStatus = "pending" | "partially_dispensed" | "dispensed";
+/** `prescribe_only`: the patient buys it elsewhere — nothing for the pharmacy to hand over. */
+export type PrescriptionItemStatus = "pending" | "partially_dispensed" | "dispensed" | "prescribe_only";
 
 export interface PrescriptionItem {
   id: Id;
@@ -459,9 +463,14 @@ export interface PrescriptionItem {
   qty: number;
   dispensed_qty: number;
   status: PrescriptionItemStatus;
+  /** Dispensed from this clinic. False is "prescribe only": never dispensed, never billed, no price. */
+  dispense: boolean;
+  /** What one unit bills at; null on a prescribe-only line, or one nobody priced. */
+  unit_price: number | null;
 }
 
-export type PrescriptionStatus = "pending" | "partially_dispensed" | "dispensed";
+/** `prescribe_only` when no line on it is dispensed here. */
+export type PrescriptionStatus = "pending" | "partially_dispensed" | "dispensed" | "prescribe_only";
 
 export interface Prescription {
   id: Id;

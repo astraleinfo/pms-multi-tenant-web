@@ -12,6 +12,7 @@ import {
   selectInvoices, selectLabOrders, selectPrescriptions, userName,
 } from "@/lib/data/repository";
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
+import { awaitsCounter } from "@/lib/prescription-pricing";
 import {
   age, currency, daysBetween, formatDate, formatTime12, pluralise, relativeDay,
   today as todayIso,
@@ -201,7 +202,7 @@ function PatientRecord({ patient, initial }: { patient: Patient; initial: Tab })
   const unsigned = encounters.filter((e) => e.status === "draft").length;
   const seesLab = can("lab:read");
   const seesBilling = can("billing:read");
-  const undispensed = prescriptions.filter((r) => r.status !== "dispensed").length;
+  const undispensed = prescriptions.filter((r) => awaitsCounter(r.status)).length;
   const unverified = labs.filter((l) => l.status !== "verified").length;
 
   /* Who actually sees this person.
@@ -566,9 +567,13 @@ function PatientRecord({ patient, initial }: { patient: Patient; initial: Tab })
                                   <span className="text-ink">
                                     {it.medicine} <span className="text-ink-3">{it.strength}</span> — {it.dosage}, {it.frequency}, {it.duration}
                                   </span>
-                                  <span className="tnum shrink-0 font-mono text-caption text-ink-3">
-                                    {it.dispensed_qty}/{it.qty}
-                                  </span>
+                                  {it.dispense === false ? (
+                                    <span className="shrink-0 text-caption text-ink-3">Bought elsewhere</span>
+                                  ) : (
+                                    <span className="tnum shrink-0 font-mono text-caption text-ink-3">
+                                      {it.dispensed_qty}/{it.qty}
+                                    </span>
+                                  )}
                                 </li>
                               ))}
                             </ul>

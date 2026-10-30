@@ -67,6 +67,7 @@ export function defaultConfig(tenantId: Id, prefix = "AS"): TenantConfig {
     expiry_alert_days: 90,
     invoice_email_reply_to: "", invoice_email_sender_name: "",
     invoice_email_subject: "", invoice_email_message: "",
+    prescribe_only_default: false,
     has_logo: false,
   };
 }

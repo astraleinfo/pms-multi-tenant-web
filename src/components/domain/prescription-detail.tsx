@@ -4,7 +4,8 @@ import * as React from "react";
 import * as api from "@/lib/api";
 import { useApp } from "@/lib/store/app-store";
 import { useDoctors, usePatient, usePrescription, useUsers } from "@/lib/query/hooks";
-import { formatDate } from "@/lib/format";
+import { currency, formatDate } from "@/lib/format";
+import { anyPriced, awaitsCounter, dispensedTotal, lineTotal } from "@/lib/prescription-pricing";
 import { openPdfBlob } from "@/lib/pdf";
 import { encounterHref, pharmacyCounterHref } from "@/lib/routes";
 import type { Prescription } from "@/lib/types";
@@ -62,7 +63,7 @@ export function PrescriptionDetailModal({ prescription: opened, onClose }: {
             <Button variant="ghost" onClick={() => void print(rx.encounter_id)} disabled={printing}>
               <IconPrint size={14} /> {printing ? "Preparing…" : "Print"}
             </Button>
-            {rx.status !== "dispensed" && (
+            {awaitsCounter(rx.status) && (
               <ButtonLink href={pharmacyCounterHref(rx.id)} variant="primary">
                 Dispense at the counter <IconArrowRight size={14} />
               </ButtonLink>
@@ -112,19 +113,38 @@ export function PrescriptionDetailModal({ prescription: opened, onClose }: {
                   {it.instructions && (
                     <p className="mt-1 text-caption italic text-ink-3">{it.instructions}</p>
                   )}
-                  <div className="mt-2.5 flex items-center gap-3">
-                    <Meter value={it.dispensed_qty} max={it.qty}
-                           tone={it.dispensed_qty >= it.qty ? "ok" : it.dispensed_qty > 0 ? "info" : "warn"} className="flex-1" />
-                    <span className="tnum shrink-0 font-mono text-caption text-ink-2">
-                      {it.dispensed_qty} of {it.qty}
-                    </span>
-                  </div>
-                  {!it.item_id && (
-                    <Badge tone="neutral" size="sm" className="mt-2">Not linked to stock</Badge>
+                  {it.dispense === false ? (
+                    <p className="mt-2.5 text-caption text-ink-3">
+                      Quantity {it.qty} · for the patient to buy elsewhere, so nothing is dispensed or billed here.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="mt-2.5 flex items-center gap-3">
+                        <Meter value={it.dispensed_qty} max={it.qty}
+                               tone={it.dispensed_qty >= it.qty ? "ok" : it.dispensed_qty > 0 ? "info" : "warn"} className="flex-1" />
+                        <span className="tnum shrink-0 font-mono text-caption text-ink-2">
+                          {it.dispensed_qty} of {it.qty}
+                        </span>
+                      </div>
+                      {it.unit_price != null && (
+                        <p className="tnum mt-1.5 font-mono text-caption text-ink-2">
+                          {it.qty} × {currency(it.unit_price)} = {currency(lineTotal(it) ?? 0)}
+                        </p>
+                      )}
+                      {!it.item_id && (
+                        <Badge tone="neutral" size="sm" className="mt-2">Not linked to stock</Badge>
+                      )}
+                    </>
                   )}
                 </li>
               ))}
             </ul>
+            {anyPriced(rx.items) && (
+              <p className="mt-3 flex items-baseline justify-between border-t border-line-soft pt-2.5 text-label text-ink-2">
+                <span>Dispensed from the clinic</span>
+                <span className="tnum font-mono font-medium text-ink">{currency(dispensedTotal(rx.items))}</span>
+              </p>
+            )}
           </div>
         </div>
       )}

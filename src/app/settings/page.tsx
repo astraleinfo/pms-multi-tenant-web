@@ -1140,6 +1140,18 @@ function ConfigurationTab() {
         </SettingsSection>
 
         <SettingsSection
+          title="Prescriptions"
+          hint="For a practice that writes prescriptions but does not sell medicine: switched on, every new line starts as “Prescribe only” — the patient buys it elsewhere, so it has no price, takes nothing from stock and adds nothing to the bill."
+        >
+          <SettingToggleRow
+            label="Prescribe only by default"
+            hint="Each line can still be switched to “Dispense from clinic” while the prescription is written. Prescriptions already written keep what they say."
+          >
+            <Switch checked={draft.prescribe_only_default} onChange={(v) => set("prescribe_only_default", v)} />
+          </SettingToggleRow>
+        </SettingsSection>
+
+        <SettingsSection
           title="Invoice email"
           hint="How an invoice reads when the desk emails it to a patient, with the PDF attached. It is sent from Astrale’s own mail service on your behalf, so there is no mail password to set up — only where replies go and what it says. Every field is optional."
         >

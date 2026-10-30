@@ -11,6 +11,7 @@ import {
 import { CLINICAL_TYPES } from "@/lib/data/catalog";
 import { addDays, currency, formatDate, relativeDay } from "@/lib/format";
 import { openPdfBlob } from "@/lib/pdf";
+import { anyPriced, lineTotal } from "@/lib/prescription-pricing";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader, Legend } from "@/components/ui/card";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -210,7 +211,11 @@ function EncounterView({ id, offerFollowUp }: { id: string; offerFollowUp: boole
                     <TableWrap>
                       <Table>
                         <THead>
-                          <tr><TH>Medicine</TH><TH>Directions</TH><TH align="right">Dispensed</TH></tr>
+                          <tr>
+                            <TH>Medicine</TH><TH>Directions</TH>
+                            {anyPriced(rx.items) && <TH align="right">Amount</TH>}
+                            <TH align="right">Dispensed</TH>
+                          </tr>
                         </THead>
                         <TBody>
                           {rx.items.map((it) => (
@@ -218,12 +223,27 @@ function EncounterView({ id, offerFollowUp }: { id: string; offerFollowUp: boole
                               <TD>
                                 <span className="block font-medium text-ink">{it.medicine}</span>
                                 <span className="block text-caption text-ink-3">{it.strength}</span>
+                                {it.dispense === false && (
+                                  <span className="block text-caption italic text-ink-3">Patient buys elsewhere</span>
+                                )}
                               </TD>
                               <TD className="text-ink-2">
                                 {it.dosage}, {it.frequency}, {it.duration}
                                 {it.instructions && <span className="block text-caption text-ink-3">{it.instructions}</span>}
                               </TD>
-                              <TD align="right" className="tnum font-mono">{it.dispensed_qty}/{it.qty}</TD>
+                              {anyPriced(rx.items) && (
+                                <TD align="right" className="tnum font-mono text-ink-2">
+                                  {lineTotal(it) !== null ? (
+                                    <>
+                                      {currency(lineTotal(it) ?? 0)}
+                                      <span className="block text-caption text-ink-3">{it.qty} × {currency(it.unit_price ?? 0)}</span>
+                                    </>
+                                  ) : "—"}
+                                </TD>
+                              )}
+                              <TD align="right" className="tnum font-mono">
+                                {it.dispense === false ? <span className="font-sans text-caption text-ink-3">Not here</span> : `${it.dispensed_qty}/${it.qty}`}
+                              </TD>
                             </TR>
                           ))}
                         </TBody>
