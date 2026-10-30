@@ -23,11 +23,13 @@ export type ToothState =
  * soft tint and extraction the solid one: the tooth that is coming out is the
  * only thing on this chart that is filled in.
  *
- * Mobility takes violet and fracture the solid ink. Every red, amber, blue,
- * green and neutral tone is already spoken for, and neither finding is a
- * grade of decay, so neither borrows a colour that means one. Colour is also
- * never the only signal: each state has its own glyph on the tooth and its
- * name in the title.
+ * Mobility takes violet and fracture the solid ink. Red, amber, blue and
+ * neutral are already spoken for, and neither finding is a grade of decay, so
+ * neither borrows a colour that means one. Green was considered for mobility
+ * and rejected: it reads as "sound / done" beside Sound and Filled. Violet is
+ * normally meaning-free; globals.css records this chart as the one place it
+ * names a finding. Colour is also never the only signal: each state has its
+ * own glyph on the tooth and its name in the title.
  */
 export const TOOTH_STATES: Array<{ key: ToothState; label: string; swatch: string; ink: string }> = [
   { key: "healthy", label: "Sound", swatch: "bg-surface border-line-strong", ink: "text-ink-2" },

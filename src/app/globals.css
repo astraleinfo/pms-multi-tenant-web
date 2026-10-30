@@ -196,9 +196,15 @@
   --ok:       #17805A;  --ok-soft:       #E7F3EE;  --ok-border:       #B5DAC7;  --ok-text:       #0E6447;
   --info:     #27798F;  --info-soft:     #E7F1F5;  --info-border:     #B4D3DF;  --info-text:     #155F76;
   --neutral:  #59657A;  --neutral-soft:  #EEF1F7;  --neutral-border:  #DCE2EC;  --neutral-text:  #4C566B;
-  /* Violet carries no clinical meaning and is not allowed to acquire one: it
-     exists so a screen of six panels can be told apart at a glance without
-     borrowing red, amber or green, which do mean something here. */
+  /* Violet carries no clinical severity or status and is not allowed to acquire
+     one: it exists so a screen of six panels can be told apart at a glance
+     without borrowing red, amber or green, which do mean something here.
+     One deliberate exception: the tooth chart paints "Mobility" with it
+     (lib/tooth-states.ts). Mobility is a finding, not a grade of decay or a
+     treatment, so it must not borrow the red/amber/blue scale; and green was
+     rejected because it reads as "sound / done" beside Sound and Filled,
+     which is the wrong thing to say about a loose tooth. The state is still
+     named by its glyph and title, never by the colour alone. */
   --violet:   #7A5CC4;  --violet-soft:   #F0EBFB;  --violet-border:   #DCCFF4;  --violet-text:   #5B3FA6;
 
   /* categorical series — separated for CVD, chroma pulled back off neon */
