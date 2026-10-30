@@ -1,11 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { useApp } from "@/lib/store/app-store";
+import { useApp, useTenant } from "@/lib/store/app-store";
 import { useClinicDb } from "@/lib/query/hooks";
 import { selectAppointments, selectDoctors } from "@/lib/data/repository";
-import { formatTime12, formatDate } from "@/lib/format";
-import { addMinutes, appointmentTypes, formatLength, slotTimes } from "@/lib/appointment-types";
+import { clinicClock, formatTime12, formatDate } from "@/lib/format";
+import {
+  addMinutes, appointmentTypes, formatLength, passedSlots, slotHasPassed, slotTimes,
+} from "@/lib/appointment-types";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { ChoiceGroup, Field, Input, Select, Textarea } from "@/components/ui/field";
@@ -36,8 +38,16 @@ export function AppointmentModal({
   onBooked?: (booked: { id: string; date: string; time: string }) => void;
 }) {
   const { session, today, config, createAppointment, conflictsFor, notify } = useApp();
+  const { tenant } = useTenant();
   const db = useClinicDb();
   const doctors = selectDoctors(db, session.tenantId);
+  /* the clinic's clock, read once a minute: a slot stops being offered when
+     its time goes, not whenever the dialog happens to re-render */
+  const [now, setNow] = React.useState(() => clinicClock(tenant.timezone));
+  React.useEffect(() => {
+    const tick = setInterval(() => setNow(clinicClock(tenant.timezone)), 60_000);
+    return () => clearInterval(tick);
+  }, [tenant.timezone]);
   /* The type decides the length and the interval together: a 45-minute visit
      is offered at 45-minute steps, so every slot on screen is one it fits. */
   const types = appointmentTypes(config);
@@ -70,8 +80,12 @@ export function AppointmentModal({
     /* open on a slot the clinician can actually take, not a fixed 09:00 */
     const first = (defaultReason && types.find((t) => sameName(t.name, defaultReason))) || types[0];
     const times = slotTimes(config.day_start, config.day_end, first?.minutes ?? duration);
-    const firstFree = times.find((t) => conflictsFor(doc, day, t, first?.minutes ?? duration).length === 0)
-      ?? times[0] ?? "";
+    /* and not one that has already gone, or "book now" opens on this morning */
+    const clockNow = clinicClock(tenant.timezone);
+    setNow(clockNow);
+    const stillOpen = (t: string) => !slotHasPassed({ date: day, time: t, today, now: clockNow });
+    const firstFree = times.find((t) => stillOpen(t) && conflictsFor(doc, day, t, first?.minutes ?? duration).length === 0)
+      ?? times.find(stillOpen) ?? times[0] ?? "";
     setPatient(defaultPatient ?? null);
     setDoctor(doc);
     setDate(day);
@@ -92,6 +106,10 @@ export function AppointmentModal({
   }, [open, doctor, doctors]);
 
   const conflicts = doctor && date && time ? conflictsFor(doctor, date, time, duration) : [];
+  const passed = React.useMemo(
+    () => passedSlots(SLOT_TIMES, { date, today, now }),
+    [SLOT_TIMES, date, today, now],
+  );
   const taken = React.useMemo(() => {
     const set = new Set<string>();
     for (const t of SLOT_TIMES) if (conflictsFor(doctor, date, t, duration).length) set.add(t);
@@ -105,7 +123,8 @@ export function AppointmentModal({
     const next = types.find((t) => t.id === id);
     if (!next) return;
     const times = slotTimes(config.day_start, config.day_end, next.minutes);
-    const free = (t: string) => conflictsFor(doctor, date, t, next.minutes).length === 0;
+    const gone = passedSlots(times, { date, today, now });
+    const free = (t: string) => !gone.has(t) && conflictsFor(doctor, date, t, next.minutes).length === 0;
     if (!times.includes(time) || !free(time)) setTime(times.find(free) ?? times[0] ?? "");
     if (!reason.trim() || types.some((t) => t.name === reason.trim())) setReason(next.name);
     setTypeId(id);
@@ -113,6 +132,18 @@ export function AppointmentModal({
 
 
   const past = !!date && date < today;
+  /* today, and a time already behind the clinic's clock */
+  const timePassed = !!date && !!time && slotHasPassed({ date, time, today, now });
+
+  /* Moving to today with a morning slot chosen: step to one that is still open. */
+  const chooseDate = (next: string) => {
+    setDate(next);
+    if (next && time && slotHasPassed({ date: next, time, today, now })) {
+      const open = SLOT_TIMES.find((t) =>
+        !slotHasPassed({ date: next, time: t, today, now }) && conflictsFor(doctor, next, t, duration).length === 0);
+      if (open) setTime(open);
+    }
+  };
   /* one appointment per patient per day — a second is the desk booking twice */
   const sameDay = patient && date
     ? selectAppointments(db, session.tenantId).find((a) =>
@@ -120,7 +151,7 @@ export function AppointmentModal({
         && (a.status === "scheduled" || a.status === "confirmed" || a.status === "checked_in"))
     : undefined;
 
-  const invalid = !patient || !doctor || !time || !reason.trim() || conflicts.length > 0 || past || !!sameDay;
+  const invalid = !patient || !doctor || !time || !reason.trim() || conflicts.length > 0 || past || timePassed || !!sameDay;
 
   return (
     <Modal
@@ -135,7 +166,7 @@ export function AppointmentModal({
           <Button
             variant="primary"
             /* a clash is not a validation message you can dismiss — the slot is gone */
-            disabled={conflicts.length > 0 || past || !!sameDay || saving}
+            disabled={conflicts.length > 0 || past || timePassed || !!sameDay || saving}
             onClick={async () => {
               setTouched(true);
               if (invalid || saving) return;
@@ -177,7 +208,7 @@ export function AppointmentModal({
             </Select>
           </Field>
           <Field label="Date" required error={past ? "Choose today or a later date." : null}>
-            <Input type="date" value={date} min={today} onChange={(e) => setDate(e.target.value)} />
+            <Input type="date" value={date} min={today} onChange={(e) => chooseDate(e.target.value)} />
           </Field>
         </div>
 
@@ -202,7 +233,12 @@ export function AppointmentModal({
               A {formatLength(duration)} visit doesn’t fit between the clinic’s opening and closing times.
             </p>
           )}
-          <SlotGrid times={SLOT_TIMES} value={time} onChange={setTime} taken={taken} />
+          <SlotGrid times={SLOT_TIMES} value={time} onChange={setTime} taken={taken} past={passed} />
+          {timePassed && (
+            <p className="mt-2 text-label text-critical-text">
+              That time has already passed today. Choose a later slot.
+            </p>
+          )}
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
