@@ -9,6 +9,7 @@ import { freeSlots, formatLength } from "@/lib/appointment-types";
 import {
   addDays, clinicClock, formatDate, formatStamp, formatTime12, weekdayShort,
 } from "@/lib/format";
+import { canMoveToday } from "@/lib/follow-up-booking";
 import type { FollowUp, FollowUpCall, FollowUpOutcome } from "@/lib/types";
 import type { NewFollowUpCall } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,7 @@ import { IconCheck, IconX } from "@/components/ui/icons";
 const RESCHEDULE_DAYS = 14;
 
 /** What the desk can say came of a call — in the order it most often happens. */
-type Choice = Exclude<FollowUpOutcome, "rescheduled">;
+type Choice = FollowUpOutcome;
 
 const CHOICES: Array<{ value: Choice; label: string }> = [
   { value: "confirmed", label: "Confirmed" },
@@ -33,6 +34,14 @@ const CHOICES: Array<{ value: Choice; label: string }> = [
   { value: "declined", label: "Declined" },
   { value: "call_back", label: "Call back later" },
 ];
+
+/**
+ * The patient is visiting today and needs a different time. It is offered last,
+ * and only on today's bookings, so 1–5 mean the same thing on every row. Unlike
+ * "Need to reschedule" — which can be saved with no new time, to ring back —
+ * it is only complete once a time is picked.
+ */
+const MOVE_TODAY: { value: Choice; label: string } = { value: "rescheduled", label: "Reschedule today" };
 
 const DOT: Record<string, string> = {
   ok: "bg-ok", warn: "bg-warn", critical: "bg-critical", violet: "bg-violet", neutral: "bg-neutral",
@@ -54,8 +63,9 @@ export function FollowUpSheet({
   row: FollowUp;
   onClose: () => void;
 }) {
-  const { recordFollowUpCall, notify, can } = useApp();
+  const { recordFollowUpCall, notify, can, today } = useApp();
   const a = row.appointment;
+  const choices = canMoveToday(a, today) ? [...CHOICES, MOVE_TODAY] : CHOICES;
   const firstName = a.patient_name.split(" ")[0] ?? a.patient_name;
 
   const [outcome, setOutcome] = React.useState<Choice | null>(null);
@@ -68,10 +78,11 @@ export function FollowUpSheet({
   React.useEffect(() => { sheet.current?.focus(); }, []);
 
   const mayWrite = can("appointment:write");
-  const moving = outcome === "reschedule_required" && slot !== null;
+  const sameDay = outcome === "rescheduled";
+  const moving = (outcome === "reschedule_required" || sameDay) && slot !== null;
 
   const save = async () => {
-    if (!outcome || saving) return;
+    if (!outcome || saving || (sameDay && !slot)) return;
     const call: NewFollowUpCall = moving
       ? {
           outcome: "rescheduled",
@@ -108,9 +119,9 @@ export function FollowUpSheet({
     }
     if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
     const index = Number(e.key) - 1;
-    if (index >= 0 && index < CHOICES.length) {
+    if (index >= 0 && index < choices.length) {
       e.preventDefault();
-      setOutcome(CHOICES[index].value);
+      setOutcome(choices[index].value);
     }
   };
 
@@ -130,7 +141,7 @@ export function FollowUpSheet({
               What did {firstName} say?
             </legend>
             <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Outcome">
-              {CHOICES.map((c, i) => {
+              {choices.map((c, i) => {
                 const on = outcome === c.value;
                 return (
                   <button
@@ -158,8 +169,8 @@ export function FollowUpSheet({
             </div>
           </fieldset>
 
-          {outcome === "reschedule_required" && (
-            <ReschedulePicker row={row} value={slot} onChange={setSlot} />
+          {(outcome === "reschedule_required" || sameDay) && (
+            <ReschedulePicker row={row} value={slot} onChange={setSlot} todayOnly={sameDay} />
           )}
 
           {outcome === "declined" && (
@@ -189,7 +200,7 @@ export function FollowUpSheet({
             <Button variant="ghost" onClick={onClose}>
               <IconX size={14} /> Close
             </Button>
-            <Button variant="primary" onClick={save} disabled={!outcome || saving || !mayWrite}>
+            <Button variant="primary" onClick={save} disabled={!outcome || saving || !mayWrite || (sameDay && !slot)}>
               {saving ? <Spinner size={14} /> : <IconCheck size={15} />}
               {saving ? "Saving…" : actionLabel(outcome, moving ? slot : null, cancel)}
             </Button>
@@ -217,11 +228,13 @@ export function FollowUpSheet({
  * booking dialog; the server checks again, under a lock, when it is saved.
  */
 function ReschedulePicker({
-  row, value, onChange,
+  row, value, onChange, todayOnly = false,
 }: {
   row: FollowUp;
   value: { doctor: string; date: string; time: string } | null;
   onChange: (slot: { doctor: string; date: string; time: string } | null) => void;
+  /** a same-day time change: nothing but today's free times is offered */
+  todayOnly?: boolean;
 }) {
   const { today, config, conflictsFor } = useApp();
   const { tenant } = useTenant();
@@ -242,7 +255,7 @@ function ReschedulePicker({
 
   const days = React.useMemo(() => {
     const out: Array<{ date: string; times: string[] }> = [];
-    for (let i = 0; i < RESCHEDULE_DAYS; i++) {
+    for (let i = 0; i < (todayOnly ? 1 : RESCHEDULE_DAYS); i++) {
       const d = addDays(today, i);
       const times = freeSlots({
         dayStart: config.day_start, dayEnd: config.day_end, minutes, date: d, today, now,
@@ -253,7 +266,7 @@ function ReschedulePicker({
       if (times.length) out.push({ date: d, times });
     }
     return out;
-  }, [today, now, config.day_start, config.day_end, minutes, doctor, conflictsFor, a.id, a.doctor_id, a.date, a.time]);
+  }, [today, now, todayOnly, config.day_start, config.day_end, minutes, doctor, conflictsFor, a.id, a.doctor_id, a.date, a.time]);
 
   /* Keep the chosen day if it still has room — after a refused booking the
      diary is re-read and the slot that went disappears from the grid. */
@@ -284,18 +297,21 @@ function ReschedulePicker({
           </Select>
         </div>
         <p className="text-caption text-ink-3">
-          A {formatLength(minutes)} visit, next {RESCHEDULE_DAYS} days
+          A {formatLength(minutes)} visit, {todayOnly ? "today" : `next ${RESCHEDULE_DAYS} days`}
         </p>
       </div>
 
       {days.length === 0 ? (
         <p className="rounded-[var(--r-sm)] bg-surface-2 px-3 py-2.5 text-label text-ink-2">
-          {userName(db, doctor)} has no free {formatLength(minutes)} slot in the next {RESCHEDULE_DAYS} days.
-          Try another clinician, or save this as needing a reschedule and ring back.
+          {todayOnly
+            ? <>{userName(db, doctor)} has no free {formatLength(minutes)} slot left today.
+                Try another clinician, or choose Need to reschedule to find another day.</>
+            : <>{userName(db, doctor)} has no free {formatLength(minutes)} slot in the next {RESCHEDULE_DAYS} days.
+                Try another clinician, or save this as needing a reschedule and ring back.</>}
         </p>
       ) : (
         <>
-          <div>
+          {!todayOnly && <div>
             <p className="mb-1.5 text-label font-medium text-ink">Day</p>
             <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1" role="radiogroup" aria-label="Day">
               {days.map((d) => {
@@ -326,7 +342,7 @@ function ReschedulePicker({
                 );
               })}
             </div>
-          </div>
+          </div>}
 
           {chosen && (
             <div>
@@ -345,7 +361,9 @@ function ReschedulePicker({
       )}
       {!value && days.length > 0 && (
         <p className="text-caption text-ink-3">
-          Pick a time to book it now, or save without one if the patient will ring back.
+          {todayOnly
+            ? "Pick the time the patient will come at."
+            : "Pick a time to book it now, or save without one if the patient will ring back."}
         </p>
       )}
     </div>
@@ -401,6 +419,7 @@ const NOTE_HINT: Record<Choice, string> = {
   no_answer: "Voicemail left, number unobtainable…",
   declined: "Why, if they said",
   call_back: "When to try again",
+  rescheduled: "Why the time changed, if they said",
 };
 
 function actionLabel(
@@ -408,6 +427,8 @@ function actionLabel(
 ) {
   switch (outcome) {
     case "confirmed": return "Mark confirmed";
+    case "rescheduled":
+      return slot ? `Move to ${formatTime12(slot.time)}` : "Choose a new time";
     case "reschedule_required":
       return slot ? `Book ${formatTime12(slot.time)}, ${formatDate(slot.date, "day")}` : "Save, reschedule later";
     case "no_answer": return "Log no answer";

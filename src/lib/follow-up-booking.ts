@@ -47,6 +47,16 @@ export function followUpPrefill({
   return { patient: patientId, doctor: doctorId, date: followUpBookingDate(due, today), reason: FOLLOW_UP_REASON };
 }
 
+/**
+ * Can the call list move this booking to another time today? The patient is
+ * visiting today and needs a different hour: only a booking that is still to
+ * happen, and is today's. Anything later goes through "Need to reschedule",
+ * and the server refuses a booking that is already under way or closed.
+ */
+export function canMoveToday(a: { date: string; status: AppointmentStatus }, today: string): boolean {
+  return a.date === today && isBooked(a.status);
+}
+
 type ApptLike = { patient_id: string; date: string; time: string; status: AppointmentStatus };
 type VisitLike = { patient_id: string; date: string };
 

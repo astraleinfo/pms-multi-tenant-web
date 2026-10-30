@@ -58,7 +58,7 @@ export function freeSlots({
   clashes: (time: string) => boolean;
 }) {
   return slotTimes(dayStart, dayEnd, minutes).filter(
-    (t) => (date > today || (date === today && t > now)) && !clashes(t),
+    (t) => !slotHasPassed({ date, time: t, today, now }) && !clashes(t),
   );
 }
 

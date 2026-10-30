@@ -17,9 +17,16 @@ describe("freeSlots", () => {
       .toEqual(["09:00", "10:30"]);
   });
 
-  it("drops slots that have already started today, by the clinic's clock", () => {
-    expect(freeSlots({ ...day, date: "2026-10-09", now: "10:00", clashes: () => false }))
+  it("drops slots that started before the grace, by the clinic's clock", () => {
+    expect(freeSlots({ ...day, date: "2026-10-09", now: "10:20", clashes: () => false }))
       .toEqual(["10:30"]);
+  });
+
+  it("keeps the slot that has just begun, as the diary and the server do", () => {
+    expect(freeSlots({ ...day, date: "2026-10-09", now: "10:10", clashes: () => false }))
+      .toEqual(["10:00", "10:30"]);
+    expect(freeSlots({ ...day, date: "2026-10-09", now: "10:00", clashes: () => false }))
+      .toEqual(["10:00", "10:30"]);
   });
 
   it("offers nothing on a day that has gone", () => {

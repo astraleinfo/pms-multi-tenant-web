@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  FOLLOW_UP_REASON, followUpBookingDate, followUpDue, followUpLabel, followUpPrefill, followUpState,
+  FOLLOW_UP_REASON, canMoveToday, followUpBookingDate, followUpDue, followUpLabel, followUpPrefill, followUpState,
 } from "./follow-up-booking";
 
 const appt = (over: Partial<{ patient_id: string; date: string; time: string; status: string }> = {}) => ({
@@ -105,5 +105,25 @@ describe("followUpLabel", () => {
     expect(followUpLabel({ kind: "booked", date: "2026-10-28", time: "09:15" })).toBe("Booked 28 Oct 2026");
     expect(followUpLabel({ kind: "seen", date: "2026-10-24" })).toBe("Seen 24 Oct 2026");
     expect(followUpLabel({ kind: "none" })).toBe("");
+  });
+});
+
+describe("canMoveToday", () => {
+  const today = "2026-11-01";
+
+  it("is true for a booking still to happen today", () => {
+    expect(canMoveToday(appt({ date: today, status: "scheduled" }), today)).toBe(true);
+    expect(canMoveToday(appt({ date: today, status: "confirmed" }), today)).toBe(true);
+  });
+
+  it("is false for another day — those go through 'Need to reschedule'", () => {
+    expect(canMoveToday(appt({ date: "2026-11-02" }), today)).toBe(false);
+    expect(canMoveToday(appt({ date: "2026-10-31" }), today)).toBe(false);
+  });
+
+  it("is false once the visit is under way or closed", () => {
+    for (const status of ["checked_in", "completed", "cancelled", "no_show"] as const) {
+      expect(canMoveToday(appt({ date: today, status }), today)).toBe(false);
+    }
   });
 });
