@@ -5,7 +5,9 @@ import { useApp } from "@/lib/store/app-store";
 import { usePlatformBilling, usePlatformLogoUrl, usePlatformSettings } from "@/lib/query/hooks";
 import type { PlatformSettings } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { DEFAULT_LOGO_SRC, LOGO_TYPES, logoProblem, PLATFORM_NAME } from "@/lib/platform/brand";
+import {
+  DEFAULT_LOGO_SRC, LOGO_MAX_SIDE, LOGO_TYPES, logoProblem, logoSizeProblem, PLATFORM_NAME,
+} from "@/lib/platform/brand";
 import { daysToSeconds, hoursToSeconds, secondsToDays, secondsToHours } from "@/lib/platform/timings";
 import { IconTrash, IconUpload } from "@/components/ui/icons";
 import { ConsolePage } from "@/components/platform/chrome";
@@ -274,6 +276,14 @@ function BrandSection({ custom }: { custom: boolean }) {
                 setStaged(null);
                 setProblem("That file could not be read as an image. A logo has to be a PNG, JPEG or WebP image.");
               }}
+              /* the API refuses one too large; say so before the upload */
+              onLoad={(e) => {
+                if (!staged) return;
+                const reason = logoSizeProblem(e.currentTarget.naturalWidth, e.currentTarget.naturalHeight);
+                if (!reason) return;
+                setStaged(null);
+                setProblem(reason);
+              }}
             />
           </div>
           <figcaption className="mt-1.5 truncate text-caption text-ink-3">{caption}</figcaption>
@@ -296,7 +306,7 @@ function BrandSection({ custom }: { custom: boolean }) {
             </button>.
           </p>
           <p className="text-caption leading-snug text-ink-3">
-            PNG, JPEG or WebP, up to 2 MB. It is drawn on a dark background, so a white or light logo
+            PNG, JPEG or WebP, up to 2 MB and {LOGO_MAX_SIDE} × {LOGO_MAX_SIDE} pixels. It is drawn on a dark background, so a white or light logo
             on a transparent background reads best. A wide logo that spells the name stands on its own;
             a square mark sits beside the word {PLATFORM_NAME}.
           </p>

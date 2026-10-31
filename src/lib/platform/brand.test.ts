@@ -1,5 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { FULL_NAME, LOGO_MAX_BYTES, logoProblem, PRODUCT_NAME } from "./brand";
+import {
+  FULL_NAME, LOGO_MAX_BYTES, LOGO_MAX_SIDE, logoProblem, logoSizeProblem, PRODUCT_NAME,
+} from "./brand";
+
+describe("logoSizeProblem", () => {
+  it("accepts up to the limit on each side, the limit itself included", () => {
+    expect(LOGO_MAX_SIDE).toBe(4000);
+    expect(logoSizeProblem(4000, 4000)).toBeNull();
+    expect(logoSizeProblem(1382, 245)).toBeNull();
+  });
+
+  it("refuses a side over the limit, naming the limit and the image's size", () => {
+    expect(logoSizeProblem(4001, 10)).toBe("Logos are limited to 4000 × 4000 pixels; this one is 4001 × 10.");
+    expect(logoSizeProblem(10, 12000)).toMatch(/10 × 12000/);
+  });
+});
 
 describe("the product's name", () => {
   it("is the Clinic Management System, and Practice OS no more", () => {

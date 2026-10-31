@@ -20,6 +20,17 @@ export const DEFAULT_LOGO_SRC = "/astrale-logo-mark.png";
  *  only so the console can refuse an obvious mistake before the upload. */
 export const LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
 export const LOGO_MAX_BYTES = 2 * 1024 * 1024;
+/** The longest side, in pixels — the API's `MAX_LOGO_SIDE`. */
+export const LOGO_MAX_SIDE = 4000;
+
+/** Why an image this many pixels across and down cannot be the logo — or
+ *  `null` if it can. Read off the staged preview once it has loaded. */
+export function logoSizeProblem(width: number, height: number): string | null {
+  if (width > LOGO_MAX_SIDE || height > LOGO_MAX_SIDE) {
+    return `Logos are limited to ${LOGO_MAX_SIDE} × ${LOGO_MAX_SIDE} pixels; this one is ${width} × ${height}.`;
+  }
+  return null;
+}
 
 /** Why `file` cannot be the platform's logo, in words for the person who chose
  *  it — or `null` if it can be sent. */
