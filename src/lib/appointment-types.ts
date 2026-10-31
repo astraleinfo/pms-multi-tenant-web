@@ -63,19 +63,15 @@ export function freeSlots({
 }
 
 /**
- * How far past its start a slot can still be booked — the same figure the API
- * holds (`PAST_START_GRACE_MIN`), so the grid never offers what the server will
- * refuse. The desk books the patient standing in front of them at the slot that
- * has just begun; a start older than this is a plan for the past.
+ * Has this start time gone, by the clinic's clock (`today`, `now` as "HH:mm")?
+ * No grace, same as the API: a start earlier than the current minute has gone,
+ * the current minute and later are open.
  */
-export const PAST_START_GRACE_MIN = 15;
-
-/** Has this start time gone, by the clinic's clock (`today`, `now` as "HH:mm")? */
 export function slotHasPassed({
   date, time, today, now,
 }: { date: string; time: string; today: string; now: string }) {
   if (date !== today) return date < today;
-  return toMinutes(time) < toMinutes(now) - PAST_START_GRACE_MIN;
+  return toMinutes(time) < toMinutes(now);
 }
 
 /** The times of a grid that have gone, for the slot buttons to draw disabled. */
