@@ -116,7 +116,7 @@ describe("canMoveToday", () => {
     expect(canMoveToday(appt({ date: today, status: "confirmed" }), today)).toBe(true);
   });
 
-  it("is false for another day — those go through 'Need to reschedule'", () => {
+  it("is false for another day — those go through 'Needs a new slot'", () => {
     expect(canMoveToday(appt({ date: "2026-11-02" }), today)).toBe(false);
     expect(canMoveToday(appt({ date: "2026-10-31" }), today)).toBe(false);
   });

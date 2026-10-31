@@ -10,42 +10,45 @@ import {
   addDays, clinicClock, formatDate, formatStamp, formatTime12, weekdayShort,
 } from "@/lib/format";
 import { canMoveToday } from "@/lib/follow-up-booking";
+import {
+  groupOutcomes, outcomeForKey, outcomeOptions, type OutcomeOption,
+} from "@/lib/follow-up-outcomes";
 import type { FollowUp, FollowUpCall, FollowUpOutcome } from "@/lib/types";
 import type { NewFollowUpCall } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Select, Textarea } from "@/components/ui/field";
-import { Kbd } from "@/components/ui/misc";
 import { Spinner } from "@/components/ui/loader";
-import { FOLLOW_UP_TONE } from "@/components/ui/badge";
 import { StatusPill } from "@/components/domain/status";
 import { SlotGrid } from "@/components/domain/slot-grid";
-import { IconCheck, IconX } from "@/components/ui/icons";
+import {
+  IconCalendar, IconCheck, IconClock, IconPhone, IconPhoneOff, IconX, type IconProps,
+} from "@/components/ui/icons";
 
 /** How far ahead a new slot is looked for. */
 const RESCHEDULE_DAYS = 14;
 
-/** What the desk can say came of a call — in the order it most often happens. */
+/** What the desk can say came of a call. */
 type Choice = FollowUpOutcome;
 
-const CHOICES: Array<{ value: Choice; label: string }> = [
-  { value: "confirmed", label: "Confirmed" },
-  { value: "reschedule_required", label: "Need to reschedule" },
-  { value: "no_answer", label: "No answer" },
-  { value: "declined", label: "Declined" },
-  { value: "call_back", label: "Call back later" },
-];
+/* An icon per option, so the cards can be told apart before they are read.
+   No colour: the options are not a scale of good to bad, and a green beside
+   Confirmed would claim one. */
+const ICON: Record<Choice, React.ComponentType<IconProps>> = {
+  confirmed: IconCheck,
+  rescheduled: IconClock,
+  reschedule_required: IconCalendar,
+  declined: IconX,
+  no_answer: IconPhoneOff,
+  call_back: IconPhone,
+};
 
-/**
- * The patient is visiting today and needs a different time. It is offered last,
- * and only on today's bookings, so 1–5 mean the same thing on every row. Unlike
- * "Need to reschedule" — which can be saved with no new time, to ring back —
- * it is only complete once a time is picked.
- */
-const MOVE_TODAY: { value: Choice; label: string } = { value: "rescheduled", label: "Reschedule today" };
-
-const DOT: Record<string, string> = {
-  ok: "bg-ok", warn: "bg-warn", critical: "bg-critical", violet: "bg-violet", neutral: "bg-neutral",
-  info: "bg-info", accent: "bg-accent",
+/* Both groups share one column count, so a card sits under the card above it.
+   It follows the size of the larger group: four reached options fill one row
+   on a wide sheet and two on a narrower one; three stay in a row of three,
+   rather than leaving one card alone on a second row. */
+const COLUMNS: Record<number, string> = {
+  3: "grid-cols-1 @xl:grid-cols-3",
+  4: "grid-cols-1 @lg:grid-cols-2 @4xl:grid-cols-4",
 };
 
 /**
@@ -54,8 +57,10 @@ const DOT: Record<string, string> = {
  *
  * Everything a call can lead to happens here without a dialog — confirming,
  * finding a new slot, letting the booking go — because the person doing it
- * has a patient on the line and a queue of others to ring. 1–5 pick the
- * outcome from the keyboard, Escape closes the sheet.
+ * has a patient on the line and a queue of others to ring. The options are
+ * grouped by whether the call reached the patient, and each says what it does
+ * to the booking (lib/follow-up-outcomes.ts). The number keys pick them in the
+ * order they are drawn, shown on each card; Escape closes the sheet.
  */
 export function FollowUpSheet({
   row, onClose,
@@ -65,7 +70,9 @@ export function FollowUpSheet({
 }) {
   const { recordFollowUpCall, notify, can, today } = useApp();
   const a = row.appointment;
-  const choices = canMoveToday(a, today) ? [...CHOICES, MOVE_TODAY] : CHOICES;
+  const choices = outcomeOptions(canMoveToday(a, today));
+  const groups = groupOutcomes(choices);
+  const columns = COLUMNS[Math.max(...groups.map((g) => g.options.length))] ?? COLUMNS[4];
   const firstName = a.patient_name.split(" ")[0] ?? a.patient_name;
 
   const [outcome, setOutcome] = React.useState<Choice | null>(null);
@@ -117,11 +124,13 @@ export function FollowUpSheet({
       onClose();
       return;
     }
-    if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
-    const index = Number(e.key) - 1;
-    if (index >= 0 && index < choices.length) {
+    /* a role that cannot log calls cannot pick an option by key either — the
+       cards are disabled, and a tick on one would say otherwise */
+    if (typing || !mayWrite || e.metaKey || e.ctrlKey || e.altKey) return;
+    const picked = outcomeForKey(choices, e.key);
+    if (picked) {
       e.preventDefault();
-      setOutcome(choices[index].value);
+      setOutcome(picked);
     }
   };
 
@@ -136,36 +145,28 @@ export function FollowUpSheet({
     >
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
         <div className="min-w-0 space-y-4">
-          <fieldset>
-            <legend className="mb-2 text-label font-semibold text-ink">
+          <fieldset className="@container">
+            <legend className="mb-2.5 text-label font-semibold text-ink">
               What did {firstName} say?
             </legend>
-            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Outcome">
-              {choices.map((c, i) => {
-                const on = outcome === c.value;
-                return (
-                  <button
-                    key={c.value}
-                    type="button"
-                    role="radio"
-                    aria-checked={on}
-                    disabled={!mayWrite}
-                    onClick={() => setOutcome(c.value)}
-                    className={cn(
-                      "inline-flex h-9.5 items-center gap-2 rounded-[var(--r)] border px-3 text-label font-medium",
-                      "transition-colors duration-150 ease-[var(--ease-brand)]",
-                      "disabled:border-disabled-border disabled:bg-disabled-surface disabled:text-disabled-ink",
-                      on
-                        ? "border-accent bg-accent-soft text-accent-text"
-                        : "border-line-strong bg-surface text-ink hover:bg-hover",
-                    )}
-                  >
-                    <span className={cn("h-2 w-2 shrink-0 rounded-full", DOT[FOLLOW_UP_TONE[c.value]])} aria-hidden />
-                    {c.label}
-                    <span className="hidden sm:inline"><Kbd>{i + 1}</Kbd></span>
-                  </button>
-                );
-              })}
+            <div className="space-y-3.5" role="radiogroup" aria-label="Outcome">
+              {groups.map((g) => (
+                <div key={g.group}>
+                  <p className="mb-1.5 text-caption font-medium text-ink-3">{g.caption}</p>
+                  <div className={cn("grid gap-2", columns)}>
+                    {g.options.map((o) => (
+                      <OutcomeCard
+                        key={o.value}
+                        id={`${a.id}-${o.value}`}
+                        option={o}
+                        checked={outcome === o.value}
+                        disabled={!mayWrite}
+                        onPick={() => setOutcome(o.value)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           </fieldset>
 
@@ -215,6 +216,84 @@ export function FollowUpSheet({
         <CallHistory appointmentId={a.id} attempts={row.attempts} />
       </div>
     </div>
+  );
+}
+
+/* ---- an option -------------------------------------------------------------- */
+
+/**
+ * One outcome as a card: what it is, and under it what it does to the booking.
+ * The card is neutral until picked; picked, it takes the accent and a tick in
+ * the corner, so the choice is not shown by colour alone. The corner otherwise
+ * holds the option's number key, quietly, for the desk that rings all day.
+ */
+function OutcomeCard({
+  id, option, checked, disabled, onPick,
+}: {
+  id: string;
+  option: OutcomeOption;
+  checked: boolean;
+  disabled: boolean;
+  onPick: () => void;
+}) {
+  const Icon = ICON[option.value];
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={checked}
+      aria-labelledby={`${id}-label`}
+      aria-describedby={`${id}-does`}
+      aria-keyshortcuts={String(option.key)}
+      disabled={disabled}
+      onClick={onPick}
+      className={cn(
+        "flex items-start gap-3 rounded-[var(--r)] border p-3 text-left",
+        "transition-colors duration-150 ease-[var(--ease-brand)]",
+        disabled
+          ? "cursor-not-allowed border-disabled-border bg-disabled-surface text-disabled-ink"
+          : checked
+            ? "border-accent bg-accent-soft text-ink"
+            : "border-line-strong bg-surface text-ink hover:bg-hover",
+      )}
+    >
+      <span
+        className={cn(
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--r-sm)] transition-colors duration-150 ease-[var(--ease-brand)]",
+          disabled
+            ? "bg-disabled-border text-disabled-ink"
+            : checked
+              ? "bg-surface text-accent-text shadow-[inset_0_0_0_1px_var(--accent-border)]"
+              : "bg-surface-3 text-ink-2",
+        )}
+        aria-hidden
+      >
+        <Icon size={17} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-start justify-between gap-2">
+          <span id={`${id}-label`} className="pt-px text-label font-medium">{option.label}</span>
+          {checked ? (
+            <span className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink" aria-hidden>
+              <IconCheck size={12} strokeWidth={2.2} />
+            </span>
+          ) : !disabled && (
+            <kbd
+              className="hidden h-4.5 min-w-4.5 shrink-0 items-center justify-center rounded-[4px] border border-line px-1 text-micro tnum text-ink-placeholder sm:inline-flex"
+              aria-hidden
+            >
+              {option.key}
+            </kbd>
+          )}
+        </span>
+        <span
+          id={`${id}-does`}
+          className={cn("mt-0.5 block text-caption text-pretty", disabled ? "text-disabled-ink" : checked ? "text-ink-2" : "text-ink-3")}
+        >
+          {option.consequence}
+        </span>
+      </span>
+    </button>
   );
 }
 
@@ -305,7 +384,7 @@ function ReschedulePicker({
         <p className="rounded-[var(--r-sm)] bg-surface-2 px-3 py-2.5 text-label text-ink-2">
           {todayOnly
             ? <>{userName(db, doctor)} has no free {formatLength(minutes)} slot left today.
-                Try another clinician, or choose Need to reschedule to find another day.</>
+                Try another clinician, or choose Needs a new slot to find another day.</>
             : <>{userName(db, doctor)} has no free {formatLength(minutes)} slot in the next {RESCHEDULE_DAYS} days.
                 Try another clinician, or save this as needing a reschedule and ring back.</>}
         </p>

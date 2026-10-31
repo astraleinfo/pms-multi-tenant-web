@@ -67,6 +67,8 @@ export const IconKey = mk(<><circle cx="8" cy="15.5" r="4" /><path d="m10.9 12.6
 export const IconSpark = mk(<><path d="M12 3.5 13.8 9 19 10.8 13.8 12.6 12 18l-1.8-5.4L5 10.8 10.2 9 12 3.5Z" /><path d="M18.6 16.4 19.4 18.6 21.6 19.4 19.4 20.2 18.6 22.4 17.8 20.2 15.6 19.4 17.8 18.6 18.6 16.4Z" /></>);
 export const IconLogout = mk(<><path d="M14.5 8V5.5a2 2 0 0 0-2-2h-6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V16" /><path d="M10 12h10.5M17.5 8.5 21 12l-3.5 3.5" /></>);
 export const IconPhone = mk(<><path d="M6.4 3.6h3.2l1.6 4-2 1.4a12 12 0 0 0 5.8 5.8l1.4-2 4 1.6v3.2a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.4 5.8a2 2 0 0 1 2-2.2Z" /></>);
+/* the same handset, struck through — a call that did not connect */
+export const IconPhoneOff = mk(<><path d="M6.4 3.6h3.2l1.6 4-2 1.4a12 12 0 0 0 5.8 5.8l1.4-2 4 1.6v3.2a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.4 5.8a2 2 0 0 1 2-2.2Z" /><path d="M20.5 3.5 3.5 20.5" /></>);
 export const IconMail = mk(<><rect x="3" y="5.5" width="18" height="13" rx="2.4" /><path d="m3.8 7 8.2 6 8.2-6" /></>);
 export const IconPin = mk(<><path d="M12 21s6.8-6.1 6.8-11A6.8 6.8 0 0 0 5.2 10c0 4.9 6.8 11 6.8 11Z" /><circle cx="12" cy="10" r="2.4" /></>);
 export const IconEye = mk(<><path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12Z" /><circle cx="12" cy="12" r="3" /></>);

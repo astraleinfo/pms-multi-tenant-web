@@ -50,7 +50,7 @@ export function followUpPrefill({
 /**
  * Can the call list move this booking to another time today? The patient is
  * visiting today and needs a different hour: only a booking that is still to
- * happen, and is today's. Anything later goes through "Need to reschedule",
+ * happen, and is today's. Anything later goes through "Needs a new slot",
  * and the server refuses a booking that is already under way or closed.
  */
 export function canMoveToday(a: { date: string; status: AppointmentStatus }, today: string): boolean {
