@@ -4,6 +4,7 @@ import * as React from "react";
 import { MODULES } from "@/lib/data/catalog";
 import { useSupportInfo } from "@/lib/query/hooks";
 import { cn } from "@/lib/cn";
+import { PRODUCT_NAME } from "@/lib/platform/brand";
 import { Spinner } from "@/components/ui/loader";
 import {
   IconAlert, IconArrowRight, IconCheck,
@@ -150,7 +151,7 @@ function ModuleShowcase({ slides, badge, tone }: {
           {/* --ink-2, not --ink-3: still the muted second line, but the aurora
               passing under this corner took --ink-3 to 4.48:1 — just under AA
               for text this size. Measured, not guessed. */}
-          <span className="block text-caption text-ink-2">Patient Management System</span>
+          <span className="block text-caption text-ink-2">{PRODUCT_NAME}</span>
         </span>
       </div>
 

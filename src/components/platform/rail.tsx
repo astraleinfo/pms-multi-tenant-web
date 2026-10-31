@@ -7,6 +7,8 @@ import { usePathname } from "next/navigation";
 import { useApp } from "@/lib/store/app-store";
 import { cn } from "@/lib/cn";
 import { isSuperAdmin } from "@/lib/api";
+import { DEFAULT_LOGO_SRC, PLATFORM_NAME } from "@/lib/platform/brand";
+import { usePlatformLogoUrl } from "@/lib/query/hooks";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/misc";
 import { Menu, MenuItem, MenuSep } from "@/components/ui/modal";
@@ -15,16 +17,29 @@ import {
   IconGauge, IconLogout, IconPulse, IconReceipt, IconSettings, IconSidebar, IconUsers,
 } from "@/components/ui/icons";
 
-/** The platform's own mark — static, not a clinic's, so it lives as an asset
- *  rather than a database value. Swap `public/astrale-logo-mark.png` to
- *  rebrand the console; nothing else here needs to change. */
+/** The platform's own logo — the one set in the console's Settings (the
+ *  same one every email and subscription bill carries), or the built-in
+ *  `public/astrale-logo-mark.png`, which is also what shows while the set
+ *  one loads, so the chrome never flashes empty. */
 const MARK_RATIO = 1382 / 245;
 
 export function PlatformMark({ height = 20 }: { height?: number }) {
+  const logoUrl = usePlatformLogoUrl();
+  if (logoUrl) {
+    /* a plain <img>: a blob URL of any shape, which next/image cannot size */
+    return (
+      <img
+        src={logoUrl}
+        alt={PLATFORM_NAME}
+        style={{ height, maxWidth: height * 8 }}
+        className="block w-auto object-contain object-left"
+      />
+    );
+  }
   return (
     <Image
-      src="/astrale-logo-mark.png"
-      alt="Astrale"
+      src={DEFAULT_LOGO_SRC}
+      alt={PLATFORM_NAME}
       width={Math.round(height * MARK_RATIO)}
       height={height}
       priority

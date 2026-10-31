@@ -1279,12 +1279,31 @@ export interface PlatformSettings {
   /** the one monthly fee every billed clinic pays, for the whole product */
   subscription_fee_monthly: number;
   referral_credit_amount: number;
+  /** a custom logo is in use; false is the built-in one. Read-only — it changes
+   *  through the logo calls below, and the PATCH refuses it (unknown key). */
+  has_logo: boolean;
 }
 
 export const getPlatformSettings = () => get<PlatformSettings>("/v1/platform/settings");
 
-export const updatePlatformSettings = (changes: Partial<PlatformSettings>) =>
-  patch_<PlatformSettings>("/v1/platform/settings", changes);
+export const updatePlatformSettings = (changes: Partial<PlatformSettings>) => {
+  const { has_logo: _readOnly, ...editable } = changes;
+  return patch_<PlatformSettings>("/v1/platform/settings", editable);
+};
+
+/** The platform's own logo — in every email's header and on the subscription
+ *  bill. A second upload replaces the first; removing it goes back to the
+ *  built-in one. Super admin only. */
+export const uploadPlatformLogo = (file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  return upload<PlatformSettings>("/v1/platform/settings/logo", form);
+};
+
+export const deletePlatformLogo = () => del<PlatformSettings>("/v1/platform/settings/logo");
+
+/** The logo in use, custom or built-in, as a blob — any console session may read it. */
+export const getPlatformLogoFile = () => requestBlob("/v1/platform/settings/logo");
 
 export interface PublicSettings {
   support_email: string;

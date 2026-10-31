@@ -121,6 +121,25 @@ export function usePlatformSettings() {
   });
 }
 
+/**
+ * The platform's own logo — the uploaded one, or the built-in one — as an
+ * object URL, for the console's chrome and its Settings page. `null` until it
+ * arrives, or if it cannot be read; callers draw `DEFAULT_LOGO_SRC` meanwhile,
+ * so the rail never flashes empty.
+ */
+export function usePlatformLogoUrl(): string | null {
+  const { platformSession } = useSession();
+  const query = useQuery({
+    queryKey: qk.platformLogo(),
+    queryFn: api.getPlatformLogoFile,
+    enabled: platformSession.signedIn,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const blob = query.data;
+  return useMemo(() => (blob ? URL.createObjectURL(blob) : null), [blob]);
+}
+
 /** Astrale's own desk — shown until the live answer arrives, so the help
  *  menu and the on-hold screen never render a blank phone number or a
  *  `mailto:` with nobody in it. */

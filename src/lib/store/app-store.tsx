@@ -186,6 +186,10 @@ interface AppContextValue {
   setTenantStatus: (tenantId: Id, status: Tenant["status"]) => void;
   updateTenant: (tenantId: Id, changes: api.TenantEdit) => Promise<Tenant>;
   updatePlatformSettings: (changes: Partial<api.PlatformSettings>) => Promise<api.PlatformSettings>;
+  /** The platform's own logo — in every email and on the subscription bill. */
+  uploadPlatformLogo: (file: File) => Promise<api.PlatformSettings>;
+  /** Back to the built-in logo. */
+  removePlatformLogo: () => Promise<api.PlatformSettings>;
   resendTenantInvitation: (tenantId: Id, userId: Id) => Promise<api.TenantCreated>;
   openSupportSession: (tenantId: Id) => Promise<api.SupportSession>;
   /** Send this colleague their "set your password" link again. */
@@ -388,6 +392,20 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     mutationFn: (changes: Partial<api.PlatformSettings>) => api.updatePlatformSettings(changes),
     onSuccess: invalidatePlatform,
   });
+  /* The logo is drawn by the console's own chrome too, so a change refreshes
+     both the settings (its `has_logo`) and the image itself. */
+  const onPlatformLogo = () => {
+    void qc.invalidateQueries({ queryKey: qk.platformSettings() });
+    void qc.invalidateQueries({ queryKey: qk.platformLogo() });
+  };
+  const mUploadPlatformLogo = useMutation({
+    mutationFn: (file: File) => api.uploadPlatformLogo(file),
+    onSuccess: onPlatformLogo,
+  });
+  const mRemovePlatformLogo = useMutation({
+    mutationFn: () => api.deletePlatformLogo(),
+    onSuccess: onPlatformLogo,
+  });
   const mResendTenantInvite = useMutation({
     mutationFn: (a: { id: Id; userId: Id }) => api.resendTenantInvitation(a.id, a.userId),
   });
@@ -498,6 +516,8 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     setTenantStatus: (id, status) => mTenantStatus.mutate({ id, status }),
     updateTenant: (id, changes) => mUpdateTenant.mutateAsync({ id, changes }),
     updatePlatformSettings: (changes) => mPlatformSettings.mutateAsync(changes),
+    uploadPlatformLogo: (file) => mUploadPlatformLogo.mutateAsync(file),
+    removePlatformLogo: () => mRemovePlatformLogo.mutateAsync(),
     resendTenantInvitation: (id, userId) => mResendTenantInvite.mutateAsync({ id, userId }),
     openSupportSession: (id) => api.openSupportSession(id),
     resendInvitation: (userId) => mResendInvite.mutateAsync(userId),

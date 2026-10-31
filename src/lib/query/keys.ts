@@ -18,6 +18,8 @@ export const qk = {
   platformUsers: (t: Id) => ["platform", "tenants", t, "users"] as const,
   platformSupportRequests: (t: Id) => ["platform", "tenants", t, "support-requests"] as const,
   platformSettings: () => ["platform", "settings"] as const,
+  /** the platform's own logo, custom or built-in */
+  platformLogo: () => ["platform", "logo"] as const,
   publicSettings: () => ["public", "settings"] as const,
   /** Every clinic's subscription bills, and one clinic's. */
   platformBilling: () => ["platform", "billing"] as const,

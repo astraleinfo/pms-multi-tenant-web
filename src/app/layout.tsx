@@ -6,6 +6,7 @@ import { AppProvider } from "@/lib/store/app-store";
 import { AppShell } from "@/components/layout/app-shell";
 import { Toaster } from "@/components/layout/toaster";
 import { NavigationProgress } from "@/lib/navigation";
+import { PLATFORM_NAME, PRODUCT_NAME } from "@/lib/platform/brand";
 
 /**
  * One typeface for the whole application — the same Google Sans the sign-in
@@ -33,8 +34,8 @@ const sans = Google_Sans({
 
 export const metadata: Metadata = {
   title: {
-    default: "Astrale — Practice OS",
-    template: "%s · Astrale",
+    default: `${PLATFORM_NAME} — ${PRODUCT_NAME}`,
+    template: `%s · ${PLATFORM_NAME}`,
   },
   description:
     "Multi-tenant patient management: queue, consultation, prescriptions, pharmacy, lab, inventory, appointments, patients and billing.",

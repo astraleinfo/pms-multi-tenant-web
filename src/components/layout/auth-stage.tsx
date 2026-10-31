@@ -3,6 +3,7 @@
 import * as React from "react";
 import { cn } from "@/lib/cn";
 import { IconLock, IconShield } from "@/components/ui/icons";
+import { PLATFORM_NAME, PRODUCT_NAME } from "@/lib/platform/brand";
 
 /** The accent, lifted towards white: the brand blue on its own is too dark
     to read as text on the stage in the light theme. */
@@ -125,8 +126,8 @@ function Brand() {
         </svg>
       </span>
       <div>
-        <p className="font-display text-title-sm font-semibold leading-none">Astrale</p>
-        <p className="mt-1 text-micro uppercase tracking-[0.16em] text-stage-dim">Practice OS</p>
+        <p className="font-display text-title-sm font-semibold leading-none">{PLATFORM_NAME}</p>
+        <p className="mt-1 text-micro uppercase tracking-[0.16em] text-stage-dim">{PRODUCT_NAME}</p>
       </div>
     </div>
   );

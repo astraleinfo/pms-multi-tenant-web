@@ -2,9 +2,12 @@
 
 import * as React from "react";
 import { useApp } from "@/lib/store/app-store";
-import { usePlatformBilling, usePlatformSettings } from "@/lib/query/hooks";
+import { usePlatformBilling, usePlatformLogoUrl, usePlatformSettings } from "@/lib/query/hooks";
 import type { PlatformSettings } from "@/lib/api";
+import { cn } from "@/lib/cn";
+import { DEFAULT_LOGO_SRC, LOGO_TYPES, logoProblem, PLATFORM_NAME } from "@/lib/platform/brand";
 import { daysToSeconds, hoursToSeconds, secondsToDays, secondsToHours } from "@/lib/platform/timings";
+import { IconTrash, IconUpload } from "@/components/ui/icons";
 import { ConsolePage } from "@/components/platform/chrome";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -45,7 +48,9 @@ function SettingsForm({ settings }: { settings: PlatformSettings }) {
   const { data: billing } = usePlatformBilling();
   const [draft, setDraft] = React.useState(settings);
   const [saving, setSaving] = React.useState(false);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(settings);
+  /* `has_logo` is not a field here — the Brand section changes it on its own
+     save — so a new logo never shows up as "Unsaved changes". */
+  const dirty = JSON.stringify({ ...draft, has_logo: null }) !== JSON.stringify({ ...settings, has_logo: null });
 
   const set = <K extends keyof PlatformSettings>(key: K, value: PlatformSettings[K]) =>
     setDraft((prev) => ({ ...prev, [key]: value }));
@@ -78,6 +83,8 @@ function SettingsForm({ settings }: { settings: PlatformSettings }) {
           </Button>
         </SettingsActions>
       </SettingsSection>
+
+      <BrandSection custom={settings.has_logo} />
 
       <SettingsSection title="Support desk" hint="Shown in every clinic's Help menu.">
         <SettingRow label="Email" htmlFor="cfg-support-email">
@@ -191,5 +198,143 @@ function SettingsForm({ settings }: { settings: PlatformSettings }) {
         </SettingsActions>
       </SettingsSection>
     </div>
+  );
+}
+
+/**
+ * The platform's own logo — what every email's header and the subscription
+ * bill carry. Choosing a file only stages it: the preview shows it on the
+ * same dark ground the email and the bill draw it on, and nothing is sent
+ * until "Save logo". Removing goes back to the built-in logo, never to none.
+ */
+function BrandSection({ custom }: { custom: boolean }) {
+  const { uploadPlatformLogo, removePlatformLogo, notify } = useApp();
+  const currentUrl = usePlatformLogoUrl();
+  const input = React.useRef<HTMLInputElement>(null);
+  const [staged, setStaged] = React.useState<{ file: File; url: string } | null>(null);
+  const [problem, setProblem] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const [dragging, setDragging] = React.useState(false);
+
+  React.useEffect(() => () => { if (staged) URL.revokeObjectURL(staged.url); }, [staged]);
+
+  const stage = (file: File | undefined) => {
+    if (!file) return;
+    const reason = logoProblem(file);
+    setProblem(reason);
+    setStaged(reason ? null : { file, url: URL.createObjectURL(file) });
+    if (input.current) input.current.value = "";
+  };
+
+  const save = async () => {
+    if (!staged) return;
+    setBusy(true);
+    try {
+      await uploadPlatformLogo(staged.file);
+      notify({ tone: "ok", title: "Logo saved", body: "Emails and subscription bills carry it from now on." });
+      setStaged(null);
+    } catch (error) {
+      setProblem(error instanceof Error ? error.message : "That logo was not saved. Try again.");
+    }
+    setBusy(false);
+  };
+
+  const reset = async () => {
+    setBusy(true);
+    try {
+      await removePlatformLogo();
+      notify({ tone: "ok", title: "Back to the built-in logo", body: "Emails and subscription bills carry the Astrale logo again." });
+    } catch (error) {
+      notify({ tone: "critical", title: "Not changed", body: error instanceof Error ? error.message : "Try again." });
+    }
+    setBusy(false);
+  };
+
+  const shown = staged?.url ?? currentUrl ?? DEFAULT_LOGO_SRC;
+  const caption = staged
+    ? `Preview: ${staged.file.name}`
+    : custom ? "Custom logo" : "Built-in Astrale logo";
+
+  return (
+    <SettingsSection
+      title="Brand"
+      hint="The logo in the header of every email the platform sends — invitations, password resets, bills and clinics' invoices to patients — and on the subscription bill. Clinics' own documents carry the clinic's logo, not this one."
+    >
+      <div className="grid gap-4 px-4 py-4 sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] sm:items-center">
+        {/* the logo as an email and the bill draw it: on the dark stage */}
+        <figure className="min-w-0">
+          <div className="flex h-24 items-center justify-center rounded-[var(--r)] border border-white/10 bg-stage px-5">
+            <img
+              src={shown}
+              alt={`${PLATFORM_NAME} logo`}
+              className="max-h-10 max-w-full object-contain"
+              /* a file named .png that is not one: say so now, not after the upload */
+              onError={() => {
+                if (!staged) return;
+                setStaged(null);
+                setProblem("That file could not be read as an image. A logo has to be a PNG, JPEG or WebP image.");
+              }}
+            />
+          </div>
+          <figcaption className="mt-1.5 truncate text-caption text-ink-3">{caption}</figcaption>
+        </figure>
+
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => { e.preventDefault(); setDragging(false); stage(e.dataTransfer.files?.[0]); }}
+          className={cn(
+            "flex min-w-0 flex-col items-start gap-2 rounded-[var(--r)] border border-dashed p-3 transition-colors",
+            dragging ? "border-accent bg-accent-soft" : "border-line",
+          )}
+        >
+          <p className="text-label text-ink">
+            Drag a logo here, or{" "}
+            <button type="button" className="font-medium text-accent-text underline-offset-2 hover:underline"
+                    onClick={() => input.current?.click()} disabled={busy}>
+              choose a file
+            </button>.
+          </p>
+          <p className="text-caption leading-snug text-ink-3">
+            PNG, JPEG or WebP, up to 2 MB. It is drawn on a dark background, so a white or light logo
+            on a transparent background reads best. A wide logo that spells the name stands on its own;
+            a square mark sits beside the word {PLATFORM_NAME}.
+          </p>
+          <input
+            ref={input}
+            type="file"
+            accept={LOGO_TYPES.join(",")}
+            className="sr-only"
+            aria-label="Choose a logo"
+            onChange={(e) => stage(e.target.files?.[0])}
+          />
+          {problem && <p role="alert" className="text-caption font-medium text-critical-text">{problem}</p>}
+        </div>
+      </div>
+
+      <SettingsActions
+        note={staged ? "This logo is not saved yet." : custom ? "Every email and bill carries this logo." : "Every email and bill carries the built-in logo."}
+      >
+        {staged ? (
+          <>
+            <Button variant="ghost" disabled={busy} onClick={() => { setStaged(null); setProblem(null); }}>Cancel</Button>
+            <Button variant="primary" disabled={busy} onClick={() => void save()}>
+              {busy ? "Saving…" : "Save logo"}
+            </Button>
+          </>
+        ) : (
+          <>
+            {custom && (
+              <Button variant="ghost" disabled={busy} onClick={() => void reset()}>
+                <IconTrash size={14} /> Use the built-in logo
+              </Button>
+            )}
+            <Button variant="secondary" disabled={busy} onClick={() => input.current?.click()}>
+              <IconUpload size={14} /> {custom ? "Replace logo" : "Upload a logo"}
+            </Button>
+          </>
+        )}
+      </SettingsActions>
+    </SettingsSection>
   );
 }

@@ -55,7 +55,7 @@ export function Monogram({ name, size = 28, logoUrl }: { name: string; size?: nu
  *
  * Two things changed here and they are the same change. The product's name is
  * gone from the top — inside a clinic, the only name that answers "where am
- * I?" is the clinic's, and "Astrale / Practice OS" was answering a question
+ * I?" is the clinic's, and the platform's own lockup was answering a question
  * nobody in a surgery is asking. And the four category headings are gone —
  * TODAY, CLINICAL, OPERATIONS, PRACTICE were four lines of shouting capitals
  * over twelve destinations that are perfectly recognisable by their own
