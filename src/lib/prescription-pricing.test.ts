@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  MAX_UNIT_PRICE, anyPriced, awaitsCounter, dispensedHere, dispensedTotal, lineTotal, priceAfterToggle,
-  priceToSend, startsDispensed, unitPriceProblem,
+  MAX_UNIT_PRICE, anyPriced, awaitsCounter, dispensedHere, dispensedTotal, lineTotal, priceAfterPick,
+  priceAfterRetype, priceAfterToggle, priceToSend, startsDispensed, unitPriceProblem,
 } from "./prescription-pricing";
 
 const line = (qty: number, unit_price: number | null, dispense = true) => ({ qty, unit_price, dispense });
@@ -59,6 +59,44 @@ describe("priceAfterToggle", () => {
     expect(priceAfterToggle(true, 12, 10)).toBe(12);
     expect(priceAfterToggle(true, null, 10)).toBe(10);
     expect(priceAfterToggle(true, null, null)).toBeNull();
+  });
+});
+
+describe("priceAfterPick", () => {
+  const stockRow = { item_id: "stock-1", dispense: true, unit_price: 6 };
+  const typedRow = { item_id: null, dispense: true, unit_price: 40 };
+
+  it("brings a shelf line's price onto a dispensed row", () => {
+    expect(priceAfterPick(typedRow, { unit_price: 1.1 })).toBe(1.1);
+    expect(priceAfterPick(stockRow, { unit_price: 1.1 })).toBe(1.1);
+  });
+
+  it("leaves a prescribe-only row unpriced whatever is picked", () => {
+    expect(priceAfterPick({ ...stockRow, dispense: false, unit_price: null }, { unit_price: 1.1 })).toBeNull();
+  });
+
+  it("does not carry the old stock line's price onto a catalogue medicine with none", () => {
+    expect(priceAfterPick(stockRow, {})).toBeNull();
+    expect(priceAfterPick(typedRow, {})).toBeNull();
+  });
+
+  it("keeps a catalogue medicine's own price when it has one", () => {
+    expect(priceAfterPick(stockRow, { unit_price: 12 })).toBe(12);
+  });
+
+  it("drops a stock line's price when the row becomes a custom entry, but keeps one typed by hand", () => {
+    expect(priceAfterPick(stockRow, { custom: true })).toBeNull();
+    expect(priceAfterPick(typedRow, { custom: true })).toBe(40);
+  });
+});
+
+describe("priceAfterRetype", () => {
+  it("drops the stock line's price when the name is typed over", () => {
+    expect(priceAfterRetype({ item_id: "stock-1", dispense: true, unit_price: 6 }, true)).toBeNull();
+  });
+
+  it("leaves the price alone while the name still matches", () => {
+    expect(priceAfterRetype({ item_id: "stock-1", dispense: true, unit_price: 6 }, false)).toBe(6);
   });
 });
 

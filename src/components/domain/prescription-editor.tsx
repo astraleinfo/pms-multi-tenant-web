@@ -6,7 +6,8 @@ import { useClinicDb, useMedicines } from "@/lib/query/hooks";
 import { selectInventoryItems, stockLevel } from "@/lib/data/repository";
 import { currency } from "@/lib/format";
 import {
-  dispensedTotal, lineTotal, priceAfterToggle, startsDispensed, unitPriceProblem,
+  dispensedTotal, lineTotal, priceAfterPick, priceAfterRetype, priceAfterToggle, startsDispensed,
+  unitPriceProblem,
 } from "@/lib/prescription-pricing";
 import { cn } from "@/lib/cn";
 import { Button, Segmented } from "@/components/ui/button";
@@ -306,22 +307,26 @@ export function PrescriptionEditor({
     }]);
   };
 
+  /* the price a prescribe-only row had before it was switched, to give back */
+  const lastPrice = React.useRef<Record<string, number | null>>({});
+
   const pickForRow = (key: string, c: MedicineChoice) => {
     if (isDuplicate(c.medicine, key)) {
       notify({ tone: "warn", title: `${c.medicine} is already on this prescription` });
       return;
     }
+    const row = items.find((it) => it.key === key);
+    /* The price follows the medicine, never the stock line the row has just
+       left: see `priceAfterPick`. */
+    const unit_price = row ? priceAfterPick(row, c) : null;
+    delete lastPrice.current[key];
     /* A custom entry only names the medicine — the dose, frequency and anything
        else already typed into the row is what the clinician meant, and picking
        "write this as a custom entry" must not throw it away. */
     if (c.custom) {
-      patch(key, { item_id: null, medicine: c.medicine });
+      patch(key, { item_id: null, medicine: c.medicine, unit_price });
       return;
     }
-    /* A shelf line brings its price with it — still editable — onto a row
-       the clinic dispenses; a prescribe-only row stays unpriced. */
-    const row = items.find((it) => it.key === key);
-    const dispense = row?.dispense ?? lineDefault;
     patch(key, {
       item_id: c.item_id,
       medicine: c.medicine,
@@ -329,13 +334,12 @@ export function PrescriptionEditor({
       dosage: c.dosage,
       frequency: c.frequency,
       duration: c.duration,
-      ...(c.unit_price !== undefined ? { unit_price: priceAfterToggle(dispense, null, c.unit_price) } : {}),
+      unit_price,
     });
   };
 
   /* Flipping a line between "dispense" and "prescribe only": off, it loses
      its price; back on, it gets back what it had, or its shelf price. */
-  const lastPrice = React.useRef<Record<string, number | null>>({});
   const setSupply = (it: DraftRxItem, supply: Supply) => {
     const dispense = supply === "dispense";
     if (dispense === it.dispense) return;
@@ -355,7 +359,11 @@ export function PrescriptionEditor({
   const editMedicine = (it: DraftRxItem, name: string) => {
     const stock = stockFor(it);
     const drifted = !!stock && norm(name) !== norm(stock.name);
-    patch(it.key, { medicine: name, ...(drifted ? { item_id: null } : {}) });
+    if (drifted) delete lastPrice.current[it.key];
+    patch(it.key, {
+      medicine: name,
+      ...(drifted ? { item_id: null, unit_price: priceAfterRetype(it, true) } : {}),
+    });
   };
 
   const handleMedicineBlur = (key: string, name: string) => {
@@ -472,6 +480,7 @@ export function PrescriptionEditor({
                     min={0}
                     step="0.01"
                     value={it.unit_price ?? Number.NaN}
+                    emptyAsNaN
                     invalid={!!priceError}
                     placeholder={currency(0)}
                     aria-label={`Unit price of ${it.medicine || `line ${idx + 1}`}`}

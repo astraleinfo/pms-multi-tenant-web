@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/cn";
+import { readNumberInput } from "@/lib/number-input";
 import { IconCheck, IconChevronDown, IconEye, IconEyeOff, IconSearch } from "./icons";
 import { controlBase, controlInvalid } from "./control";
 import { DateInput, DateTimeInput, Panel, TimeInput } from "./picker";
@@ -145,20 +146,24 @@ function clamp(value: number, min?: string | number, max?: string | number) {
 }
 
 export function NumberInput({
-  value, onChange, onBlur, className, invalid, ...rest
+  value, onChange, onBlur, className, invalid, emptyAsNaN = false, ...rest
 }: Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "type"> & {
   value: number;
   onChange: (value: number) => void;
   invalid?: boolean;
+  /** An empty box reports `NaN` rather than 0 — for a figure where "nothing"
+   *  is not "zero" (a price left empty falls back to another one). */
+  emptyAsNaN?: boolean;
 }) {
   const show = (n: number) => (Number.isFinite(n) ? String(n) : "");
   const [text, setText] = React.useState(() => show(value));
   /* what the parent was last told — so a change from outside (a dialogue
-     reopening on another row) resyncs, while our own echo does not. */
+     reopening on another row) resyncs, while our own echo does not.
+     `Object.is`, so an empty `emptyAsNaN` box is its own echo too. */
   const reported = React.useRef(value);
 
   React.useEffect(() => {
-    if (value !== reported.current) {
+    if (!Object.is(value, reported.current)) {
       reported.current = value;
       setText(show(value));
     }
@@ -172,26 +177,21 @@ export function NumberInput({
       onChange={(e) => {
         const raw = e.target.value;
         setText(raw);
-        /* Half-typed values — "", "-", "1e" — are left on screen without being
-           reported, except that an empty box means zero. Nothing is clamped
-           here: pulling a figure back to `min` on every keystroke is the same
-           trap in a different shape, since deleting "12" down to "1" would
-           snap it to the floor before the "5" arrives. */
-        if (raw.trim() === "") {
-          reported.current = 0;
-          onChange(0);
-          return;
-        }
-        const parsed = Number(raw);
-        if (Number.isNaN(parsed)) return;
-        reported.current = parsed;
-        onChange(parsed);
+        /* Half-typed values — "-", "1e" — are left on screen without being
+           reported, and an empty box means zero (or NaN, with `emptyAsNaN`).
+           Nothing is clamped here: pulling a figure back to `min` on every
+           keystroke is the same trap in a different shape, since deleting
+           "12" down to "1" would snap it to the floor before the "5" arrives. */
+        const next = readNumberInput(raw, { emptyAsNaN });
+        if (next === undefined) return;
+        reported.current = next;
+        onChange(next);
       }}
       onBlur={(e) => {
         /* Now that they have finished: "" becomes 0, "007" becomes 7, and
            anything outside min/max is brought inside it. */
         const bounded = clamp(reported.current, rest.min, rest.max);
-        if (bounded !== reported.current) {
+        if (!Object.is(bounded, reported.current)) {
           reported.current = bounded;
           onChange(bounded);
         }

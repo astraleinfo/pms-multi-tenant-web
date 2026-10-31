@@ -62,6 +62,33 @@ export function priceAfterToggle(
   return previous ?? stockPrice;
 }
 
+/** The parts of an editor row that decide its price. */
+export interface RowPrice {
+  item_id: string | null;
+  dispense: boolean;
+  unit_price: number | null;
+}
+
+/**
+ * A row's price after a medicine is picked for it. A shelf line brings its own
+ * price (none on a prescribe-only row); a catalogue entry brings its price if
+ * it has one, and otherwise the row is unpriced — the price it had belonged to
+ * whatever it was before. A custom entry only renames the row: it keeps a price
+ * typed by hand, but not one that came with a stock line it no longer points at.
+ */
+export function priceAfterPick(
+  row: RowPrice, choice: { unit_price?: number; custom?: boolean },
+): number | null {
+  if (choice.custom) return row.item_id ? null : row.unit_price;
+  if (choice.unit_price === undefined) return null;
+  return priceAfterToggle(row.dispense, null, choice.unit_price);
+}
+
+/** A row's price after its name is typed over. Drifting off the stock line it
+ *  was picked as drops that line's price with the link. */
+export const priceAfterRetype = (row: RowPrice, drifted: boolean): number | null =>
+  drifted ? null : row.unit_price;
+
 /** Why a typed price will be refused, in a sentence — or null. */
 export function unitPriceProblem(price: number | null): string | null {
   if (price == null) return null;
