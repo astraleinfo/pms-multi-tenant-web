@@ -43,12 +43,15 @@ const ICON: Record<Choice, React.ComponentType<IconProps>> = {
 };
 
 /* Both groups share one column count, so a card sits under the card above it.
-   It follows the size of the larger group: four reached options fill one row
-   on a wide sheet and two on a narrower one; three stay in a row of three,
-   rather than leaving one card alone on a second row. */
+   It follows the size of the larger group: four reached options make two rows
+   of two on a mid-width sheet and one row of four on a wide one; three stay
+   in a row of three, rather than leaving one card alone on a second row. The
+   widths are the narrowest at which the longest label ("Reschedule today", 116px)
+   still sits on one line beside the icon and the key chip with room to spare:
+   a card needs about 230px. */
 const COLUMNS: Record<number, string> = {
-  3: "grid-cols-1 @xl:grid-cols-3",
-  4: "grid-cols-1 @lg:grid-cols-2 @4xl:grid-cols-4",
+  3: "grid-cols-1 @min-[700px]:grid-cols-3",
+  4: "grid-cols-1 @min-[448px]:grid-cols-2 @min-[940px]:grid-cols-4",
 };
 
 /**
@@ -58,8 +61,8 @@ const COLUMNS: Record<number, string> = {
  * Everything a call can lead to happens here without a dialog — confirming,
  * finding a new slot, letting the booking go — because the person doing it
  * has a patient on the line and a queue of others to ring. The options are
- * grouped by whether the call reached the patient, and each says what it does
- * to the booking (lib/follow-up-outcomes.ts). The number keys pick them in the
+ * grouped by whether the call reached the patient, and each carries a tooltip
+ * saying what it does to the booking (lib/follow-up-outcomes.ts). The number keys pick them in the
  * order they are drawn, shown on each card; Escape closes the sheet.
  */
 export function FollowUpSheet({
@@ -222,7 +225,9 @@ export function FollowUpSheet({
 /* ---- an option -------------------------------------------------------------- */
 
 /**
- * One outcome as a card: what it is, and under it what it does to the booking.
+ * One outcome as a card: an icon and its name, nothing more. What it does to
+ * the booking is the card's tooltip — there to be found on hover by anyone
+ * unsure how two options differ, not text that every call has to read past.
  * The card is neutral until picked; picked, it takes the accent and a tick in
  * the corner, so the choice is not shown by colour alone. The corner otherwise
  * holds the option's number key, quietly, for the desk that rings all day.
@@ -243,12 +248,12 @@ function OutcomeCard({
       role="radio"
       aria-checked={checked}
       aria-labelledby={`${id}-label`}
-      aria-describedby={`${id}-does`}
       aria-keyshortcuts={String(option.key)}
+      title={option.hint}
       disabled={disabled}
       onClick={onPick}
       className={cn(
-        "flex items-start gap-3 rounded-[var(--r)] border p-3 text-left",
+        "flex min-h-[3.25rem] items-center gap-3 rounded-[var(--r)] border px-3 py-2 text-left",
         "transition-colors duration-150 ease-[var(--ease-brand)]",
         disabled
           ? "cursor-not-allowed border-disabled-border bg-disabled-surface text-disabled-ink"
@@ -270,29 +275,21 @@ function OutcomeCard({
       >
         <Icon size={17} />
       </span>
-      <span className="min-w-0 flex-1">
-        <span className="flex items-start justify-between gap-2">
-          <span id={`${id}-label`} className="pt-px text-label font-medium">{option.label}</span>
-          {checked ? (
-            <span className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink" aria-hidden>
-              <IconCheck size={12} strokeWidth={2.2} />
-            </span>
-          ) : !disabled && (
-            <kbd
-              className="hidden h-4.5 min-w-4.5 shrink-0 items-center justify-center rounded-[4px] border border-line px-1 text-micro tnum text-ink-placeholder sm:inline-flex"
-              aria-hidden
-            >
-              {option.key}
-            </kbd>
-          )}
-        </span>
-        <span
-          id={`${id}-does`}
-          className={cn("mt-0.5 block text-caption text-pretty", disabled ? "text-disabled-ink" : checked ? "text-ink-2" : "text-ink-3")}
-        >
-          {option.consequence}
-        </span>
+      <span id={`${id}-label`} className="min-w-0 flex-1 text-label font-medium">
+        {option.label}
       </span>
+      {checked ? (
+        <span className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink" aria-hidden>
+          <IconCheck size={12} strokeWidth={2.2} />
+        </span>
+      ) : !disabled && (
+        <kbd
+          className="hidden h-4.5 min-w-4.5 shrink-0 items-center justify-center rounded-[4px] border border-line px-1 text-micro tnum text-ink-placeholder sm:inline-flex"
+          aria-hidden
+        >
+          {option.key}
+        </kbd>
+      )}
     </button>
   );
 }

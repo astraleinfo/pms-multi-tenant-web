@@ -5,9 +5,10 @@ import type { FollowUpOutcome } from "@/lib/types";
 
    The options are grouped by whether the call reached the patient, because
    the two cases lead to different next steps: someone who answered has said
-   what happens to the booking, someone who didn't stays on the list. Each
-   option says, in one line, what it does to the booking — "Needs a new slot"
-   and "Reschedule today" sound alike until you read that line.
+   what happens to the booking, someone who didn't stays on the list. The cards
+   show the label alone; each option keeps a line saying what it does to the
+   booking, shown as the card's tooltip — "Needs a new slot" and "Reschedule
+   today" sound alike until you hover and read it.
 
    The number keys pick an option in the order the options are drawn, so the
    key hint on a card is always its place on the screen. "Reschedule today"
@@ -20,8 +21,8 @@ export type OutcomeGroup = "reached" | "unreached";
 export interface OutcomeOption {
   value: FollowUpOutcome;
   label: string;
-  /** what the option does to the booking, in a line */
-  consequence: string;
+  /** what the option does to the booking, in a line: the card's tooltip, not visible text */
+  hint: string;
   group: OutcomeGroup;
   /** the number key that picks it: its place in the order drawn, from 1 */
   key: number;
@@ -31,29 +32,29 @@ type Entry = Omit<OutcomeOption, "key">;
 
 const CONFIRMED: Entry = {
   value: "confirmed", label: "Confirmed", group: "reached",
-  consequence: "Keeps the slot.",
+  hint: "Keeps the slot.",
 };
 /* Unlike "Needs a new slot" — which can be saved with no new time, to ring
    back — this is only complete once a time is picked. */
 const MOVE_TODAY: Entry = {
   value: "rescheduled", label: "Reschedule today", group: "reached",
-  consequence: "Still coming today, at another time.",
+  hint: "Still coming today, at another time.",
 };
 const NEW_SLOT: Entry = {
   value: "reschedule_required", label: "Needs a new slot", group: "reached",
-  consequence: "Book another day now, or ring back later.",
+  hint: "Book another day now, or ring back later.",
 };
 const DECLINED: Entry = {
   value: "declined", label: "Declined", group: "reached",
-  consequence: "Won't come. You can free the slot.",
+  hint: "Won't come. You can free the slot.",
 };
 const NO_ANSWER: Entry = {
   value: "no_answer", label: "No answer", group: "unreached",
-  consequence: "Stays on the list to try again.",
+  hint: "Stays on the list to try again.",
 };
 const CALL_BACK: Entry = {
   value: "call_back", label: "Call back later", group: "unreached",
-  consequence: "They asked to be rung another time.",
+  hint: "They asked to be rung another time.",
 };
 
 export const OUTCOME_GROUPS: Array<{ group: OutcomeGroup; caption: string }> = [

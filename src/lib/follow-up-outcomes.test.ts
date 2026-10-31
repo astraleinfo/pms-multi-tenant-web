@@ -24,10 +24,25 @@ describe("outcomeOptions", () => {
     ]);
   });
 
-  it("gives every option its own label and a line saying what it does", () => {
+  it("gives every option its own label and its own line saying what it does", () => {
     const options = outcomeOptions(true);
     expect(new Set(options.map((o) => o.label)).size).toBe(options.length);
-    for (const o of options) expect(o.consequence).toMatch(/\S.*\.$/);
+    expect(new Set(options.map((o) => o.hint)).size).toBe(options.length);
+    for (const o of options) expect(o.hint).toMatch(/\S.*\.$/);
+  });
+
+  it("keeps the line that tells the two reschedule options apart", () => {
+    const byValue = Object.fromEntries(outcomeOptions(true).map((o) => [o.value, o]));
+    expect(byValue.rescheduled.hint).toMatch(/today/i);
+    expect(byValue.reschedule_required.hint).toMatch(/another day/i);
+    expect(byValue.rescheduled.hint).not.toBe(byValue.reschedule_required.hint);
+  });
+
+  it("keeps every label short enough for a one-line card", () => {
+    for (const o of outcomeOptions(true)) {
+      expect(o.label.length).toBeLessThanOrEqual(20);
+      expect(o.label).not.toContain(".");
+    }
   });
 });
 
