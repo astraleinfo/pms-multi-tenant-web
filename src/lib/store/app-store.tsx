@@ -15,10 +15,10 @@ import type {
   AccountStatus, Appointment, BillingDepartment, ClinicalTypeKey, Encounter,
   FieldDefinition, FollowUp, Id, PatientNote, InventoryItem, InventoryItemPatch, Invoice, InvoiceLineItem, LabAttachment,
   LabResultLine, NewAppointment, NewEncounter, NewInventoryItem, NewServicePrice, Payment,
-  PrescriptionItem, QueueEntry, ServicePrice, ServicePricePatch, Tenant, TenantConfig,
+  QueueEntry, ServicePrice, ServicePricePatch, Tenant, TenantConfig,
   User,
 } from "@/lib/types";
-import type { AuthResult, PlatformStaff } from "@/lib/api";
+import type { AuthResult, PlatformStaff, PrescriptionLineDraft } from "@/lib/api";
 
 export type { Toast, Session, PlatformSession } from "@/lib/store/session";
 export type { AuthResult } from "@/lib/api";
@@ -107,12 +107,12 @@ interface AppContextValue {
 
   createPrescription: (
     encounterId: Id, patientId: Id, doctorId: Id,
-    items: Array<Omit<PrescriptionItem, "id" | "prescription_id" | "dispensed_qty" | "status">>,
+    items: PrescriptionLineDraft[],
   ) => void;
   /** Rewrites the visit's prescription while it is still unbilled. */
   replacePrescription: (
     encounterId: Id,
-    items: Array<Omit<PrescriptionItem, "id" | "prescription_id" | "dispensed_qty" | "status">>,
+    items: PrescriptionLineDraft[],
   ) => Promise<Id | null>;
   /** Resolves once the hand-over is written, so the window can ask for money
       knowing the charge exists. */
@@ -298,9 +298,9 @@ function AppFacade({ children }: { children: React.ReactNode }) {
     boardAfter(await api.createEncounter(a.e, a.sign)));
   const mUpdateEncounter = useTenantMutation(async (a: { id: Id; patch: Partial<Encounter> & { sign?: boolean } }) =>
     boardAfter(await api.updateEncounter(a.id, a.patch)));
-  const mCreatePrescription = useTenantMutation((a: { encounterId: Id; patientId: Id; doctorId: Id; items: Array<Omit<PrescriptionItem, "id" | "prescription_id" | "dispensed_qty" | "status">> }) =>
+  const mCreatePrescription = useTenantMutation((a: { encounterId: Id; patientId: Id; doctorId: Id; items: PrescriptionLineDraft[] }) =>
     api.createPrescription(a.encounterId, a.patientId, a.doctorId, a.items));
-  const mReplacePrescription = useTenantMutation((a: { encounterId: Id; items: Array<Omit<PrescriptionItem, "id" | "prescription_id" | "dispensed_qty" | "status">> }) =>
+  const mReplacePrescription = useTenantMutation((a: { encounterId: Id; items: PrescriptionLineDraft[] }) =>
     api.replacePrescription(a.encounterId, a.items));
   const mDispense = useTenantMutation((a: { id: Id; lines: Array<{ itemId: Id; qty: number; batch_no: string }> }) =>
     api.dispense(a.id, a.lines));

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  MAX_UNIT_PRICE, anyPriced, awaitsCounter, dispensedHere, dispensedTotal, lineTotal, priceAfterPick,
-  priceAfterRetype, priceAfterToggle, priceToSend, startsDispensed, unitPriceProblem,
+  anyPriced, awaitsCounter, dispensedHere, dispensedTotal, lineTotal, startsDispensed,
 } from "./prescription-pricing";
 
 const line = (qty: number, unit_price: number | null, dispense = true) => ({ qty, unit_price, dispense });
@@ -47,81 +46,6 @@ describe("startsDispensed", () => {
   it("follows the clinic's default", () => {
     expect(startsDispensed({ prescribe_only_default: false })).toBe(true);
     expect(startsDispensed({ prescribe_only_default: true })).toBe(false);
-  });
-});
-
-describe("priceAfterToggle", () => {
-  it("drops the price when the line becomes prescribe only", () => {
-    expect(priceAfterToggle(false, 12, 10)).toBeNull();
-  });
-
-  it("brings back the price the line had, else the stock price, else none", () => {
-    expect(priceAfterToggle(true, 12, 10)).toBe(12);
-    expect(priceAfterToggle(true, null, 10)).toBe(10);
-    expect(priceAfterToggle(true, null, null)).toBeNull();
-  });
-});
-
-describe("priceAfterPick", () => {
-  const stockRow = { item_id: "stock-1", dispense: true, unit_price: 6 };
-  const typedRow = { item_id: null, dispense: true, unit_price: 40 };
-
-  it("brings a shelf line's price onto a dispensed row", () => {
-    expect(priceAfterPick(typedRow, { unit_price: 1.1 })).toBe(1.1);
-    expect(priceAfterPick(stockRow, { unit_price: 1.1 })).toBe(1.1);
-  });
-
-  it("leaves a prescribe-only row unpriced whatever is picked", () => {
-    expect(priceAfterPick({ ...stockRow, dispense: false, unit_price: null }, { unit_price: 1.1 })).toBeNull();
-  });
-
-  it("does not carry the old stock line's price onto a catalogue medicine with none", () => {
-    expect(priceAfterPick(stockRow, {})).toBeNull();
-    expect(priceAfterPick(typedRow, {})).toBeNull();
-  });
-
-  it("keeps a catalogue medicine's own price when it has one", () => {
-    expect(priceAfterPick(stockRow, { unit_price: 12 })).toBe(12);
-  });
-
-  it("drops a stock line's price when the row becomes a custom entry, but keeps one typed by hand", () => {
-    expect(priceAfterPick(stockRow, { custom: true })).toBeNull();
-    expect(priceAfterPick(typedRow, { custom: true })).toBe(40);
-  });
-});
-
-describe("priceAfterRetype", () => {
-  it("drops the stock line's price when the name is typed over", () => {
-    expect(priceAfterRetype({ item_id: "stock-1", dispense: true, unit_price: 6 }, true)).toBeNull();
-  });
-
-  it("leaves the price alone while the name still matches", () => {
-    expect(priceAfterRetype({ item_id: "stock-1", dispense: true, unit_price: 6 }, false)).toBe(6);
-  });
-});
-
-describe("unitPriceProblem", () => {
-  it("accepts no price, zero and anything up to the ceiling", () => {
-    expect(unitPriceProblem(null)).toBeNull();
-    expect(unitPriceProblem(0)).toBeNull();
-    expect(unitPriceProblem(MAX_UNIT_PRICE)).toBeNull();
-  });
-
-  it("refuses what the API refuses", () => {
-    expect(unitPriceProblem(-1)).toMatch(/negative/);
-    expect(unitPriceProblem(MAX_UNIT_PRICE + 1)).toMatch(/more than/);
-    expect(unitPriceProblem(Number.NaN)).toMatch(/number/);
-  });
-});
-
-describe("priceToSend", () => {
-  it("sends no price for a prescribe-only line", () => {
-    expect(priceToSend({ dispense: false, unit_price: 12 })).toBeNull();
-  });
-
-  it("sends a dispensed line's price to the cent", () => {
-    expect(priceToSend({ dispense: true, unit_price: 12.345 })).toBe(12.35);
-    expect(priceToSend({ dispense: true, unit_price: null })).toBeNull();
   });
 });
 

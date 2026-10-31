@@ -15,7 +15,6 @@ import type {
 import type {
   ConsentContent, ConsentForm, ConsentTemplate, ConsentVersion, PatientConsent,
 } from "@/lib/consent";
-import { priceToSend } from "@/lib/prescription-pricing";
 import {
   ApiError, del, get, patch as patch_, post, put as put_, requestBlob, setAccessToken, upload,
 } from "./client";
@@ -726,21 +725,23 @@ export const updateEncounter = (id: Id, changes: Partial<Encounter> & { sign?: b
 
 /* ---- prescriptions & pharmacy (§3.8, §3.9) ------------------------------------ */
 
-/** One line as the API takes it. A prescribe-only line goes without a price —
- *  the server would drop it anyway. */
-const prescriptionLineBody = (
-  i: Omit<PrescriptionItem, "id" | "prescription_id" | "dispensed_qty" | "status">,
-) => ({
+/** What a client writes for a prescription line. The price is not among it: the
+ *  server prices a dispensed stock line at the stock price when it saves. */
+export type PrescriptionLineDraft = Omit<
+  PrescriptionItem, "id" | "prescription_id" | "dispensed_qty" | "status" | "unit_price"
+>;
+
+const prescriptionLineBody = (i: PrescriptionLineDraft) => ({
   medicine: i.medicine, strength: i.strength, dosage: i.dosage, frequency: i.frequency,
   duration: i.duration, instructions: i.instructions, qty: i.qty, item_id: i.item_id,
-  dispense: i.dispense, unit_price: priceToSend(i),
+  dispense: i.dispense,
 });
 
 export const createPrescription = async (
   encounterId: Id,
   _patientId: Id,
   _doctorId: Id,
-  items: Array<Omit<PrescriptionItem, "id" | "prescription_id" | "dispensed_qty" | "status">>,
+  items: PrescriptionLineDraft[],
 ) => (await post<Prescription>(`/v1/encounters/${encounterId}/prescriptions`, {
   /* the patient and the prescriber come from the encounter and the session */
   items: items.map(prescriptionLineBody),
@@ -750,7 +751,7 @@ export const createPrescription = async (
  *  empty list takes it away; the server answers null then. */
 export const replacePrescription = async (
   encounterId: Id,
-  items: Array<Omit<PrescriptionItem, "id" | "prescription_id" | "dispensed_qty" | "status">>,
+  items: PrescriptionLineDraft[],
 ) => (await put_<Prescription | null>(`/v1/encounters/${encounterId}/prescription`, {
   items: items.map(prescriptionLineBody),
 }))?.id ?? null;

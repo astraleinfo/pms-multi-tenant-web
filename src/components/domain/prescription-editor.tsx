@@ -5,10 +5,7 @@ import { useApp } from "@/lib/store/app-store";
 import { useClinicDb, useMedicines } from "@/lib/query/hooks";
 import { selectInventoryItems, stockLevel } from "@/lib/data/repository";
 import { currency } from "@/lib/format";
-import {
-  dispensedTotal, lineTotal, priceAfterPick, priceAfterRetype, priceAfterToggle, startsDispensed,
-  unitPriceProblem,
-} from "@/lib/prescription-pricing";
+import { startsDispensed } from "@/lib/prescription-pricing";
 import { cn } from "@/lib/cn";
 import { Button, Segmented } from "@/components/ui/button";
 import { Field, Input, NumberInput } from "@/components/ui/field";
@@ -28,8 +25,6 @@ export interface DraftRxItem {
   qty: number;
   /** dispensed from the clinic; false is "prescribe only" — the patient buys it elsewhere */
   dispense: boolean;
-  /** what one unit bills at; null when nobody has priced it, and on a prescribe-only line */
-  unit_price: number | null;
 }
 
 /**
@@ -50,8 +45,6 @@ interface MedicineChoice {
   /** how many are on the shelf, for a stock-backed choice */
   on_hand?: number;
   unit?: string;
-  /** what the shelf sells one at — a dispensed line starts at this price */
-  unit_price?: number;
   /** which list it came from, so the dropdown can say so */
   source: "stock" | "catalogue";
   /** typed by hand rather than picked: it names the medicine and nothing else */
@@ -69,7 +62,7 @@ let rowSeq = 0;
 export const emptyRxItem = (dispense = true): DraftRxItem => ({
   key: `rx-row-${++rowSeq}`,
   item_id: null, medicine: "", strength: "", dosage: "", frequency: "", duration: "",
-  instructions: "", qty: 1, dispense, unit_price: null,
+  instructions: "", qty: 1, dispense,
 });
 
 type Supply = "dispense" | "elsewhere";
@@ -263,7 +256,6 @@ export function PrescriptionEditor({
         duration: defaults?.duration ?? "",
         on_hand: stockLevel(db, session.tenantId, item.id),
         unit: item.unit,
-        unit_price: item.unit_price,
         source: "stock",
       };
     });
@@ -303,28 +295,19 @@ export function PrescriptionEditor({
       dosage: c.dosage,
       frequency: c.frequency,
       duration: c.duration,
-      unit_price: priceAfterToggle(lineDefault, null, c.unit_price ?? null),
     }]);
   };
-
-  /* the price a prescribe-only row had before it was switched, to give back */
-  const lastPrice = React.useRef<Record<string, number | null>>({});
 
   const pickForRow = (key: string, c: MedicineChoice) => {
     if (isDuplicate(c.medicine, key)) {
       notify({ tone: "warn", title: `${c.medicine} is already on this prescription` });
       return;
     }
-    const row = items.find((it) => it.key === key);
-    /* The price follows the medicine, never the stock line the row has just
-       left: see `priceAfterPick`. */
-    const unit_price = row ? priceAfterPick(row, c) : null;
-    delete lastPrice.current[key];
     /* A custom entry only names the medicine — the dose, frequency and anything
        else already typed into the row is what the clinician meant, and picking
        "write this as a custom entry" must not throw it away. */
     if (c.custom) {
-      patch(key, { item_id: null, medicine: c.medicine, unit_price });
+      patch(key, { item_id: null, medicine: c.medicine });
       return;
     }
     patch(key, {
@@ -334,36 +317,20 @@ export function PrescriptionEditor({
       dosage: c.dosage,
       frequency: c.frequency,
       duration: c.duration,
-      unit_price,
     });
   };
 
-  /* Flipping a line between "dispense" and "prescribe only": off, it loses
-     its price; back on, it gets back what it had, or its shelf price. */
   const setSupply = (it: DraftRxItem, supply: Supply) => {
     const dispense = supply === "dispense";
-    if (dispense === it.dispense) return;
-    if (!dispense) lastPrice.current[it.key] = it.unit_price;
-    const shelf = stockFor(it)?.unit_price ?? null;
-    patch(it.key, {
-      dispense,
-      unit_price: priceAfterToggle(dispense, lastPrice.current[it.key] ?? null, shelf),
-    });
+    if (dispense !== it.dispense) patch(it.key, { dispense });
   };
-
-  const total = dispensedTotal(items.filter((it) => it.medicine.trim()));
-  const elsewhere = items.filter((it) => it.medicine.trim() && !it.dispense).length;
 
   /* Typing over a name that was picked from the shelf breaks the tie to it:
      the row is about whatever it now says, not the box it started as. */
   const editMedicine = (it: DraftRxItem, name: string) => {
     const stock = stockFor(it);
     const drifted = !!stock && norm(name) !== norm(stock.name);
-    if (drifted) delete lastPrice.current[it.key];
-    patch(it.key, {
-      medicine: name,
-      ...(drifted ? { item_id: null, unit_price: priceAfterRetype(it, true) } : {}),
-    });
+    patch(it.key, { medicine: name, ...(drifted ? { item_id: null } : {}) });
   };
 
   const handleMedicineBlur = (key: string, name: string) => {
@@ -390,8 +357,6 @@ export function PrescriptionEditor({
         const stock = stockFor(it);
         /* stock only matters for a line the clinic hands over */
         const short = it.dispense && level !== null && level < it.qty;
-        const amount = lineTotal(it);
-        const priceError = unitPriceProblem(it.unit_price);
 
         return (
           <div
@@ -467,48 +432,24 @@ export function PrescriptionEditor({
               <Field label="Duration">
                 <Input value={it.duration} onChange={(e) => patch(it.key, { duration: e.target.value })} placeholder="5 days" />
               </Field>
-              <Field label="Instructions">
+              {/* What the stock line sells for now — shown, never typed: the server
+                  prices the line from the stock line when the prescription is saved.
+                  A line the patient buys elsewhere has none, so it has no field. */}
+              {it.dispense && (
+                <Field label="Unit price">
+                  <p className="tnum flex h-9.5 items-center font-mono text-body text-ink">
+                    {stock ? currency(stock.unit_price) : <span className="text-ink-3">—</span>}
+                  </p>
+                </Field>
+              )}
+              {/* a dispensed row has a fourth short field, so its note takes a row of its own */}
+              <Field label="Instructions" className={it.dispense ? "sm:col-span-2 lg:col-span-4" : undefined}>
                 <Input value={it.instructions} onChange={(e) => patch(it.key, { instructions: e.target.value })} placeholder="After food" />
               </Field>
-              {it.dispense ? (
-                <Field
-                  label="Unit price"
-                  error={priceError}
-                  help={amount !== null ? `${it.qty} × ${currency(it.unit_price ?? 0)} = ${currency(amount)}` : "Not priced"}
-                >
-                  <NumberInput
-                    min={0}
-                    step="0.01"
-                    value={it.unit_price ?? Number.NaN}
-                    emptyAsNaN
-                    invalid={!!priceError}
-                    placeholder={currency(0)}
-                    aria-label={`Unit price of ${it.medicine || `line ${idx + 1}`}`}
-                    onChange={(n) => patch(it.key, { unit_price: Number.isFinite(n) ? n : null })}
-                  />
-                </Field>
-              ) : (
-                <p className="self-end pb-2 text-caption leading-snug text-ink-3 sm:col-span-2 lg:col-span-1">
-                  Prescribed only — no price, nothing drawn from stock and nothing billed.
-                </p>
-              )}
             </div>
           </div>
         );
       })}
-
-      {(total > 0 || elsewhere > 0) && (
-        <p className="flex flex-wrap items-baseline justify-between gap-2 rounded-[var(--r)] border border-line-soft bg-surface-2 px-3 py-2 text-label text-ink-2">
-          <span>
-            {elsewhere > 0 && `${elsewhere} line${elsewhere === 1 ? "" : "s"} for the patient to buy elsewhere`}
-          </span>
-          {total > 0 && (
-            <span>
-              Dispensed from the clinic: <span className="tnum font-mono font-medium text-ink">{currency(total)}</span>
-            </span>
-          )}
-        </p>
-      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="secondary" size="sm" onClick={() => onChange([...items, emptyRxItem(lineDefault)])}>

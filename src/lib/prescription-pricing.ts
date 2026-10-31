@@ -4,9 +4,9 @@
    A line is dispensed from the clinic — it has a unit price, comes out of
    stock at the pharmacy and is billed there — or it is "prescribe only": the
    patient buys it elsewhere, so it has no price, never moves stock and never
-   becomes a charge. The server decides all of that (it drops the price of a
-   prescribe-only line itself); this mirrors it so the editor and the read-only
-   views say the same thing before anything is saved.
+   becomes a charge. The price is never typed: the server sets it from the stock
+   line when the prescription is saved. This file only reads what was stored, so
+   the read-only views say the same thing about a line.
    ========================================================================== */
 
 import type { PrescriptionStatus, TenantConfig } from "@/lib/types";
@@ -17,9 +17,6 @@ export interface PricedLine {
   dispense: boolean;
   unit_price: number | null;
 }
-
-/** The most one unit can be priced at — the API refuses anything above it. */
-export const MAX_UNIT_PRICE = 1_000_000;
 
 /* Rounded half up from the decimal text, as the API rounds (12.345 → 12.35);
    `Math.round(n * 100)` would see 1234.4999… and go the other way. */
@@ -49,60 +46,6 @@ export function dispensedTotal(lines: PricedLine[]): number {
 /** Whether any line would put a price on the page — with none, a print or a
  *  view shows no price column at all. */
 export const anyPriced = (lines: PricedLine[]) => lines.some((l) => lineTotal(l) !== null);
-
-/**
- * The price a line has after its dispense switch is flipped. Switched off it
- * has none. Switched back on it gets back what it had, or failing that its
- * stock line's price, or stays unpriced.
- */
-export function priceAfterToggle(
-  dispense: boolean, previous: number | null, stockPrice: number | null,
-): number | null {
-  if (!dispense) return null;
-  return previous ?? stockPrice;
-}
-
-/** The parts of an editor row that decide its price. */
-export interface RowPrice {
-  item_id: string | null;
-  dispense: boolean;
-  unit_price: number | null;
-}
-
-/**
- * A row's price after a medicine is picked for it. A shelf line brings its own
- * price (none on a prescribe-only row); a catalogue entry brings its price if
- * it has one, and otherwise the row is unpriced — the price it had belonged to
- * whatever it was before. A custom entry only renames the row: it keeps a price
- * typed by hand, but not one that came with a stock line it no longer points at.
- */
-export function priceAfterPick(
-  row: RowPrice, choice: { unit_price?: number; custom?: boolean },
-): number | null {
-  if (choice.custom) return row.item_id ? null : row.unit_price;
-  if (choice.unit_price === undefined) return null;
-  return priceAfterToggle(row.dispense, null, choice.unit_price);
-}
-
-/** A row's price after its name is typed over. Drifting off the stock line it
- *  was picked as drops that line's price with the link. */
-export const priceAfterRetype = (row: RowPrice, drifted: boolean): number | null =>
-  drifted ? null : row.unit_price;
-
-/** Why a typed price will be refused, in a sentence — or null. */
-export function unitPriceProblem(price: number | null): string | null {
-  if (price == null) return null;
-  if (!Number.isFinite(price)) return "Enter a number.";
-  if (price < 0) return "A price cannot be negative.";
-  if (price > MAX_UNIT_PRICE) return "That is more than a unit can be priced at.";
-  return null;
-}
-
-/** The price to send for a line: none for a prescribe-only line, otherwise to the cent. */
-export function priceToSend(line: Pick<PricedLine, "dispense" | "unit_price">): number | null {
-  if (!line.dispense || line.unit_price == null) return null;
-  return cents(line.unit_price);
-}
 
 /** Still something for the pharmacy to hand over. */
 export const awaitsCounter = (status: PrescriptionStatus) =>
